@@ -1,7 +1,11 @@
-import { Elysia } from "elysia";
+import { createApp } from "./app";
+import { appConfig } from "./shared/config";
 
-const app = new Elysia().get("/", () => "Hello Elysia").listen(3000);
+const app = await createApp();
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-);
+app.listen({
+  hostname: appConfig.host,
+  port: appConfig.port,
+});
+
+console.log(`LeiBlog API running at http://${appConfig.host}:${appConfig.port}`);

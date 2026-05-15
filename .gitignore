@@ -41,6 +41,8 @@ lerna-debug.log*
 .vercel/
 .vite/
 .cache/
+blog-server/uploads/*
+!blog-server/uploads/.gitkeep
 
 # Package-manager artifacts not used by this repo
 package-lock.json

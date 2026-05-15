@@ -1,0 +1,73 @@
+name: blog-server
+
+services:
+  blog-postgres:
+    image: postgres:16
+    container_name: blog-postgres
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+      POSTGRES_USER: taolei
+      POSTGRES_PASSWORD: "12345678"
+      POSTGRES_DB: lei_blog
+    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - blog_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taolei -d lei_blog"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  blog-redis:
+    image: redis:7-alpine
+    container_name: blog-redis
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - blog_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  blog-api:
+    image: oven/bun:1.3
+    container_name: blog-api
+    profiles:
+      - api
+    working_dir: /app
+    command: ["sh", "-lc", "bun install --frozen-lockfile && bun run dev"]
+    environment:
+      TZ: Asia/Shanghai
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 3000
+      DATABASE_URL: postgres://taolei:12345678@blog-postgres:5432/lei_blog
+      REDIS_URL: redis://blog-redis:6379
+      APP_SECRET_KEY: replace-with-32-byte-secret
+      JWT_SECRET: replace-with-jwt-secret
+      UPLOADS_DIR: uploads
+      UPLOADS_URL_PREFIX: /uploads
+      UPLOAD_MAX_FILE_SIZE_BYTES: 52428800
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+    depends_on:
+      blog-postgres:
+        condition: service_healthy
+      blog-redis:
+        condition: service_healthy
+
+volumes:
+  blog_postgres_data:
+  blog_redis_data:
