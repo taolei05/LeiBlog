@@ -1,0 +1,51 @@
+# Local documentation and references
+docs/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+coverage/
+.next/
+out/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+*.local
+
+# OS and editor files
+.DS_Store
+**/.DS_Store
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Deployment and generated caches
+.vercel/
+.vite/
+.cache/
+
+# Package-manager artifacts not used by this repo
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Backups created while converting nested repositories into one root repository
+.git-backups/
