@@ -43,7 +43,7 @@ interface LoginUserRow extends UserProfileRow {
 }
 
 interface EmailCodePurpose {
-  purpose: "register" | "password_reset";
+  purpose: "register" | "password_reset" | "email_change";
 }
 
 interface ResendConfigRow {
@@ -82,7 +82,7 @@ async function getResendConfig(client: DbClient) {
   };
 }
 
-async function sendResendEmail(
+export async function sendResendEmail(
   client: DbClient,
   input: { to: string; subject: string; text: string }
 ) {
@@ -182,7 +182,12 @@ export async function createEmailCode(
 
   const sent = await sendResendEmail(client, {
     to: email,
-    subject: input.purpose === "register" ? "LeiBlog 注册验证码" : "LeiBlog 找回密码验证码",
+    subject:
+      input.purpose === "register"
+        ? "LeiBlog 注册验证码"
+        : input.purpose === "email_change"
+          ? "LeiBlog 邮箱变更验证码"
+          : "LeiBlog 找回密码验证码",
     text: `验证码：${code}，${EMAIL_CODE_MINUTES} 分钟内有效。`,
   });
 

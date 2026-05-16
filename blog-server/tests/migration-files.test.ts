@@ -19,6 +19,7 @@ describe("initial database migration", () => {
       "article_categories",
       "articles",
       "comments",
+      "email_change_requests",
       "media_assets",
       "setup_state",
     ]) {
@@ -31,5 +32,11 @@ describe("initial database migration", () => {
     expect(migration).toContain("resend_api_key_encrypted");
     expect(migration).toContain("deepl_api_key_encrypted");
     expect(migration).toContain("ipgeolocation_api_key_encrypted");
+  });
+
+  test("supports guestbook comments and verified email changes", () => {
+    expect(migration).toContain("CREATE TYPE comment_target_type");
+    expect(migration).toContain("target_type comment_target_type");
+    expect(migration).toContain("'email_change'");
   });
 });

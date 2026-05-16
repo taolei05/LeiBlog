@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "react-day-picker/style.css";
+@import "@mdxeditor/editor/style.css";
+@import "./tokens.css";
+@import "./base.css";
+@import "./layouts.css";

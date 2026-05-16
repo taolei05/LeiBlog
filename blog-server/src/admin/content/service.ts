@@ -10,6 +10,7 @@ import {
 } from "../../shared/cache/content";
 import { db, withTransaction, type DbClient } from "../../shared/db";
 import { conflict, notFound, validationError } from "../../shared/errors";
+import { createArticleSummary } from "../../shared/mdx/summary";
 import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
 
 type ArticleStatus = "draft" | "published" | "offline";
@@ -241,20 +242,6 @@ function toArticle(row: ArticleRow) {
     tags: parseRelations(row.tags),
     contributors: parseRelations(row.contributors),
   };
-}
-
-function createSummary(summary: string | null | undefined, contentMdx: string) {
-  if (summary && summary.trim()) return summary.trim();
-  if (summary === null) return null;
-
-  const plain = contentMdx
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[#*_>`{}[\]()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return plain ? plain.slice(0, 200) : null;
 }
 
 async function slugExists(
@@ -785,7 +772,7 @@ export async function createArticle(
         ${currentUser.id},
         ${input.title.trim()},
         ${slug},
-        ${createSummary(input.summary, contentMdx)},
+        ${createArticleSummary(input.summary, contentMdx)},
         ${contentMdx},
         ${cleanOptional(input.coverImageUrl)},
         ${status},
@@ -821,7 +808,9 @@ export async function updateArticle(
   const title = input.title?.trim() ?? existing.title;
   const contentMdx = input.contentMdx ?? existing.contentMdx;
   const summary =
-    input.summary === undefined ? existing.summary : createSummary(input.summary, contentMdx);
+    input.summary === undefined
+      ? existing.summary
+      : createArticleSummary(input.summary, contentMdx);
   const coverImageUrl =
     input.coverImageUrl === undefined
       ? existing.coverImageUrl

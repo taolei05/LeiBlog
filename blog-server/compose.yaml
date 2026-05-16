@@ -39,9 +39,9 @@ services:
       timeout: 5s
       retries: 20
 
-  blog-api:
+  blog-server:
     image: oven/bun:1.3
-    container_name: blog-api
+    container_name: blog-server
     profiles:
       - api
     working_dir: /app

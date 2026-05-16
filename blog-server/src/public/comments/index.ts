@@ -7,7 +7,12 @@ import {
   CreateCommentBody,
   PublicCommentQuery,
 } from "./model";
-import { createPublicComment, listPublicComments } from "./service";
+import {
+  createGuestbookComment,
+  createPublicComment,
+  listGuestbookComments,
+  listPublicComments,
+} from "./service";
 import { authContext } from "../../shared/auth/plugin";
 
 export const publicCommentsModule = new Elysia()
@@ -16,6 +21,14 @@ export const publicCommentsModule = new Elysia()
     ({ params, query }) => listPublicComments(params.articleId, query),
     {
       params: ArticleCommentsParams,
+      query: PublicCommentQuery,
+      response: { 200: CommentListResponse },
+    }
+  )
+  .get(
+    "/guestbook/comments",
+    ({ query }) => listGuestbookComments(query),
+    {
       query: PublicCommentQuery,
       response: { 200: CommentListResponse },
     }
@@ -29,6 +42,17 @@ export const publicCommentsModule = new Elysia()
     }),
     {
       params: ArticleCommentsParams,
+      body: CreateCommentBody,
+      response: { 200: CommentResponse },
+    }
+  )
+  .post(
+    "/guestbook/comments",
+    async ({ currentUser, body }) => ({
+      ok: true,
+      item: await createGuestbookComment(currentUser, body),
+    }),
+    {
       body: CreateCommentBody,
       response: { 200: CommentResponse },
     }

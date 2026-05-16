@@ -4,9 +4,10 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE user_role AS ENUM ('admin', 'user', 'demo');
 CREATE TYPE article_status AS ENUM ('draft', 'published', 'offline');
+CREATE TYPE comment_target_type AS ENUM ('article', 'guestbook');
 CREATE TYPE comment_status AS ENUM ('pending', 'approved', 'rejected');
 CREATE TYPE media_type AS ENUM ('image', 'video', 'document');
-CREATE TYPE email_code_purpose AS ENUM ('register', 'password_reset');
+CREATE TYPE email_code_purpose AS ENUM ('register', 'password_reset', 'email_change');
 
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS trigger AS $$
@@ -203,17 +204,23 @@ ON article_contributor_links (contributor_id);
 
 CREATE TABLE comments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  article_id uuid NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  target_type comment_target_type NOT NULL DEFAULT 'article',
+  article_id uuid REFERENCES articles(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   parent_id uuid REFERENCES comments(id) ON DELETE SET NULL,
   content text NOT NULL,
   status comment_status NOT NULL DEFAULT 'approved',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  CONSTRAINT comments_target_ref_check CHECK (
+    (target_type = 'article' AND article_id IS NOT NULL)
+    OR (target_type = 'guestbook' AND article_id IS NULL)
+  )
 );
 
 CREATE INDEX comments_article_created_at_idx ON comments (article_id, created_at DESC);
+CREATE INDEX comments_target_created_at_idx ON comments (target_type, created_at DESC);
 CREATE INDEX comments_user_id_idx ON comments (user_id);
 CREATE INDEX comments_parent_id_idx ON comments (parent_id);
 CREATE INDEX comments_status_idx ON comments (status);
@@ -269,6 +276,21 @@ CREATE TABLE email_verification_codes (
 
 CREATE INDEX email_verification_codes_email_purpose_idx
 ON email_verification_codes (lower(email), purpose, created_at DESC);
+
+CREATE TABLE email_change_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  new_email varchar(254) NOT NULL,
+  code_hash text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX email_change_requests_user_created_at_idx
+ON email_change_requests (user_id, created_at DESC);
+CREATE INDEX email_change_requests_email_created_at_idx
+ON email_change_requests (lower(new_email), created_at DESC);
 
 CREATE TABLE password_reset_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

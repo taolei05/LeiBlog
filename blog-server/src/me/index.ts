@@ -1,8 +1,22 @@
 import { Elysia } from "elysia";
 
 import { meCommentsModule } from "./comments";
-import { ChangePasswordBody, MeResponse, OkResponse, UpdateMeBody } from "./model";
-import { changeMyPassword, getUserProfile, updateMe } from "./service";
+import {
+  ChangePasswordBody,
+  ConfirmEmailChangeBody,
+  EmailChangeCodeBody,
+  EmailChangeCodeResponse,
+  MeResponse,
+  OkResponse,
+  UpdateMeBody,
+} from "./model";
+import {
+  changeMyPassword,
+  confirmEmailChange,
+  getUserProfile,
+  requestEmailChangeCode,
+  updateMe,
+} from "./service";
 import { authContext } from "../shared/auth/plugin";
 
 export const meModule = new Elysia({ prefix: "/api/me" })
@@ -21,6 +35,23 @@ export const meModule = new Elysia({ prefix: "/api/me" })
     user: await updateMe(currentUser.id, body),
   }), {
     body: UpdateMeBody,
+    response: {
+      200: MeResponse,
+    },
+  })
+  .post("/email-change-code", ({ currentUser, body }) => (
+    requestEmailChangeCode(currentUser.id, body)
+  ), {
+    body: EmailChangeCodeBody,
+    response: {
+      200: EmailChangeCodeResponse,
+    },
+  })
+  .patch("/email", async ({ currentUser, body }) => ({
+    ok: true,
+    user: await confirmEmailChange(currentUser.id, body),
+  }), {
+    body: ConfirmEmailChangeBody,
     response: {
       200: MeResponse,
     },

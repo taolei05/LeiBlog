@@ -19,7 +19,13 @@ import {
   updateUserByAdmin,
 } from "../src/admin/users/service";
 import { hashPassword, verifyPassword, type AuthUser } from "../src/shared/auth";
-import { changeMyPassword, getUserProfile, updateMe } from "../src/me/service";
+import {
+  changeMyPassword,
+  confirmEmailChange,
+  getUserProfile,
+  requestEmailChangeCode,
+  updateMe,
+} from "../src/me/service";
 
 const POSTGRES_ADMIN_URL =
   process.env.TEST_POSTGRES_ADMIN_URL ??
@@ -112,6 +118,24 @@ describe("auth and user services", () => {
     expect(updated.name).toBe("新名字");
     expect(updated.tags).toEqual(["小可爱", "读者"]);
 
+    const emailChange = await requestEmailChangeCode(
+      user.id,
+      { email: "new-user@example.com" },
+      testDb
+    );
+    expect(emailChange.sent).toBe(false);
+    expect(typeof emailChange.devCode).toBe("string");
+
+    const changedEmail = await confirmEmailChange(
+      user.id,
+      {
+        email: "new-user@example.com",
+        emailCode: emailChange.devCode!,
+      },
+      testDb
+    );
+    expect(changedEmail.email).toBe("new-user@example.com");
+
     await changeMyPassword(
       user.id,
       {
@@ -133,7 +157,7 @@ describe("auth and user services", () => {
       { client: testDb }
     );
 
-    const reset = await createPasswordResetToken("user@example.com", {
+    const reset = await createPasswordResetToken("new-user@example.com", {
       client: testDb,
     });
     expect(typeof reset.devToken).toBe("string");

@@ -10,10 +10,12 @@ import {
   toCommentItem,
   type CommentRow,
   type CommentStatus,
+  type CommentTargetType,
 } from "../../shared/types/comment";
 
 export interface AdminCommentQuery {
   search?: string;
+  targetType?: CommentTargetType;
   articleId?: string;
   userId?: string;
   status?: CommentStatus;
@@ -52,7 +54,7 @@ function toPage(input: AdminCommentQuery) {
 
 async function getCommentById(commentId: string, client: DbClient = db) {
   const [row] = await client<CommentRow[]>`
-    SELECT c.id, c.article_id, c.user_id, c.parent_id, c.content, c.status,
+    SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
            c.created_at, c.updated_at, c.deleted_at,
            u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
     FROM comments c
@@ -75,6 +77,7 @@ export async function listAdminComments(
   const search = query.search?.trim()
     ? `%${query.search.trim().toLowerCase()}%`
     : null;
+  const targetType = query.targetType ?? null;
   const articleId = query.articleId ?? null;
   const userId = query.userId ?? null;
   const status = query.status ?? null;
@@ -83,20 +86,21 @@ export async function listAdminComments(
 
   const rows = await client.unsafe<CommentRow[]>(
     `
-      SELECT c.id, c.article_id, c.user_id, c.parent_id, c.content, c.status,
+      SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
              c.created_at, c.updated_at, c.deleted_at,
              u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
       FROM comments c
       JOIN users u ON u.id = c.user_id
       WHERE ($1::text IS NULL OR lower(c.content) LIKE $1 OR lower(u.username) LIKE $1 OR lower(coalesce(u.name, '')) LIKE $1)
-        AND ($2::uuid IS NULL OR c.article_id = $2)
-        AND ($3::uuid IS NULL OR c.user_id = $3)
-        AND ($4::comment_status IS NULL OR c.status = $4)
-        AND ($5::boolean = true OR c.deleted_at IS NULL)
+        AND ($2::comment_target_type IS NULL OR c.target_type = $2)
+        AND ($3::uuid IS NULL OR c.article_id = $3)
+        AND ($4::uuid IS NULL OR c.user_id = $4)
+        AND ($5::comment_status IS NULL OR c.status = $5)
+        AND ($6::boolean = true OR c.deleted_at IS NULL)
       ORDER BY ${orderBy}
-      LIMIT $6 OFFSET $7
+      LIMIT $7 OFFSET $8
     `,
-    [search, articleId, userId, status, includeDeleted, pageSize, offset]
+    [search, targetType, articleId, userId, status, includeDeleted, pageSize, offset]
   );
 
   const [count] = await client.unsafe<{ total: string }[]>(
@@ -105,12 +109,13 @@ export async function listAdminComments(
       FROM comments c
       JOIN users u ON u.id = c.user_id
       WHERE ($1::text IS NULL OR lower(c.content) LIKE $1 OR lower(u.username) LIKE $1 OR lower(coalesce(u.name, '')) LIKE $1)
-        AND ($2::uuid IS NULL OR c.article_id = $2)
-        AND ($3::uuid IS NULL OR c.user_id = $3)
-        AND ($4::comment_status IS NULL OR c.status = $4)
-        AND ($5::boolean = true OR c.deleted_at IS NULL)
+        AND ($2::comment_target_type IS NULL OR c.target_type = $2)
+        AND ($3::uuid IS NULL OR c.article_id = $3)
+        AND ($4::uuid IS NULL OR c.user_id = $4)
+        AND ($5::comment_status IS NULL OR c.status = $5)
+        AND ($6::boolean = true OR c.deleted_at IS NULL)
     `,
-    [search, articleId, userId, status, includeDeleted]
+    [search, targetType, articleId, userId, status, includeDeleted]
   );
 
   return {
@@ -138,7 +143,9 @@ export async function reviewComment(
   `;
 
   const updated = await getCommentById(commentId, client);
-  await clearArticleCacheById(existing.articleId, client);
+  if (existing.articleId) {
+    await clearArticleCacheById(existing.articleId, client);
+  }
   return updated;
 }
 
@@ -156,7 +163,9 @@ export async function deleteCommentByAdmin(
     WHERE id = ${commentId}
   `;
 
-  await clearArticleCacheById(existing.articleId, client);
+  if (existing.articleId) {
+    await clearArticleCacheById(existing.articleId, client);
+  }
   return { ok: true };
 }
 
