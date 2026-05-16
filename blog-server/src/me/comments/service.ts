@@ -10,7 +10,7 @@ async function getOwnComment(
   client: DbClient
 ) {
   const [row] = await client<CommentRow[]>`
-    SELECT c.id, c.article_id, c.user_id, c.parent_id, c.content, c.status,
+    SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
            c.created_at, c.updated_at, c.deleted_at,
            u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
     FROM comments c
@@ -43,7 +43,9 @@ export async function updateMyComment(
   `;
 
   const updated = await getOwnComment(currentUser, commentId, client);
-  await clearArticleCacheById(existing.article_id, client);
+  if (existing.article_id) {
+    await clearArticleCacheById(existing.article_id, client);
+  }
   return toCommentItem(updated);
 }
 
@@ -60,6 +62,8 @@ export async function deleteMyComment(
     WHERE id = ${commentId}
   `;
 
-  await clearArticleCacheById(existing.article_id, client);
+  if (existing.article_id) {
+    await clearArticleCacheById(existing.article_id, client);
+  }
   return { ok: true };
 }

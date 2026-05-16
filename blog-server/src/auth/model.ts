@@ -4,7 +4,11 @@ import { UserProfileSchema } from "../shared/types/user";
 
 export const EmailCodeBody = t.Object({
   email: t.String({ format: "email", maxLength: 254 }),
-  purpose: t.Union([t.Literal("register"), t.Literal("password_reset")]),
+  purpose: t.Union([
+    t.Literal("register"),
+    t.Literal("password_reset"),
+    t.Literal("email_change"),
+  ]),
 });
 
 export const RegisterBody = t.Object({

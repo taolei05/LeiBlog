@@ -8,6 +8,11 @@ export const CommentStatusSchema = t.Union([
   t.Literal("rejected"),
 ]);
 
+export const CommentTargetTypeSchema = t.Union([
+  t.Literal("article"),
+  t.Literal("guestbook"),
+]);
+
 export const CommentAuthorSchema = t.Object({
   id: t.String(),
   username: t.String(),
@@ -20,7 +25,8 @@ export const CommentAuthorSchema = t.Object({
 
 export const CommentItemSchema = t.Object({
   id: t.String(),
-  articleId: t.String(),
+  targetType: CommentTargetTypeSchema,
+  articleId: t.Nullable(t.String()),
   userId: t.String(),
   parentId: t.Nullable(t.String()),
   content: t.String(),
@@ -32,10 +38,12 @@ export const CommentItemSchema = t.Object({
 });
 
 export type CommentStatus = "pending" | "approved" | "rejected";
+export type CommentTargetType = "article" | "guestbook";
 
 export interface CommentRow {
   id: string;
-  article_id: string;
+  target_type: CommentTargetType;
+  article_id: string | null;
   user_id: string;
   parent_id: string | null;
   content: string;
@@ -60,6 +68,7 @@ function toIso(value: Date | string | null) {
 export function toCommentItem(row: CommentRow) {
   return {
     id: row.id,
+    targetType: row.target_type,
     articleId: row.article_id,
     userId: row.user_id,
     parentId: row.parent_id,

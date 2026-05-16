@@ -1,9 +1,14 @@
 import { t } from "elysia";
 
-import { CommentItemSchema, CommentStatusSchema } from "../../shared/types/comment";
+import {
+  CommentItemSchema,
+  CommentStatusSchema,
+  CommentTargetTypeSchema,
+} from "../../shared/types/comment";
 
 export const AdminCommentQuery = t.Object({
   search: t.Optional(t.String({ maxLength: 160 })),
+  targetType: t.Optional(CommentTargetTypeSchema),
   articleId: t.Optional(t.String()),
   userId: t.Optional(t.String()),
   status: t.Optional(CommentStatusSchema),

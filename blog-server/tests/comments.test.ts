@@ -9,7 +9,12 @@ import {
   reviewComment,
 } from "../src/admin/comments/service";
 import { createArticle, createCategory } from "../src/admin/content/service";
-import { createPublicComment, listPublicComments } from "../src/public/comments/service";
+import {
+  createGuestbookComment,
+  createPublicComment,
+  listGuestbookComments,
+  listPublicComments,
+} from "../src/public/comments/service";
 import { deleteMyComment, updateMyComment } from "../src/me/comments/service";
 import { hashPassword, type AuthUser } from "../src/shared/auth";
 
@@ -101,6 +106,8 @@ describe("comment services", () => {
       { content: "第一条评论" },
       testDb
     );
+    expect(root.targetType).toBe("article");
+    expect(root.articleId).toBe(articleId);
     expect(root.status).toBe("approved");
     expect(root.author.tags).toEqual(["小可爱"]);
 
@@ -159,6 +166,37 @@ describe("comment services", () => {
       testDb
     );
     expect(withDeleted.total).toBe(2);
+  });
+
+  test("creates and lists guestbook comments separately from article comments", async () => {
+    const message = await createGuestbookComment(
+      currentUser,
+      { content: "留言板第一条" },
+      testDb
+    );
+
+    expect(message.targetType).toBe("guestbook");
+    expect(message.articleId).toBeNull();
+
+    const guestbookList = await listGuestbookComments(
+      { page: "1", pageSize: "10" },
+      testDb
+    );
+    expect(guestbookList.items.some((item) => item.id === message.id)).toBe(true);
+
+    const articleList = await listPublicComments(
+      articleId,
+      { page: "1", pageSize: "50" },
+      testDb
+    );
+    expect(articleList.items.some((item) => item.id === message.id)).toBe(false);
+
+    const adminList = await listAdminComments(
+      currentAdmin,
+      { targetType: "guestbook", page: "1", pageSize: "10" },
+      testDb
+    );
+    expect(adminList.items.some((item) => item.id === message.id)).toBe(true);
   });
 
   test("blocks comments when site comments are disabled", async () => {

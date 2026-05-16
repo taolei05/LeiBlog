@@ -150,6 +150,7 @@ export async function listPublishedArticles(
             SELECT count(*)
             FROM comments c
             WHERE c.article_id = a.id
+              AND c.target_type = 'article'
               AND c.status = 'approved'
               AND c.deleted_at IS NULL
           ) AS comment_count,
@@ -244,6 +245,7 @@ export async function getPublishedArticleBySlug(slug: string, client: DbClient =
           SELECT count(*)
           FROM comments c
           WHERE c.article_id = a.id
+            AND c.target_type = 'article'
             AND c.status = 'approved'
             AND c.deleted_at IS NULL
         ) AS comment_count,

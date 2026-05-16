@@ -10,7 +10,7 @@
     "check": "bun run typecheck && bun test",
     "db:migrate": "bun src/db/migrate.ts",
     "db:seed": "bun src/db/seed.ts",
-    "docker:up": "docker compose up -d blog-postgres blog-redis",
+    "docker:up": "docker compose --profile api up -d blog-postgres blog-redis blog-server",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
   },

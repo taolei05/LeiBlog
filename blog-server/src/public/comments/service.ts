@@ -2,7 +2,10 @@ import type { AuthUser } from "../../shared/auth";
 import { clearArticleCacheById } from "../../shared/cache/content";
 import { db, withTransaction, type DbClient } from "../../shared/db";
 import { forbidden, notFound, validationError } from "../../shared/errors";
-import { toCommentItem, type CommentRow } from "../../shared/types/comment";
+import {
+  toCommentItem,
+  type CommentRow,
+} from "../../shared/types/comment";
 
 export interface PublicCommentQuery {
   page?: string;
@@ -14,6 +17,16 @@ export interface CreateCommentInput {
   content: string;
   parentId?: string | null;
 }
+
+type CommentTarget =
+  | {
+      articleId: string;
+      targetType: "article";
+    }
+  | {
+      articleId: null;
+      targetType: "guestbook";
+    };
 
 function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
   const parsed = Number(value);
@@ -55,20 +68,25 @@ async function ensurePublishedArticle(articleId: string, client: DbClient) {
 }
 
 async function ensureParentComment(
-  articleId: string,
+  target: CommentTarget,
   parentId: string | null | undefined,
   client: DbClient
 ) {
   if (!parentId) return null;
 
-  const [parent] = await client<{ id: string }[]>`
-    SELECT id
-    FROM comments
-    WHERE id = ${parentId}
-      AND article_id = ${articleId}
-      AND status = 'approved'
-      AND deleted_at IS NULL
-  `;
+  const [parent] = await client.unsafe<{ id: string }[]>(
+    `
+      SELECT id
+      FROM comments
+      WHERE id = $1
+        AND target_type = $2::comment_target_type
+        AND (($2::comment_target_type = 'article' AND article_id = $3::uuid)
+          OR ($2::comment_target_type = 'guestbook' AND article_id IS NULL))
+        AND status = 'approved'
+        AND deleted_at IS NULL
+    `,
+    [parentId, target.targetType, target.articleId]
+  );
 
   if (!parent) throw validationError("父评论不存在");
   return parent.id;
@@ -76,7 +94,7 @@ async function ensureParentComment(
 
 async function getCommentById(id: string, client: DbClient = db) {
   const [row] = await client<CommentRow[]>`
-    SELECT c.id, c.article_id, c.user_id, c.parent_id, c.content, c.status,
+    SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
            c.created_at, c.updated_at, c.deleted_at,
            u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
     FROM comments c
@@ -88,43 +106,49 @@ async function getCommentById(id: string, client: DbClient = db) {
   return toCommentItem(row);
 }
 
-export async function listPublicComments(
-  articleId: string,
+async function listCommentsForTarget(
+  target: CommentTarget,
   query: PublicCommentQuery,
   client: DbClient = db
 ) {
-  await ensurePublishedArticle(articleId, client);
+  if (target.targetType === "article") {
+    await ensurePublishedArticle(target.articleId, client);
+  }
 
   const { page, pageSize, offset } = toPage(query);
   const parentId = query.parentId ?? null;
 
   const rows = await client.unsafe<CommentRow[]>(
     `
-      SELECT c.id, c.article_id, c.user_id, c.parent_id, c.content, c.status,
+      SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
              c.created_at, c.updated_at, c.deleted_at,
              u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
       FROM comments c
       JOIN users u ON u.id = c.user_id
-      WHERE c.article_id = $1
+      WHERE c.target_type = $1::comment_target_type
+        AND (($1::comment_target_type = 'article' AND c.article_id = $2::uuid)
+          OR ($1::comment_target_type = 'guestbook' AND c.article_id IS NULL))
         AND c.status = 'approved'
         AND c.deleted_at IS NULL
-        AND ($2::uuid IS NULL OR c.parent_id = $2)
+        AND ($3::uuid IS NULL OR c.parent_id = $3)
       ORDER BY c.created_at ASC
-      LIMIT $3 OFFSET $4
+      LIMIT $4 OFFSET $5
     `,
-    [articleId, parentId, pageSize, offset]
+    [target.targetType, target.articleId, parentId, pageSize, offset]
   );
 
   const [count] = await client.unsafe<{ total: string }[]>(
     `
       SELECT count(*) AS total
       FROM comments c
-      WHERE c.article_id = $1
+      WHERE c.target_type = $1::comment_target_type
+        AND (($1::comment_target_type = 'article' AND c.article_id = $2::uuid)
+          OR ($1::comment_target_type = 'guestbook' AND c.article_id IS NULL))
         AND c.status = 'approved'
         AND c.deleted_at IS NULL
-        AND ($2::uuid IS NULL OR c.parent_id = $2)
+        AND ($3::uuid IS NULL OR c.parent_id = $3)
     `,
-    [articleId, parentId]
+    [target.targetType, target.articleId, parentId]
   );
 
   return {
@@ -136,9 +160,9 @@ export async function listPublicComments(
   };
 }
 
-export async function createPublicComment(
+async function createCommentForTarget(
   currentUser: AuthUser,
-  articleId: string,
+  target: CommentTarget,
   input: CreateCommentInput,
   client: DbClient = db
 ) {
@@ -149,12 +173,14 @@ export async function createPublicComment(
 
   await withTransaction(async (tx) => {
     await ensureCommentsEnabled(tx);
-    await ensurePublishedArticle(articleId, tx);
-    const parentId = await ensureParentComment(articleId, input.parentId, tx);
+    if (target.targetType === "article") {
+      await ensurePublishedArticle(target.articleId, tx);
+    }
+    const parentId = await ensureParentComment(target, input.parentId, tx);
 
     const [created] = await tx<{ id: string }[]>`
-      INSERT INTO comments (article_id, user_id, parent_id, content)
-      VALUES (${articleId}, ${currentUser.id}, ${parentId}, ${content})
+      INSERT INTO comments (target_type, article_id, user_id, parent_id, content)
+      VALUES (${target.targetType}, ${target.articleId}, ${currentUser.id}, ${parentId}, ${content})
       RETURNING id
     `;
 
@@ -162,8 +188,52 @@ export async function createPublicComment(
   }, client);
 
   const comment = await getCommentById(commentId, client);
-  await clearArticleCacheById(articleId, client);
+  if (target.articleId) {
+    await clearArticleCacheById(target.articleId, client);
+  }
   return comment;
+}
+
+export function listPublicComments(
+  articleId: string,
+  query: PublicCommentQuery,
+  client: DbClient = db
+) {
+  return listCommentsForTarget({ targetType: "article", articleId }, query, client);
+}
+
+export function listGuestbookComments(
+  query: PublicCommentQuery,
+  client: DbClient = db
+) {
+  return listCommentsForTarget({ targetType: "guestbook", articleId: null }, query, client);
+}
+
+export function createPublicComment(
+  currentUser: AuthUser,
+  articleId: string,
+  input: CreateCommentInput,
+  client: DbClient = db
+) {
+  return createCommentForTarget(
+    currentUser,
+    { targetType: "article", articleId },
+    input,
+    client
+  );
+}
+
+export function createGuestbookComment(
+  currentUser: AuthUser,
+  input: CreateCommentInput,
+  client: DbClient = db
+) {
+  return createCommentForTarget(
+    currentUser,
+    { targetType: "guestbook", articleId: null },
+    input,
+    client
+  );
 }
 
 export { getCommentById, ensureCommentsEnabled, ensurePublishedArticle };
