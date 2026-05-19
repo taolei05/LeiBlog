@@ -10,12 +10,18 @@ import {
 import { appConfig, type AppConfig } from "../../shared/config";
 import { db, withTransaction, type DbClient } from "../../shared/db";
 import { notFound, validationError } from "../../shared/errors";
+import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
 
 type MediaType = "image" | "video" | "document";
 type SortOrder = "asc" | "desc";
+type MediaSystemFolderKey = "article-covers" | "avatars" | "comments" | "site";
 
 export interface MediaListQuery {
+  createdFrom?: string;
+  createdTo?: string;
   search?: string;
+  folderId?: string;
+  folderSlug?: string;
   fileType?: MediaType;
   fileFormat?: string;
   page?: string;
@@ -27,6 +33,14 @@ export interface MediaListQuery {
 export interface UploadMediaInput {
   file: File;
   fileName?: string;
+  folderId?: string;
+  folderSlug?: string;
+}
+
+export interface MediaFolderInput {
+  description?: string | null;
+  name: string;
+  slug?: string;
 }
 
 export interface MediaServiceOptions {
@@ -35,16 +49,64 @@ export interface MediaServiceOptions {
 }
 
 interface MediaRow {
-  id: string;
-  file_name: string;
-  file_format: string;
-  file_type: MediaType;
-  file_size_bytes: string | number | bigint;
   access_url: string;
-  uploaded_by: string | null;
   created_at: Date | string;
+  file_format: string;
+  file_name: string;
+  file_size_bytes: string | number | bigint;
+  file_type: MediaType;
+  folder_id: string | null;
+  folder_name: string | null;
+  folder_slug: string | null;
+  folder_system_key: string | null;
+  id: string;
+  updated_at: Date | string;
+  uploaded_by: string | null;
+}
+
+interface MediaFolderRow {
+  article_count: string | number | bigint;
+  created_at: Date | string;
+  description: string;
+  id: string;
+  is_protected: boolean;
+  name: string;
+  slug: string;
+  system_key: MediaSystemFolderKey | null;
   updated_at: Date | string;
 }
+
+const DEFAULT_MEDIA_FOLDERS = [
+  {
+    description: "文章封面只能存储到这里。",
+    name: "文章封面",
+    slug: "article-covers",
+    systemKey: "article-covers",
+  },
+  {
+    description: "所有用户头像只能存储到这里。",
+    name: "头像",
+    slug: "avatars",
+    systemKey: "avatars",
+  },
+  {
+    description: "评论图片只能存储到这里。",
+    name: "评论",
+    slug: "comments",
+    systemKey: "comments",
+  },
+  {
+    description: "站点深浅色 Logo 和 favicon 只能存储到这里。",
+    name: "站点",
+    slug: "site",
+    systemKey: "site",
+  },
+] satisfies Array<{
+  description: string;
+  name: string;
+  slug: MediaSystemFolderKey;
+  systemKey: MediaSystemFolderKey;
+}>;
 
 const FORMAT_TO_TYPE = {
   jpeg: "image",
@@ -84,8 +146,26 @@ function toMediaItem(row: MediaRow) {
     fileType: row.file_type,
     fileSizeBytes: Number(row.file_size_bytes),
     accessUrl: row.access_url,
+    folderId: row.folder_id,
+    folderName: row.folder_name,
+    folderSlug: row.folder_slug,
+    folderSystemKey: row.folder_system_key,
     uploadedBy: row.uploaded_by,
     createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  };
+}
+
+function toMediaFolder(row: MediaFolderRow) {
+  return {
+    createdAt: toIso(row.created_at),
+    description: row.description,
+    fileCount: Number(row.article_count),
+    id: row.id,
+    isProtected: row.is_protected,
+    name: row.name,
+    slug: row.slug,
+    systemKey: row.system_key,
     updatedAt: toIso(row.updated_at),
   };
 }
@@ -94,6 +174,17 @@ function parsePositiveInt(value: string | undefined, fallback: number, max: numb
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
   return Math.min(parsed, max);
+}
+
+function parseDateFilter(value: string | undefined) {
+  if (!value?.trim()) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw validationError("媒体时间筛选格式无效");
+  }
+
+  return date;
 }
 
 function toPage(input: MediaListQuery) {
@@ -110,14 +201,14 @@ function orderClause(sortBy: MediaListQuery["sortBy"], sortOrder: MediaListQuery
   const order = sortOrder === "asc" ? "ASC" : "DESC";
   const column =
     sortBy === "fileName"
-      ? "lower(file_name)"
+      ? "lower(ma.file_name)"
       : sortBy === "fileSize"
-        ? "file_size_bytes"
+        ? "ma.file_size_bytes"
         : sortBy === "fileType"
-          ? "file_type"
-          : "created_at";
+          ? "ma.file_type"
+          : "ma.created_at";
 
-  return `${column} ${order}, created_at DESC`;
+  return `${column} ${order}, ma.created_at DESC`;
 }
 
 function getConfig(options: MediaServiceOptions) {
@@ -126,6 +217,66 @@ function getConfig(options: MediaServiceOptions) {
 
 function getClient(options: MediaServiceOptions) {
   return options.client ?? db;
+}
+
+function cleanOptional(value: string | null | undefined) {
+  if (value === null) return null;
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function folderSlugFromName(value: string) {
+  return normalizeSlug(value) || createPinyinSlug(value) || "folder";
+}
+
+async function ensureDefaultMediaFolders(client: DbClient) {
+  for (const folder of DEFAULT_MEDIA_FOLDERS) {
+    await client`
+      INSERT INTO media_folders (name, slug, description, system_key, is_protected)
+      VALUES (
+        ${folder.name},
+        ${folder.slug},
+        ${folder.description},
+        ${folder.systemKey},
+        true
+      )
+      ON CONFLICT DO NOTHING
+    `;
+    await client`
+      UPDATE media_folders
+      SET name = ${folder.name},
+          description = ${folder.description},
+          system_key = ${folder.systemKey},
+          is_protected = true
+      WHERE slug = ${folder.slug}
+    `;
+  }
+}
+
+async function folderSlugExists(client: DbClient, slug: string, exceptId?: string) {
+  const [row] = await client.unsafe<{ id: string }[]>(
+    `
+      SELECT id
+      FROM media_folders
+      WHERE lower(slug) = lower($1)
+        AND ($2::uuid IS NULL OR id <> $2)
+      LIMIT 1
+    `,
+    [slug, exceptId ?? null]
+  );
+
+  return Boolean(row);
+}
+
+async function createUniqueFolderSlug(client: DbClient, value: string, exceptId?: string) {
+  const baseSlug = folderSlugFromName(value);
+
+  for (let index = 1; index < 1000; index += 1) {
+    const candidate = withSlugSuffix(baseSlug, index);
+    if (!(await folderSlugExists(client, candidate, exceptId))) return candidate;
+  }
+
+  throw validationError("文件夹 slug 已存在");
 }
 
 function resolveUploadsDir(config: AppConfig) {
@@ -237,14 +388,141 @@ function pathForAccessUrl(config: AppConfig, accessUrl: string) {
 
 async function getMediaRow(id: string, client: DbClient = db) {
   const [row] = await client<MediaRow[]>`
-    SELECT id, file_name, file_format, file_type, file_size_bytes,
-           access_url, uploaded_by, created_at, updated_at
-    FROM media_assets
-    WHERE id = ${id}
+    SELECT ma.id, ma.file_name, ma.file_format, ma.file_type, ma.file_size_bytes,
+           ma.access_url, ma.folder_id, mf.name AS folder_name, mf.slug AS folder_slug,
+           mf.system_key AS folder_system_key, ma.uploaded_by, ma.created_at, ma.updated_at
+    FROM media_assets ma
+    LEFT JOIN media_folders mf ON mf.id = ma.folder_id
+    WHERE ma.id = ${id}
   `;
 
   if (!row) throw notFound("媒体不存在");
   return row;
+}
+
+async function getFolderRow(id: string, client: DbClient = db) {
+  const [row] = await client<MediaFolderRow[]>`
+    SELECT mf.id, mf.name, mf.slug, mf.description, mf.system_key, mf.is_protected,
+           mf.created_at, mf.updated_at, count(ma.id) AS article_count
+    FROM media_folders mf
+    LEFT JOIN media_assets ma ON ma.folder_id = mf.id
+    WHERE mf.id = ${id}
+    GROUP BY mf.id
+  `;
+
+  if (!row) throw notFound("媒体文件夹不存在");
+  return row;
+}
+
+async function resolveFolder({
+  client,
+  folderId,
+  folderSlug,
+}: {
+  client: DbClient;
+  folderId?: string;
+  folderSlug?: string;
+}) {
+  const slug = folderSlug?.trim().toLowerCase() || null;
+  const id = folderId?.trim() || null;
+
+  if (!id && !slug) return null;
+
+  const [row] = await client<MediaFolderRow[]>`
+    SELECT mf.id, mf.name, mf.slug, mf.description, mf.system_key, mf.is_protected,
+           mf.created_at, mf.updated_at, count(ma.id) AS article_count
+    FROM media_folders mf
+    LEFT JOIN media_assets ma ON ma.folder_id = mf.id
+    WHERE (${id}::uuid IS NULL OR mf.id = ${id})
+      AND (${slug}::text IS NULL OR lower(mf.slug) = ${slug})
+    GROUP BY mf.id
+    LIMIT 1
+  `;
+
+  if (!row) throw validationError("媒体文件夹不存在");
+  return row;
+}
+
+export async function listMediaFolders(
+  currentUser: AuthUser,
+  options: MediaServiceOptions = {}
+) {
+  requireAdminOrDemo(currentUser);
+  const client = getClient(options);
+  await ensureDefaultMediaFolders(client);
+
+  const rows = await client<MediaFolderRow[]>`
+    SELECT mf.id, mf.name, mf.slug, mf.description, mf.system_key, mf.is_protected,
+           mf.created_at, mf.updated_at, count(ma.id) AS article_count
+    FROM media_folders mf
+    LEFT JOIN media_assets ma ON ma.folder_id = mf.id
+    GROUP BY mf.id
+    ORDER BY mf.is_protected DESC, mf.created_at ASC, lower(mf.name) ASC
+  `;
+
+  return { ok: true, items: rows.map(toMediaFolder) };
+}
+
+export async function createMediaFolder(
+  currentUser: AuthUser,
+  input: MediaFolderInput,
+  options: MediaServiceOptions = {}
+) {
+  assertWritableAdmin(currentUser);
+  const client = getClient(options);
+  await ensureDefaultMediaFolders(client);
+
+  const slug = await createUniqueFolderSlug(client, input.slug ?? input.name);
+  const [row] = await client<MediaFolderRow[]>`
+    INSERT INTO media_folders (name, slug, description)
+    VALUES (${input.name.trim()}, ${slug}, ${cleanOptional(input.description) ?? ""})
+    RETURNING id, name, slug, description, system_key, is_protected,
+              created_at, updated_at, 0 AS article_count
+  `;
+
+  return { ok: true, item: toMediaFolder(row) };
+}
+
+export async function updateMediaFolder(
+  currentUser: AuthUser,
+  id: string,
+  input: MediaFolderInput,
+  options: MediaServiceOptions = {}
+) {
+  assertWritableAdmin(currentUser);
+  const client = getClient(options);
+  const existing = await getFolderRow(id, client);
+  const slug =
+    !existing.is_protected && input.slug?.trim()
+      ? await createUniqueFolderSlug(client, input.slug, id)
+      : existing.slug;
+
+  await client`
+    UPDATE media_folders
+    SET name = ${input.name.trim()},
+        slug = ${slug},
+        description = ${cleanOptional(input.description) ?? ""}
+    WHERE id = ${id}
+  `;
+
+  return { ok: true, item: toMediaFolder(await getFolderRow(id, client)) };
+}
+
+export async function deleteMediaFolder(
+  currentUser: AuthUser,
+  id: string,
+  options: MediaServiceOptions = {}
+) {
+  assertWritableAdmin(currentUser);
+  const client = getClient(options);
+  const folder = await getFolderRow(id, client);
+
+  if (folder.is_protected) {
+    throw validationError("系统媒体文件夹禁止删除");
+  }
+
+  await client`DELETE FROM media_folders WHERE id = ${id}`;
+  return { ok: true };
 }
 
 export async function getMediaById(
@@ -263,37 +541,53 @@ export async function listMedia(
 ) {
   requireAdminOrDemo(currentUser);
   const client = getClient(options);
+  await ensureDefaultMediaFolders(client);
   const { page, pageSize, offset } = toPage(query);
   const search = query.search?.trim()
     ? `%${query.search.trim().toLowerCase()}%`
     : null;
+  const folderId = query.folderId ?? null;
+  const folderSlug = query.folderSlug?.trim().toLowerCase() || null;
   const fileType = query.fileType ?? null;
   const fileFormat = query.fileFormat?.trim().toLowerCase() || null;
+  const createdFrom = parseDateFilter(query.createdFrom);
+  const createdTo = parseDateFilter(query.createdTo);
   const orderBy = orderClause(query.sortBy, query.sortOrder);
 
   const rows = await client.unsafe<MediaRow[]>(
     `
-      SELECT id, file_name, file_format, file_type, file_size_bytes,
-             access_url, uploaded_by, created_at, updated_at
-      FROM media_assets
-      WHERE ($1::text IS NULL OR lower(file_name) LIKE $1 OR lower(access_url) LIKE $1)
-        AND ($2::media_type IS NULL OR file_type = $2)
-        AND ($3::text IS NULL OR lower(file_format) = $3)
+      SELECT ma.id, ma.file_name, ma.file_format, ma.file_type, ma.file_size_bytes,
+             ma.access_url, ma.folder_id, mf.name AS folder_name, mf.slug AS folder_slug,
+             mf.system_key AS folder_system_key, ma.uploaded_by, ma.created_at, ma.updated_at
+      FROM media_assets ma
+      LEFT JOIN media_folders mf ON mf.id = ma.folder_id
+      WHERE ($1::text IS NULL OR lower(ma.file_name) LIKE $1 OR lower(ma.access_url) LIKE $1 OR lower(coalesce(mf.name, '')) LIKE $1)
+        AND ($2::media_type IS NULL OR ma.file_type = $2)
+        AND ($3::text IS NULL OR lower(ma.file_format) = $3)
+        AND ($4::timestamptz IS NULL OR ma.created_at >= $4)
+        AND ($5::timestamptz IS NULL OR ma.created_at < $5)
+        AND ($6::uuid IS NULL OR ma.folder_id = $6)
+        AND ($7::text IS NULL OR lower(mf.slug) = $7)
       ORDER BY ${orderBy}
-      LIMIT $4 OFFSET $5
+      LIMIT $8 OFFSET $9
     `,
-    [search, fileType, fileFormat, pageSize, offset]
+    [search, fileType, fileFormat, createdFrom, createdTo, folderId, folderSlug, pageSize, offset]
   );
 
   const [count] = await client.unsafe<{ total: string }[]>(
     `
       SELECT count(*) AS total
-      FROM media_assets
-      WHERE ($1::text IS NULL OR lower(file_name) LIKE $1 OR lower(access_url) LIKE $1)
-        AND ($2::media_type IS NULL OR file_type = $2)
-        AND ($3::text IS NULL OR lower(file_format) = $3)
+      FROM media_assets ma
+      LEFT JOIN media_folders mf ON mf.id = ma.folder_id
+      WHERE ($1::text IS NULL OR lower(ma.file_name) LIKE $1 OR lower(ma.access_url) LIKE $1 OR lower(coalesce(mf.name, '')) LIKE $1)
+        AND ($2::media_type IS NULL OR ma.file_type = $2)
+        AND ($3::text IS NULL OR lower(ma.file_format) = $3)
+        AND ($4::timestamptz IS NULL OR ma.created_at >= $4)
+        AND ($5::timestamptz IS NULL OR ma.created_at < $5)
+        AND ($6::uuid IS NULL OR ma.folder_id = $6)
+        AND ($7::text IS NULL OR lower(mf.slug) = $7)
     `,
-    [search, fileType, fileFormat]
+    [search, fileType, fileFormat, createdFrom, createdTo, folderId, folderSlug]
   );
 
   return {
@@ -313,9 +607,15 @@ export async function uploadMedia(
   assertWritableAdmin(currentUser);
   const config = getConfig(options);
   const client = getClient(options);
+  await ensureDefaultMediaFolders(client);
   const fileInfo = await validateUploadFile(input.file, config);
+  const folder = await resolveFolder({
+    client,
+    folderId: input.folderId,
+    folderSlug: input.folderSlug,
+  });
   const id = randomUUID();
-  const subdir = storageSubdir();
+  const subdir = folder ? `${folder.slug}/${storageSubdir()}` : storageSubdir();
   const storageName = mediaStorageName(id, fileInfo.format);
   const uploadsDir = resolveUploadsDir(config);
   const targetDir = resolve(uploadsDir, subdir);
@@ -329,7 +629,7 @@ export async function uploadMedia(
   try {
     await client`
       INSERT INTO media_assets (
-        id, file_name, file_format, file_type, file_size_bytes, access_url, uploaded_by
+        id, file_name, file_format, file_type, file_size_bytes, access_url, folder_id, uploaded_by
       )
       VALUES (
         ${id},
@@ -338,6 +638,7 @@ export async function uploadMedia(
         ${fileInfo.fileType},
         ${input.file.size},
         ${accessUrl},
+        ${folder?.id ?? null},
         ${currentUser.id}
       )
     `;

@@ -30,35 +30,35 @@ export const adminNavigationGroups: Array<{
     label: "内容管理",
     items: [
       {
-        description: "文章列表、状态筛选、发布操作占位。",
+        description: "文章列表、状态筛选和发布操作。",
         icon: "documentText",
         label: "文章管理",
         path: "/admin/content/articles",
         section: "内容管理",
       },
       {
-        description: "分类树、文章数量和排序占位。",
+        description: "分类树、文章数量和排序。",
         icon: "albums",
         label: "分类管理",
         path: "/admin/content/categories",
         section: "内容管理",
       },
       {
-        description: "标签维护、引用次数和合并占位。",
+        description: "标签维护、引用次数和合并。",
         icon: "pricetags",
         label: "标签管理",
         path: "/admin/content/tags",
         section: "内容管理",
       },
       {
-        description: "评论审核、状态筛选和只读操作占位。",
+        description: "评论审核、状态筛选和只读操作。",
         icon: "chatbubbles",
         label: "评论管理",
         path: "/admin/content/comments",
         section: "内容管理",
       },
       {
-        description: "媒体文件、链接复制和预览操作占位。",
+        description: "媒体文件、链接复制和预览操作。",
         icon: "images",
         label: "媒体库",
         path: "/admin/content/media",
@@ -70,24 +70,31 @@ export const adminNavigationGroups: Array<{
     label: "系统",
     items: [
       {
-        description: "后台用户、角色和访问状态占位。",
+        description: "后台用户、角色和访问状态。",
         icon: "people",
         label: "用户管理",
         path: "/admin/system/users",
         section: "系统",
       },
       {
-        description: "个人资料、头像和偏好设置占位。",
+        description: "个人资料、头像和偏好设置。",
         icon: "personCircle",
         label: "个人设置",
         path: "/admin/system/profile",
         section: "系统",
       },
       {
-        description: "HeroUI 主题、站点配置和集成设置。",
+        description: "HeroUI 主题 token、模式切换和组件预览。",
         icon: "colorPalette",
-        label: "系统设置",
+        label: "主题设置",
         path: "/admin/system/settings",
+        section: "系统",
+      },
+      {
+        description: "站点信息、SEO、备案和集成密钥。",
+        icon: "settings",
+        label: "站点设置",
+        path: "/admin/system/site",
         section: "系统",
       },
     ],
@@ -98,6 +105,36 @@ export const adminRoutes = adminNavigationGroups.flatMap((group) => group.items)
 
 export const dashboardRoute = adminRoutes[0];
 
+const adminSectionIconMap: Record<AdminNavSection, AppIconName> = {
+  主要: "analytics",
+  内容管理: "library",
+  系统: "settings",
+};
+
+export function getAdminSectionIcon(section: AdminNavSection) {
+  return adminSectionIconMap[section];
+}
+
 export function getAdminRouteMeta(pathname: string) {
+  if (pathname === "/admin/content/articles/new") {
+    return {
+      description: "新建文章标题、摘要和 MDX 正文。",
+      icon: "pencil",
+      label: "新建文章",
+      path: pathname,
+      section: "内容管理",
+    } satisfies AdminRouteMeta;
+  }
+
+  if (/^\/admin\/content\/articles\/[^/]+\/edit$/.test(pathname)) {
+    return {
+      description: "编辑文章标题、摘要和 MDX 正文。",
+      icon: "pencil",
+      label: "编辑文章",
+      path: pathname,
+      section: "内容管理",
+    } satisfies AdminRouteMeta;
+  }
+
   return adminRoutes.find((route) => route.path === pathname) ?? dashboardRoute;
 }

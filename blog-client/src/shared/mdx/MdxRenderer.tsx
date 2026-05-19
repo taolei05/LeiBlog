@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 
+import { resolveApiAssetUrl } from "../api/api-base-url";
 import { AppIcon } from "../icons";
 
 type MdxRendererProps = {
@@ -49,22 +50,26 @@ function getCodeLanguage(className: string | undefined) {
 }
 
 function MdxSmartLink({ children, href = "", ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) {
-  if (href.startsWith("/")) {
+  if (href.startsWith("/") && !href.startsWith("/uploads/")) {
     return <Link to={href}>{children}</Link>;
   }
 
+  const resolvedHref = resolveApiAssetUrl(href) ?? href;
+
   return (
-    <a href={href} rel="noreferrer" target="_blank" {...props}>
+    <a href={resolvedHref} rel="noreferrer" target="_blank" {...props}>
       {children}
     </a>
   );
 }
 
 function MdxImageLink({ alt, caption, src }: MdxImageLinkProps) {
+  const imageSrc = resolveApiAssetUrl(src) ?? src;
+
   return (
     <figure className="mdx-image-link">
-      <a href={src} rel="noreferrer" target="_blank">
-        <img alt={alt} loading="lazy" src={src} />
+      <a href={imageSrc} rel="noreferrer" target="_blank">
+        <img alt={alt} loading="lazy" src={imageSrc} />
       </a>
       {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>

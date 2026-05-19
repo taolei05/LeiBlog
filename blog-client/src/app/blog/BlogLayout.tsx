@@ -1,9 +1,18 @@
 import { Button, SearchField } from "@heroui/react";
-import { useState, type FormEvent } from "react";
+import type { FormEvent } from "react";
+import type { AppIconName } from "../../shared/icons/AppIcon";
+import type { PublicSiteInfo } from "../../shared/site/site-info";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import { AppIcon, type AppIconName } from "../../shared/icons/AppIcon";
+import { AppIcon } from "../../shared/icons/AppIcon";
+import {
+  applyFavicon,
+  fetchPublicSiteInfo,
+  getPreferredSiteLogo,
+} from "../../shared/site/site-info";
 import { ThemeSwitcher } from "../../shared/theme/ThemeSwitcher";
+import { useTheme } from "../../shared/theme/ThemeProviderLite";
 import { InteractiveCursor } from "./InteractiveCursor";
 
 const primaryNavItems = [
@@ -26,7 +35,13 @@ const siteNavItems = [
   { to: "/guestbook", label: "留言板", icon: "chatbubbles" },
 ] as const;
 
-function BlogNavLink({ icon, label, to }: { icon: AppIconName; label: string; to: string }) {
+type BlogNavLinkProps = {
+  icon: AppIconName;
+  label: string;
+  to: string;
+};
+
+function BlogNavLink({ icon, label, to }: BlogNavLinkProps) {
   return (
     <NavLink
       className={({ isActive }) => (isActive ? "top-nav__link is-active" : "top-nav__link")}
@@ -38,15 +53,13 @@ function BlogNavLink({ icon, label, to }: { icon: AppIconName; label: string; to
   );
 }
 
-function BlogMenu({
-  icon,
-  items,
-  label,
-}: {
+type BlogMenuProps = {
   icon: "reader" | "library";
   items: typeof articleNavItems | typeof siteNavItems;
   label: string;
-}) {
+};
+
+function BlogMenu({ icon, items, label }: BlogMenuProps) {
   return (
     <details className="blog-nav-menu">
       <summary>
@@ -65,8 +78,37 @@ function BlogMenu({
 
 export function BlogLayout() {
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [siteInfo, setSiteInfo] = useState<PublicSiteInfo>();
+  const siteName = siteInfo?.siteName ?? "LeiBlog";
+  const siteLogoUrl = getPreferredSiteLogo(siteInfo, resolvedTheme);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSiteInfo() {
+      try {
+        const nextSiteInfo = await fetchPublicSiteInfo();
+        if (!isActive) return;
+        setSiteInfo(nextSiteInfo);
+      } catch {
+        if (!isActive) return;
+        setSiteInfo(undefined);
+      }
+    }
+
+    void loadSiteInfo();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    applyFavicon(siteInfo?.faviconUrl);
+  }, [siteInfo?.faviconUrl]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,13 +125,15 @@ export function BlogLayout() {
         跳到主要内容
       </a>
       <header className="blog-shell__header">
-        <NavLink aria-label="LeiBlog 首页" className="brand-link blog-brand" to="/">
-          <img
-            alt=""
-            className="blog-brand__image"
-            src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=160&q=80"
-          />
-          <span>LeiBlog</span>
+        <NavLink aria-label={`${siteName} 首页`} className="brand-link blog-brand" to="/">
+          {siteLogoUrl ? (
+            <img alt="" className="blog-brand__image" src={siteLogoUrl} />
+          ) : (
+            <span aria-hidden="true" className="brand-mark">
+              {siteName.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span>{siteName}</span>
         </NavLink>
         <Button
           aria-label="打开前台菜单"

@@ -1,4 +1,4 @@
-import { GenericJsxEditor, type JsxComponentDescriptor } from "@mdxeditor/editor";
+import type { JsxComponentDescriptor, JsxEditorProps } from "@mdxeditor/editor";
 
 export const allowedMdxJsxComponentNames = [
   "Callout",
@@ -13,9 +13,13 @@ export function isAllowedMdxJsxComponent(value: string): value is AllowedMdxJsxC
   return allowedMdxJsxComponentNames.includes(value as AllowedMdxJsxComponentName);
 }
 
+function MdxJsxComponentEditor({ descriptor }: JsxEditorProps) {
+  return <div className="mdx-jsx-component-editor">{descriptor.name ?? "MDX 组件"}</div>;
+}
+
 export const mdxJsxComponentDescriptors: JsxComponentDescriptor[] = [
   {
-    Editor: GenericJsxEditor,
+    Editor: MdxJsxComponentEditor,
     hasChildren: true,
     kind: "flow",
     name: "Callout",
@@ -25,7 +29,7 @@ export const mdxJsxComponentDescriptors: JsxComponentDescriptor[] = [
     ],
   },
   {
-    Editor: GenericJsxEditor,
+    Editor: MdxJsxComponentEditor,
     kind: "flow",
     name: "ImageLink",
     props: [
@@ -35,7 +39,7 @@ export const mdxJsxComponentDescriptors: JsxComponentDescriptor[] = [
     ],
   },
   {
-    Editor: GenericJsxEditor,
+    Editor: MdxJsxComponentEditor,
     hasChildren: true,
     kind: "flow",
     name: "ReadNext",
@@ -45,7 +49,7 @@ export const mdxJsxComponentDescriptors: JsxComponentDescriptor[] = [
     ],
   },
   {
-    Editor: GenericJsxEditor,
+    Editor: MdxJsxComponentEditor,
     hasChildren: true,
     kind: "flow",
     name: "CodeBlock",

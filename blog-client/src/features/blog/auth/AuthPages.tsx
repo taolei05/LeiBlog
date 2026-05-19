@@ -75,11 +75,7 @@ export function RegisterPage() {
 
 export function ForgotPasswordPage() {
   return (
-    <AuthShell
-      description="找回密码页先提供邮箱输入和验证码流程占位。"
-      icon="lockClosed"
-      title="找回密码"
-    >
+    <AuthShell description="通过邮箱验证码找回账号密码。" icon="lockClosed" title="找回密码">
       <TextField fullWidth isRequired>
         <Label>邮箱</Label>
         <Input autoComplete="email" placeholder="name@example.com" type="email" />
@@ -122,7 +118,7 @@ export function UserProfilePage() {
         <form className="front-card-form" onSubmit={saveProfile}>
           <TextField fullWidth>
             <Label>昵称</Label>
-            <Input placeholder="LeiBlog 读者" />
+            <Input placeholder="你的昵称" />
           </TextField>
           <TextField fullWidth>
             <Label>头像链接</Label>

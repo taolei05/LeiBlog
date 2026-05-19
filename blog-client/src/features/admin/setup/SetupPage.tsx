@@ -9,17 +9,19 @@ import {
   TextArea,
   TextField,
 } from "@heroui/react";
-import { useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
+import type { ChangeEvent, Dispatch, SetStateAction } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { AppIcon } from "../../../shared/icons";
-import {
-  isSetupComplete,
-  markSetupComplete,
-  SETUP_COMPLETE_STORAGE_KEY,
-  signInAdminSession,
-} from "../../../shared/routing/adminGuards";
+import { signInAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
+import {
+  completeInitialSetup,
+  createDemoSession,
+  getSetupStatus,
+  loginAdmin,
+} from "../shared/admin-api";
 
 const setupSteps = [
   {
@@ -65,6 +67,8 @@ type SetupFormState = {
   resendApiKey: string;
   resendDomain: string;
   seoDescription: string;
+  seoKeywords: string;
+  seoTitle: string;
   siteDescription: string;
   siteLogoDark: string;
   siteLogoLight: string;
@@ -92,6 +96,8 @@ const initialFormState: SetupFormState = {
   resendApiKey: "",
   resendDomain: "",
   seoDescription: "",
+  seoKeywords: "LeiBlog, 个人博客, 工程实践",
+  seoTitle: "LeiBlog",
   siteDescription: "一个内容优先的个人博客。",
   siteLogoDark: "",
   siteLogoLight: "",
@@ -121,7 +127,9 @@ export function SetupPage() {
   const location = useLocation();
   const [currentStep, setCurrentStep] = useState(0);
   const [formState, setFormState] = useState(initialFormState);
-  const [completed, setCompleted] = useState(isSetupComplete);
+  const [completed, setCompleted] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const currentStepMeta = setupSteps[currentStep];
   const nextPath = useMemo(() => {
     const state = location.state as { next?: string } | null;
@@ -133,11 +141,92 @@ export function SetupPage() {
     return createChangeHandler(setFormState, key);
   }
 
-  function completeSetup() {
-    markSetupComplete();
-    signInAdminSession("admin");
-    setCompleted(true);
-    void navigate(nextPath, { replace: true });
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSetupStatus() {
+      try {
+        const setup = await getSetupStatus();
+        if (!isActive) return;
+        setCompleted(setup.isCompleted);
+      } catch {
+        if (!isActive) return;
+        setStatusMessage("无法读取初始化状态，请确认后端服务已启动。");
+      }
+    }
+
+    void loadSetupStatus();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  async function completeSetup() {
+    setIsSubmitting(true);
+    setStatusMessage("");
+
+    try {
+      await completeInitialSetup({
+        admin: {
+          avatarUrl: formState.adminAvatar || undefined,
+          description: formState.adminDescription,
+          email: formState.adminEmail || undefined,
+          name: formState.adminName || undefined,
+          password: formState.adminPassword,
+          tags: splitList(formState.adminTags),
+          username: formState.adminUsername,
+        },
+        filing: {
+          icpNumber: formState.icpNumber || undefined,
+          icpUrl: formState.icpUrl || undefined,
+          policeNumber: formState.policeNumber || undefined,
+          policeUrl: formState.policeUrl || undefined,
+        },
+        siteConfig: {
+          commentsEnabled: formState.commentsEnabled,
+          copyright: formState.copyright,
+          deeplApiKey: formState.deeplApiKey || undefined,
+          ipgeolocationApiKey: formState.ipGeolocationApiKey || undefined,
+          resendApiKey: formState.resendApiKey || undefined,
+          resendDomain: formState.resendDomain || undefined,
+          seoDescription: formState.seoDescription,
+          seoKeywords: splitList(formState.seoKeywords),
+          seoTitle: formState.seoTitle,
+        },
+        siteInfo: {
+          description: formState.siteDescription,
+          establishedAt: formState.foundedAt,
+          faviconUrl: formState.favicon || undefined,
+          logoDarkUrl: formState.siteLogoDark || undefined,
+          logoLightUrl: formState.siteLogoLight || undefined,
+          siteName: formState.siteName,
+        },
+      });
+      const nextSession = await loginAdmin(formState.adminUsername, formState.adminPassword);
+      signInAdminSession(nextSession);
+      setCompleted(true);
+      void navigate(nextPath, { replace: true });
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "初始化失败");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function enterReadonlyDemo() {
+    setIsSubmitting(true);
+    setStatusMessage("");
+
+    try {
+      const nextSession = await createDemoSession();
+      signInAdminSession(nextSession);
+      void navigate(nextPath, { replace: true });
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "演示会话创建失败");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (completed) {
@@ -147,9 +236,7 @@ export function SetupPage() {
           <AppIcon name="checkmarkCircle" size={28} />
           <Card.Header>
             <Card.Title>首次配置已完成</Card.Title>
-            <Card.Description>
-              本地标记 `{SETUP_COMPLETE_STORAGE_KEY}` 已写入，后台守卫会放行 admin 和 demo 角色。
-            </Card.Description>
+            <Card.Description>管理员已创建，可以返回后台登录页进入控制台。</Card.Description>
           </Card.Header>
           <Card.Footer className="setup-card__footer">
             <Button onPress={() => navigate("/admin")}>
@@ -170,8 +257,17 @@ export function SetupPage() {
           <div className="setup-shell__intro">
             <p className="eyebrow">首次配置</p>
             <h1>完成 4 步后进入后台</h1>
-            <p>后台守卫已接入，未完成配置前会停留在这个向导页。</p>
+            <p>没有管理员时只能停留在初始化页，或进入只读演示后台。</p>
           </div>
+          <Button
+            isDisabled={isSubmitting}
+            onPress={() => void enterReadonlyDemo()}
+            type="button"
+            variant="secondary"
+          >
+            <AppIcon name="shield" />
+            只读演示进入后台
+          </Button>
           <ol className="setup-steps">
             {setupSteps.map((step, index) => (
               <li
@@ -213,7 +309,7 @@ export function SetupPage() {
             className="setup-wizard__form"
             onSubmit={(event) => {
               event.preventDefault();
-              completeSetup();
+              void completeSetup();
             }}
           >
             {currentStep === 0 ? (
@@ -323,11 +419,22 @@ export function SetupPage() {
 
             {currentStep === 2 ? (
               <div className="form-grid">
+                <SetupTextField
+                  label="SEO 标题"
+                  onChange={updateField("seoTitle")}
+                  value={formState.seoTitle}
+                />
                 <SetupTextArea
                   className="form-grid__wide"
                   label="SEO 描述"
                   onChange={updateField("seoDescription")}
                   value={formState.seoDescription}
+                />
+                <SetupTextField
+                  label="SEO 关键词"
+                  onChange={updateField("seoKeywords")}
+                  placeholder="用逗号分隔"
+                  value={formState.seoKeywords}
                 />
                 <SetupTextField
                   label="版权信息"
@@ -421,17 +528,29 @@ export function SetupPage() {
                   下一步
                 </Button>
               ) : (
-                <Button type="submit">
+                <Button isDisabled={isSubmitting} type="submit">
                   <AppIcon name="save" />
                   完成配置并进入后台
                 </Button>
               )}
             </div>
+            {statusMessage ? <p className="front-form-note">{statusMessage}</p> : null}
           </Form>
         </Card>
       </div>
     </main>
   );
+}
+
+function splitList(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(/[,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function NavBrand() {

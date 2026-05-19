@@ -14,7 +14,7 @@ export function ServerErrorPage() {
           <AppIcon name="server" size={28} />
         </div>
         <h1>服务暂时不可用</h1>
-        <p>这是一页前端错误态占位，后续会接入真实异常边界和错误恢复入口。</p>
+        <p>服务异常时会展示这页，并提供返回入口。</p>
         <div className="action-row">
           <Button onPress={() => navigate("/")}>返回首页</Button>
           <Button variant="secondary" onPress={() => navigate(-1)}>

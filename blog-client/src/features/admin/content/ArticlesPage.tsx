@@ -1,105 +1,44 @@
-import { Card } from "@heroui/react";
-import { lazy, Suspense } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AdminDataPage } from "../shared/AdminDataPage";
-import {
-  DataStatusChip,
-  DataTable,
-  type DataTableBulkAction,
-  type DataTableColumn,
-  type DataTableFilter,
-  type DataTableRow,
-  type DataTableRowAction,
-  type DataTableToolbarAction,
+import type {
+  DataTableBulkAction,
+  DataTableColumn,
+  DataTableFilter,
+  DataTableRow,
+  DataTableRowAction,
+  DataTableToolbarAction,
 } from "../shared/DataTable";
+import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { adminFetch } from "../shared/admin-api";
 
 type ArticleRow = DataTableRow & {
   author: string;
   category: string;
   comments: number;
-  status: "draft" | "published" | "review";
+  status: "draft" | "offline" | "published";
   title: string;
   updatedAt: string;
   views: number;
 };
 
-const articleRows: ArticleRow[] = [
-  {
-    id: "article-1",
-    author: "Lei",
-    category: "工程札记",
-    comments: 12,
-    status: "published",
-    title: "用 Elysia 重建博客后端",
-    updatedAt: "2026-05-12 22:18",
-    views: 2368,
-  },
-  {
-    id: "article-2",
-    author: "Lei",
-    category: "前端",
-    comments: 5,
-    status: "review",
-    title: "HeroUI v3 主题变量整理",
-    updatedAt: "2026-05-14 09:30",
-    views: 841,
-  },
-  {
-    id: "article-3",
-    author: "Lei",
-    category: "生活",
-    comments: 0,
-    status: "draft",
-    title: "五月写作计划",
-    updatedAt: "2026-05-15 18:42",
-    views: 93,
-  },
-  {
-    id: "article-4",
-    author: "Demo",
-    category: "摄影",
-    comments: 18,
-    status: "published",
-    title: "夜色里的城市光线",
-    updatedAt: "2026-05-08 21:04",
-    views: 1720,
-  },
-  {
-    id: "article-5",
-    author: "Lei",
-    category: "工程札记",
-    comments: 3,
-    status: "published",
-    title: "Redis 缓存键设计笔记",
-    updatedAt: "2026-05-03 11:12",
-    views: 1284,
-  },
-  {
-    id: "article-6",
-    author: "Lei",
-    category: "前端",
-    comments: 1,
-    status: "draft",
-    title: "MDXEditor 插件链草稿",
-    updatedAt: "2026-05-01 16:25",
-    views: 340,
-  },
-  {
-    id: "article-7",
-    author: "Lei",
-    category: "系统",
-    comments: 7,
-    status: "review",
-    title: "首次配置流程验收清单",
-    updatedAt: "2026-04-28 08:10",
-    views: 918,
-  },
-];
+type AdminArticleItem = {
+  authorId: string | null;
+  categories: Array<{ name: string }>;
+  commentCount: number;
+  id: string;
+  readCount: number;
+  slug: string;
+  status: ArticleRow["status"];
+  title: string;
+  updatedAt: string;
+};
 
 const statusMeta = {
   draft: { label: "草稿", tone: "default" },
+  offline: { label: "已下架", tone: "danger" },
   published: { label: "已发布", tone: "success" },
-  review: { label: "待审核", tone: "warning" },
 } as const;
 
 const articleColumns: DataTableColumn<ArticleRow>[] = [
@@ -160,92 +99,185 @@ const articleFilters: DataTableFilter<ArticleRow>[] = [
     key: "status",
     label: "状态",
     options: [
-      { label: "已发布", predicate: (row) => row.status === "published", value: "published" },
-      { label: "待审核", predicate: (row) => row.status === "review", value: "review" },
       { label: "草稿", predicate: (row) => row.status === "draft", value: "draft" },
+      { label: "已发布", predicate: (row) => row.status === "published", value: "published" },
+      { label: "已下架", predicate: (row) => row.status === "offline", value: "offline" },
     ],
   },
-  {
-    allLabel: "全部分类",
-    key: "category",
-    label: "分类",
-    options: ["工程札记", "前端", "生活", "摄影", "系统"].map((category) => ({
-      label: category,
-      predicate: (row) => row.category === category,
-      value: category,
-    })),
-  },
 ];
-
-const articleToolbarActions: DataTableToolbarAction<ArticleRow>[] = [
-  {
-    icon: "create",
-    label: "新建文章",
-    onPress: ({ setNotice }) => setNotice("新建文章表单会在编辑器阶段接入"),
-  },
-  {
-    access: "read",
-    icon: "download",
-    label: "导出",
-    onPress: ({ setNotice }) => setNotice("已生成文章导出占位任务"),
-  },
-];
-
-const articleBulkActions: DataTableBulkAction<ArticleRow>[] = [
-  {
-    icon: "checkmarkCircle",
-    label: "批量发布",
-    onPress: (rows, { clearSelection, setNotice }) => {
-      setNotice(`已标记 ${rows.length} 篇文章等待发布接口`);
-      clearSelection();
-    },
-  },
-  {
-    icon: "folderOpen",
-    label: "归档",
-    onPress: (rows, { clearSelection, setNotice }) => {
-      setNotice(`已标记 ${rows.length} 篇文章等待归档接口`);
-      clearSelection();
-    },
-  },
-];
-
-const articleRowActions: DataTableRowAction<ArticleRow>[] = [
-  {
-    access: "read",
-    icon: "eye",
-    label: "查看",
-    onPress: (row, { setNotice }) => setNotice(`预览《${row.title}》`),
-  },
-  {
-    icon: "pencil",
-    label: "编辑",
-    onPress: (row, { setNotice }) => setNotice(`编辑《${row.title}》会在 MDX 阶段接入`),
-  },
-  {
-    access: "danger",
-    icon: "trash",
-    label: "删除",
-    onPress: (row, { setNotice }) => setNotice(`删除《${row.title}》需要后端接口确认`),
-  },
-];
-
-const ArticleMdxEditorPanel = lazy(() =>
-  import("./ArticleMdxEditorPanel").then((module) => ({
-    default: module.ArticleMdxEditorPanel,
-  })),
-);
 
 export function ArticlesPage() {
+  const navigate = useNavigate();
+  const [articleRows, setArticleRows] = useState<ArticleRow[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const articleCategoryOptions = useMemo(
+    () => [...new Set(articleRows.map((row) => row.category).filter(Boolean))],
+    [articleRows],
+  );
+  const filters = useMemo<DataTableFilter<ArticleRow>[]>(
+    () => [
+      ...articleFilters,
+      {
+        allLabel: "全部分类",
+        key: "category",
+        label: "分类",
+        options: articleCategoryOptions.map((category) => ({
+          label: category,
+          predicate: (row) => row.category === category,
+          value: category,
+        })),
+      },
+    ],
+    [articleCategoryOptions],
+  );
+
+  async function loadArticles() {
+    const response = await adminFetch<{ items: AdminArticleItem[] }>("/admin/content/articles");
+    setArticleRows(
+      response.items.map((article) => ({
+        author: article.authorId ?? "未知",
+        category: article.categories[0]?.name ?? "未分类",
+        comments: article.commentCount,
+        id: article.id,
+        status: article.status,
+        title: article.title,
+        updatedAt: new Date(article.updatedAt).toLocaleString("zh-CN"),
+        views: article.readCount,
+      })),
+    );
+  }
+
+  useEffect(() => {
+    void loadArticles();
+  }, [reloadKey]);
+
+  async function updateArticleStatus(
+    row: ArticleRow,
+    nextStatus: ArticleRow["status"],
+    setNotice: (message: string) => void,
+  ) {
+    await adminFetch(`/admin/content/articles/${row.id}`, {
+      body: { status: nextStatus },
+      method: "PATCH",
+    });
+    setNotice(`《${row.title}》已更新为${statusMeta[nextStatus].label}`);
+    setReloadKey((key) => key + 1);
+  }
+
+  const articleToolbarActions: DataTableToolbarAction<ArticleRow>[] = [
+    {
+      confirmation: "none",
+      icon: "create",
+      label: "新建文章",
+      onPress: () => {
+        void navigate("/admin/content/articles/new");
+      },
+    },
+    {
+      access: "read",
+      icon: "refresh",
+      label: "刷新",
+      onPress: ({ setNotice }) => {
+        setReloadKey((key) => key + 1);
+        setNotice("文章列表已刷新");
+      },
+    },
+  ];
+
+  const articleBulkActions: DataTableBulkAction<ArticleRow>[] = [
+    {
+      icon: "checkmarkCircle",
+      label: "批量发布",
+      onPress: async (rows, { clearSelection, setNotice }) => {
+        await Promise.all(
+          rows.map((row) =>
+            adminFetch(`/admin/content/articles/${row.id}`, {
+              body: { status: "published" },
+              method: "PATCH",
+            }),
+          ),
+        );
+        clearSelection();
+        setNotice(`已发布 ${rows.length} 篇文章`);
+        setReloadKey((key) => key + 1);
+      },
+    },
+    {
+      icon: "folderOpen",
+      label: "下架",
+      onPress: async (rows, { clearSelection, setNotice }) => {
+        await Promise.all(
+          rows.map((row) =>
+            adminFetch(`/admin/content/articles/${row.id}`, {
+              body: { status: "offline" },
+              method: "PATCH",
+            }),
+          ),
+        );
+        clearSelection();
+        setNotice(`已下架 ${rows.length} 篇文章`);
+        setReloadKey((key) => key + 1);
+      },
+    },
+  ];
+
+  const articleRowActions: DataTableRowAction<ArticleRow>[] = [
+    {
+      access: "read",
+      icon: "eye",
+      label: "查看",
+      onPress: (row, { setNotice }) => setNotice(`查看《${row.title}》`),
+    },
+    {
+      confirmation: "none",
+      icon: "pencil",
+      label: "编辑",
+      onPress: (row) => {
+        void navigate(`/admin/content/articles/${row.id}/edit`);
+      },
+    },
+    {
+      icon: "send",
+      isDisabled: (row) => row.status === "published",
+      label: "发布",
+      onPress: (row, { setNotice }) => updateArticleStatus(row, "published", setNotice),
+    },
+    {
+      icon: "archive",
+      isDisabled: (row) => row.status === "offline",
+      label: "下架",
+      onPress: (row, { setNotice }) => updateArticleStatus(row, "offline", setNotice),
+    },
+    {
+      icon: "documentText",
+      isDisabled: (row) => row.status === "draft",
+      label: "转草稿",
+      onPress: (row, { setNotice }) => updateArticleStatus(row, "draft", setNotice),
+    },
+    {
+      access: "danger",
+      icon: "trash",
+      label: "删除",
+      onPress: async (row, { setNotice }) => {
+        await adminFetch(`/admin/content/articles/${row.id}`, { method: "DELETE" });
+        setNotice("文章已删除");
+        setReloadKey((key) => key + 1);
+      },
+    },
+  ];
+  const publishedCount = articleRows.filter((row) => row.status === "published").length;
+  const draftCount = articleRows.filter((row) => row.status === "draft").length;
+  const offlineCount = articleRows.filter((row) => row.status === "offline").length;
+
   return (
     <AdminDataPage
-      description="文章管理已接入搜索、状态/分类筛选、列排序、分页和批量操作占位。"
+      description="文章管理保留搜索、状态/分类筛选、列排序、分页和批量操作。"
       eyebrow="内容管理"
       icon="documentText"
       metrics={[
-        { label: "草稿", value: "12" },
-        { label: "已发布", value: "48" },
-        { label: "待审核", value: "3" },
+        { label: "草稿", value: String(draftCount) },
+        { label: "已发布", value: String(publishedCount) },
+        { label: "已下架", value: String(offlineCount) },
       ]}
       title="文章管理"
       wide
@@ -255,24 +287,13 @@ export function ArticlesPage() {
         bulkActions={articleBulkActions}
         columns={articleColumns}
         defaultSort={{ column: "updatedAt", direction: "desc" }}
-        filters={articleFilters}
+        filters={filters}
         rowActions={articleRowActions}
         rows={articleRows}
         searchPlaceholder="搜索标题、分类、作者"
         toolbarActions={articleToolbarActions}
+        emptyText="暂无文章记录"
       />
-      <Suspense
-        fallback={
-          <Card className="admin-mdx-card">
-            <Card.Header>
-              <Card.Title>正文编辑</Card.Title>
-              <Card.Description>编辑器载入中</Card.Description>
-            </Card.Header>
-          </Card>
-        }
-      >
-        <ArticleMdxEditorPanel />
-      </Suspense>
     </AdminDataPage>
   );
 }

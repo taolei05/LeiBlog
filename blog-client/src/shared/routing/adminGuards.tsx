@@ -1,100 +1,76 @@
-import { useMemo, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
-export const ADMIN_ROLE_STORAGE_KEY = "leiblog:admin-role";
-export const ADMIN_AUTH_STORAGE_KEY = "leiblog:admin-authenticated";
-export const SETUP_COMPLETE_STORAGE_KEY = "leiblog:setup-complete";
+import type { AdminRole, AdminSession, SetupStatus } from "../../features/admin/shared/admin-api";
+import {
+  clearAdminSession,
+  getSetupStatus,
+  readStoredAdminSession,
+  writeAdminSession,
+} from "../../features/admin/shared/admin-api";
+import { resolveApiAssetUrl } from "../api/api-base-url";
 
-export type AdminRole = "admin" | "demo" | "user";
-
-type AdminSession = {
+type AdminSessionView = {
+  avatarUrl?: string;
   displayName: string;
   isAuthenticated: boolean;
   isReadOnly: boolean;
   role: AdminRole;
   status: "anonymous" | "authenticated";
+  token: string | null;
+  userId?: string;
 };
 
-export type AdminAccessRedirect = {
-  state?: {
-    next: string;
-  };
-  to: string;
-};
+type SetupStatusState =
+  | {
+      status: "loading";
+    }
+  | {
+      setup: SetupStatus;
+      status: "ready";
+    }
+  | {
+      status: "error";
+    };
 
-export type AdminAccessState = {
-  allowedRoles?: AdminRole[];
-  currentPath: string;
-  isAuthenticated: boolean;
-  role: AdminRole;
-  setupComplete: boolean;
-};
+export { type AdminRole };
 
-function readStorageValue(key: string) {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+export function parseAdminRole(value: unknown, fallback: AdminRole = "admin"): AdminRole {
+  if (value === "admin" || value === "demo" || value === "user") return value;
+  return fallback;
 }
 
-function writeStorageValue(key: string, value: string) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // The UI can still continue with in-memory state when storage is blocked.
-  }
-}
-
-function removeStorageValue(key: string) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Ignore storage failures and let the guard fall back on its in-memory read.
-  }
-}
-
-export function isSetupComplete() {
-  return readStorageValue(SETUP_COMPLETE_STORAGE_KEY) === "true";
-}
-
-export function markSetupComplete() {
-  writeStorageValue(SETUP_COMPLETE_STORAGE_KEY, "true");
-}
-
-export function signInAdminSession(role: AdminRole = "admin") {
-  writeStorageValue(ADMIN_AUTH_STORAGE_KEY, "true");
-  writeStorageValue(ADMIN_ROLE_STORAGE_KEY, role);
+export function signInAdminSession(session: AdminSession) {
+  writeAdminSession(session);
 }
 
 export function signOutAdminSession() {
-  removeStorageValue(ADMIN_AUTH_STORAGE_KEY);
+  clearAdminSession();
 }
 
-function readAdminAuthenticated() {
-  return readStorageValue(ADMIN_AUTH_STORAGE_KEY) === "true";
-}
+function toSessionView(session: AdminSession | null): AdminSessionView {
+  if (!session) {
+    return {
+      displayName: "",
+      isAuthenticated: false,
+      isReadOnly: false,
+      role: "user",
+      status: "anonymous",
+      token: null,
+    };
+  }
 
-function readAdminRole(): AdminRole {
-  const storedRole = readStorageValue(ADMIN_ROLE_STORAGE_KEY);
-
-  return parseAdminRole(storedRole);
-}
-
-export function parseAdminRole(value: unknown, fallback: AdminRole = "admin") {
-  return value === "admin" || value === "demo" || value === "user" ? value : fallback;
+  return {
+    avatarUrl: resolveApiAssetUrl(session.user.avatarUrl),
+    displayName: session.user.name ?? session.user.username,
+    isAuthenticated: true,
+    isReadOnly: session.user.role === "demo",
+    role: session.user.role,
+    status: "authenticated",
+    token: session.token,
+    userId: session.user.id,
+  };
 }
 
 export function isAdminRoleAllowed(role: AdminRole, allowedRoles: AdminRole[] = ["admin", "demo"]) {
@@ -102,13 +78,17 @@ export function isAdminRoleAllowed(role: AdminRole, allowedRoles: AdminRole[] = 
 }
 
 export function getAdminAccessRedirect({
-  allowedRoles = ["admin", "demo"],
   currentPath,
   isAuthenticated,
   role,
   setupComplete,
-}: AdminAccessState): AdminAccessRedirect | null {
-  if (!setupComplete) {
+}: {
+  currentPath: string;
+  isAuthenticated: boolean;
+  role: AdminRole;
+  setupComplete: boolean;
+}) {
+  if (!setupComplete && role !== "demo") {
     return { state: { next: currentPath }, to: "/admin/setup" };
   }
 
@@ -116,34 +96,64 @@ export function getAdminAccessRedirect({
     return { state: { next: currentPath }, to: "/admin/login" };
   }
 
-  if (!isAdminRoleAllowed(role, allowedRoles)) {
+  if (!isAdminRoleAllowed(role)) {
     return { to: "/" };
   }
 
   return null;
 }
 
-export function useAdminSession(): AdminSession {
-  const [isAuthenticated] = useState(readAdminAuthenticated);
-  const [role] = useState<AdminRole>(readAdminRole);
+function useSetupStatusState() {
+  const [state, setState] = useState<SetupStatusState>({ status: "loading" });
 
-  return useMemo(
-    () => ({
-      displayName: role === "demo" ? "Demo 账户" : "Lei 管理员",
-      isAuthenticated,
-      isReadOnly: role === "demo",
-      role,
-      status: isAuthenticated ? ("authenticated" as const) : ("anonymous" as const),
-    }),
-    [isAuthenticated, role],
-  );
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSetupStatus() {
+      try {
+        const setup = await getSetupStatus();
+        if (!isActive) return;
+        setState({ setup, status: "ready" });
+      } catch {
+        if (!isActive) return;
+        setState({ status: "error" });
+      }
+    }
+
+    void loadSetupStatus();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  return state;
+}
+
+export function useAdminSession(): AdminSessionView {
+  const [session] = useState(readStoredAdminSession);
+
+  return useMemo(() => toSessionView(session), [session]);
+}
+
+function AdminRouteLoading() {
+  return <main className="setup-page">正在检查后台访问状态...</main>;
 }
 
 export function RequireSetupComplete({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const [setupComplete] = useState(isSetupComplete);
+  const setupState = useSetupStatusState();
+  const session = useAdminSession();
 
-  if (!setupComplete) {
+  if (setupState.status === "loading") {
+    return <AdminRouteLoading />;
+  }
+
+  if (setupState.status === "error") {
+    return <Navigate replace to="/500" />;
+  }
+
+  if (!setupState.setup.isCompleted && !session.isReadOnly) {
     return <Navigate replace state={{ next: location.pathname }} to="/admin/setup" />;
   }
 

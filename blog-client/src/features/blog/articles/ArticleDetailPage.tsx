@@ -1,14 +1,68 @@
 import { Chip } from "@heroui/react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { AppIcon } from "../../../shared/icons";
-import { MdxRenderer } from "../../../shared/mdx/MdxRenderer";
+import { ArticleMdxContent } from "../shared/ArticleMdxContent";
+import { EmptyPlaceholder } from "../shared/BlogComponents";
 import { CommentThread } from "../shared/CommentThread";
-import { getArticleBySlug } from "../shared/blogContent";
+import { fetchPublicArticleBySlug, type BlogArticle } from "../shared/blogApi";
 
 export function BlogArticleDetailPage() {
   const { slug } = useParams();
-  const article = getArticleBySlug(slug);
+  const [article, setArticle] = useState<BlogArticle | null>(null);
+  const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadArticle() {
+      if (!slug) {
+        setStatus("error");
+        return;
+      }
+
+      try {
+        setStatus("loading");
+        const nextArticle = await fetchPublicArticleBySlug(slug);
+        if (!isActive) return;
+        setArticle(nextArticle);
+        setStatus("idle");
+      } catch {
+        if (!isActive) return;
+        setArticle(null);
+        setStatus("error");
+      }
+    }
+
+    void loadArticle();
+
+    return () => {
+      isActive = false;
+    };
+  }, [slug]);
+
+  if (!article) {
+    return (
+      <section className="article-reading-layout">
+        <article className="article-detail">
+          <nav aria-label="文章面包屑" className="front-breadcrumbs">
+            <Link to="/">
+              <AppIcon name="home" />
+              首页
+            </Link>
+            <Link to="/articles">
+              <AppIcon name="reader" />
+              文章
+            </Link>
+          </nav>
+          <EmptyPlaceholder
+            text={status === "error" ? "文章不存在或接口暂时不可用。" : "正在读取文章。"}
+          />
+        </article>
+      </section>
+    );
+  }
 
   return (
     <section className="article-reading-layout">
@@ -33,16 +87,18 @@ export function BlogArticleDetailPage() {
             <span>{article.date}</span>
             <span>{article.readTime}</span>
             {article.tags.map((tag) => (
-              <Chip key={tag} size="sm" variant="soft">
-                <Chip.Label>#{tag}</Chip.Label>
+              <Chip key={tag.slug} size="sm" variant="soft">
+                <Chip.Label>#{tag.name}</Chip.Label>
               </Chip>
             ))}
           </div>
         </header>
 
-        <img alt={article.title} className="article-detail__cover" src={article.cover} />
+        {article.cover ? (
+          <img alt={article.title} className="article-detail__cover" src={article.cover} />
+        ) : null}
 
-        <MdxRenderer>{article.renderMdx}</MdxRenderer>
+        <ArticleMdxContent contentMdx={article.contentMdx ?? ""} />
 
         <footer className="article-detail__footer">
           <Link className="front-action-link" to="/articles">
@@ -52,7 +108,8 @@ export function BlogArticleDetailPage() {
         </footer>
 
         <CommentThread
-          description="评论支持回复、用户标签和审核状态，真实数据会接入 /api/articles/:id/comments。"
+          articleId={article.id}
+          description="评论来自当前文章的公开评论接口。"
           target="article"
           title="文章评论"
         />

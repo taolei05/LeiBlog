@@ -64,6 +64,7 @@ export interface ArticleInput {
 export type ArticleUpdateInput = Partial<ArticleInput>;
 
 interface TaxonomyRow {
+  article_count?: string | number | bigint;
   id: string;
   name: string;
   slug: string;
@@ -91,6 +92,7 @@ interface ArticleRow {
   cover_image_url: string | null;
   status: ArticleStatus;
   read_count: string | number | bigint;
+  comment_count: string | number | bigint;
   is_pinned: boolean;
   created_at: Date | string;
   updated_at: Date | string;
@@ -195,6 +197,7 @@ function toCategory(row: TaxonomyRow) {
     id: row.id,
     name: row.name,
     slug: row.slug,
+    articleCount: Number(row.article_count ?? 0),
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
   };
@@ -234,6 +237,7 @@ function toArticle(row: ArticleRow) {
     coverImageUrl: row.cover_image_url,
     status: row.status,
     readCount: Number(row.read_count),
+    commentCount: Number(row.comment_count),
     isPinned: row.is_pinned,
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
@@ -330,9 +334,12 @@ async function createArticleSlugBase(
 
 async function getCategoryById(id: string, client: DbClient = db) {
   const [row] = await client<TaxonomyRow[]>`
-    SELECT id, name, slug, created_at, updated_at
-    FROM article_categories
-    WHERE id = ${id}
+    SELECT c.id, c.name, c.slug, c.created_at, c.updated_at,
+           count(acl.article_id) AS article_count
+    FROM article_categories c
+    LEFT JOIN article_category_links acl ON acl.category_id = c.id
+    WHERE c.id = ${id}
+    GROUP BY c.id
   `;
   if (!row) throw notFound("分类不存在");
   return toCategory(row);
@@ -340,9 +347,12 @@ async function getCategoryById(id: string, client: DbClient = db) {
 
 async function getTagById(id: string, client: DbClient = db) {
   const [row] = await client<TaxonomyRow[]>`
-    SELECT id, name, slug, color, created_at, updated_at
-    FROM article_tags
-    WHERE id = ${id}
+    SELECT t.id, t.name, t.slug, t.color, t.created_at, t.updated_at,
+           count(atl.article_id) AS article_count
+    FROM article_tags t
+    LEFT JOIN article_tag_links atl ON atl.tag_id = t.id
+    WHERE t.id = ${id}
+    GROUP BY t.id
   `;
   if (!row) throw notFound("标签不存在");
   return toTag(row);
@@ -372,9 +382,12 @@ export async function listCategories(
 
   const rows = await client.unsafe<TaxonomyRow[]>(
     `
-      SELECT id, name, slug, created_at, updated_at
-      FROM article_categories
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 OR lower(slug) LIKE $1)
+      SELECT c.id, c.name, c.slug, c.created_at, c.updated_at,
+             count(acl.article_id) AS article_count
+      FROM article_categories c
+      LEFT JOIN article_category_links acl ON acl.category_id = c.id
+      WHERE ($1::text IS NULL OR lower(c.name) LIKE $1 OR lower(c.slug) LIKE $1)
+      GROUP BY c.id
       ORDER BY ${orderBy}
       LIMIT $2 OFFSET $3
     `,
@@ -383,8 +396,8 @@ export async function listCategories(
   const [count] = await client.unsafe<{ total: string }[]>(
     `
       SELECT count(*) AS total
-      FROM article_categories
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 OR lower(slug) LIKE $1)
+      FROM article_categories c
+      WHERE ($1::text IS NULL OR lower(c.name) LIKE $1 OR lower(c.slug) LIKE $1)
     `,
     [search]
   );
@@ -448,9 +461,12 @@ export async function listTags(currentUser: AuthUser, query: ListQuery, client: 
 
   const rows = await client.unsafe<TaxonomyRow[]>(
     `
-      SELECT id, name, slug, color, created_at, updated_at
-      FROM article_tags
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 OR lower(slug) LIKE $1)
+      SELECT t.id, t.name, t.slug, t.color, t.created_at, t.updated_at,
+             count(atl.article_id) AS article_count
+      FROM article_tags t
+      LEFT JOIN article_tag_links atl ON atl.tag_id = t.id
+      WHERE ($1::text IS NULL OR lower(t.name) LIKE $1 OR lower(t.slug) LIKE $1)
+      GROUP BY t.id
       ORDER BY ${orderBy}
       LIMIT $2 OFFSET $3
     `,
@@ -459,8 +475,8 @@ export async function listTags(currentUser: AuthUser, query: ListQuery, client: 
   const [count] = await client.unsafe<{ total: string }[]>(
     `
       SELECT count(*) AS total
-      FROM article_tags
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 OR lower(slug) LIKE $1)
+      FROM article_tags t
+      WHERE ($1::text IS NULL OR lower(t.name) LIKE $1 OR lower(t.slug) LIKE $1)
     `,
     [search]
   );
@@ -635,7 +651,14 @@ export async function getArticleById(id: string, client: DbClient = db) {
   const [row] = await client<ArticleRow[]>`
     SELECT
       a.id, a.author_id, a.title, a.slug, a.summary, a.content_mdx,
-      a.cover_image_url, a.status, a.read_count, a.is_pinned,
+      a.cover_image_url, a.status, a.read_count,
+      (
+        SELECT count(*)
+        FROM comments c
+        WHERE c.article_id = a.id
+          AND c.deleted_at IS NULL
+      ) AS comment_count,
+      a.is_pinned,
       a.created_at, a.updated_at, a.published_at,
       COALESCE((
         SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug) ORDER BY c.name)
@@ -683,7 +706,14 @@ export async function listArticles(
     `
       SELECT
         a.id, a.author_id, a.title, a.slug, a.summary, a.content_mdx,
-        a.cover_image_url, a.status, a.read_count, a.is_pinned,
+        a.cover_image_url, a.status, a.read_count,
+        (
+          SELECT count(*)
+          FROM comments c
+          WHERE c.article_id = a.id
+            AND c.deleted_at IS NULL
+        ) AS comment_count,
+        a.is_pinned,
         a.created_at, a.updated_at, a.published_at,
         COALESCE((
           SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug) ORDER BY c.name)

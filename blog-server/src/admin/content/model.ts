@@ -95,6 +95,7 @@ export const CategoryResponseItem = t.Object({
   id: t.String(),
   name: t.String(),
   slug: t.String(),
+  articleCount: t.Number(),
   createdAt: t.String(),
   updatedAt: t.String(),
 });
@@ -104,6 +105,7 @@ export const TagResponseItem = t.Object({
   name: t.String(),
   slug: t.String(),
   color: t.Nullable(t.String()),
+  articleCount: t.Number(),
   createdAt: t.String(),
   updatedAt: t.String(),
 });
@@ -136,6 +138,7 @@ export const ArticleResponseItem = t.Object({
   coverImageUrl: t.Nullable(t.String()),
   status: ArticleStatus,
   readCount: t.Number(),
+  commentCount: t.Number(),
   isPinned: t.Boolean(),
   createdAt: t.String(),
   updatedAt: t.String(),

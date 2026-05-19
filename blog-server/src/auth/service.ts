@@ -134,7 +134,7 @@ async function getUserProfileById(userId: string, client: DbClient = db) {
   return toUserProfile(row);
 }
 
-async function consumeEmailCode(
+export async function consumeEmailCode(
   email: string,
   code: string,
   purpose: EmailCodePurpose["purpose"],

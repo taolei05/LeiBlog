@@ -4,6 +4,7 @@ import { AdminLayout } from "./admin/AdminLayout";
 import { BlogLayout } from "./blog/BlogLayout";
 import { NotFoundPage } from "./errors/404";
 import { ServerErrorPage } from "./errors/500";
+import { ArticleEditPage } from "../features/admin/content/ArticleEditPage";
 import { ArticlesPage } from "../features/admin/content/ArticlesPage";
 import { CategoriesPage } from "../features/admin/content/CategoriesPage";
 import { CommentsPage } from "../features/admin/content/CommentsPage";
@@ -13,6 +14,7 @@ import { AdminLoginPage } from "../features/admin/auth/AdminLoginPage";
 import { AdminDashboardPage } from "../features/admin/dashboard/AdminDashboardPage";
 import { SetupPage } from "../features/admin/setup/SetupPage";
 import { ProfilePage } from "../features/admin/system/ProfilePage";
+import { SiteSettingsPage } from "../features/admin/system/SiteSettingsPage";
 import { ThemeSettingsPage } from "../features/admin/system/ThemeSettingsPage";
 import { UsersPage } from "../features/admin/system/UsersPage";
 import {
@@ -73,6 +75,8 @@ export function AppRouter() {
         >
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="admin/content/articles" element={<ArticlesPage />} />
+          <Route path="admin/content/articles/new" element={<ArticleEditPage />} />
+          <Route path="admin/content/articles/:id/edit" element={<ArticleEditPage />} />
           <Route path="admin/content/categories" element={<CategoriesPage />} />
           <Route path="admin/content/tags" element={<TagsPage />} />
           <Route path="admin/content/comments" element={<CommentsPage />} />
@@ -80,6 +84,7 @@ export function AppRouter() {
           <Route path="admin/system/users" element={<UsersPage />} />
           <Route path="admin/system/profile" element={<ProfilePage />} />
           <Route path="admin/system/settings" element={<ThemeSettingsPage />} />
+          <Route path="admin/system/site" element={<SiteSettingsPage />} />
         </Route>
         <Route path="500" element={<ServerErrorPage />} />
         <Route path="*" element={<NotFoundPage />} />

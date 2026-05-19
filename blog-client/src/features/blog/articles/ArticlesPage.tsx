@@ -1,26 +1,48 @@
 import { SearchField } from "@heroui/react";
-import { useDeferredValue } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { ArticleCard, BlogPageHeader, EmptyPlaceholder } from "../shared/BlogComponents";
-import { blogArticles } from "../shared/blogContent";
+import { fetchPublicArticles, type BlogArticle } from "../shared/blogApi";
 
 export function BlogArticlesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [articles, setArticles] = useState<BlogArticle[]>([]);
+  const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
   const query = searchParams.get("q") ?? "";
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
-  const filteredArticles = blogArticles.filter((article) => {
-    if (!deferredQuery) return true;
 
-    return `${article.title} ${article.excerpt} ${article.category} ${article.tags.join(" ")}`
-      .toLowerCase()
-      .includes(deferredQuery);
-  });
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadArticles() {
+      try {
+        setStatus("loading");
+        const nextArticles = await fetchPublicArticles({
+          pageSize: 100,
+          search: deferredQuery,
+        });
+        if (!isActive) return;
+        setArticles(nextArticles);
+        setStatus("idle");
+      } catch {
+        if (!isActive) return;
+        setArticles([]);
+        setStatus("error");
+      }
+    }
+
+    void loadArticles();
+
+    return () => {
+      isActive = false;
+    };
+  }, [deferredQuery]);
 
   return (
     <section className="front-stack">
       <BlogPageHeader
-        description="文章列表先接入前端搜索和稳定卡片布局，真实接口会在后续 API 阶段替换。"
+        description="从后端公开接口读取已发布文章，搜索会同步到接口查询参数。"
         eyebrow="文章"
         icon="reader"
         title="文章列表"
@@ -49,14 +71,14 @@ export function BlogArticlesPage() {
           <SearchField.ClearButton />
         </SearchField.Group>
       </SearchField>
-      {filteredArticles.length > 0 ? (
+      {articles.length > 0 ? (
         <div className="article-list">
-          {filteredArticles.map((article) => (
+          {articles.map((article) => (
             <ArticleCard article={article} key={article.slug} />
           ))}
         </div>
       ) : (
-        <EmptyPlaceholder text="没有匹配的文章。" />
+        <EmptyPlaceholder text={status === "error" ? "文章接口暂时不可用。" : "没有匹配的文章。"} />
       )}
     </section>
   );

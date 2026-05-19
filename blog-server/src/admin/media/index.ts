@@ -3,6 +3,10 @@ import { Elysia } from "elysia";
 import {
   MediaLinkResponse,
   MediaListResponse,
+  MediaFolderBody,
+  MediaFolderListResponse,
+  MediaFolderParams,
+  MediaFolderResponse,
   MediaParams,
   MediaPreviewResponse,
   MediaQuery,
@@ -12,12 +16,16 @@ import {
   UploadMediaBody,
 } from "./model";
 import {
+  createMediaFolder,
+  deleteMediaFolder,
   deleteMedia,
   getMediaById,
   getMediaDownload,
   getMediaLink,
   getMediaPreview,
+  listMediaFolders,
   listMedia,
+  updateMediaFolder,
   renameMedia,
   uploadMedia,
 } from "./service";
@@ -25,6 +33,26 @@ import { authContext } from "../../shared/auth/plugin";
 
 export const adminMediaModule = new Elysia({ prefix: "/media" })
   .use(authContext)
+  .get("/folders", ({ currentUser }) => listMediaFolders(currentUser), {
+    response: { 200: MediaFolderListResponse },
+  })
+  .post("/folders", ({ currentUser, body }) => createMediaFolder(currentUser, body), {
+    body: MediaFolderBody,
+    response: { 200: MediaFolderResponse },
+  })
+  .patch(
+    "/folders/:id",
+    ({ currentUser, params, body }) => updateMediaFolder(currentUser, params.id, body),
+    {
+      params: MediaFolderParams,
+      body: MediaFolderBody,
+      response: { 200: MediaFolderResponse },
+    }
+  )
+  .delete("/folders/:id", ({ currentUser, params }) => deleteMediaFolder(currentUser, params.id), {
+    params: MediaFolderParams,
+    response: { 200: OkResponse },
+  })
   .get("/", ({ currentUser, query }) => listMedia(currentUser, query), {
     query: MediaQuery,
     response: { 200: MediaListResponse },

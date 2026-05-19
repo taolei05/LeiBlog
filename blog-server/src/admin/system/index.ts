@@ -1,6 +1,12 @@
 import { Elysia } from "elysia";
 
 import {
+  ApiKeyEmailCodeResponse,
+  ApiKeysResponse,
+  DeepLTestBody,
+  IntegrationTestResponse,
+  RevealApiKeysBody,
+  ResendTestBody,
   SystemFilingBody,
   SystemFilingResponse,
   SystemSiteConfigBody,
@@ -9,9 +15,14 @@ import {
   SystemSiteInfoResponse,
 } from "./model";
 import {
+  createApiKeyRevealCode,
   getSystemFiling,
   getSystemSiteConfig,
   getSystemSiteInfo,
+  revealSystemApiKeys,
+  testDeepLIntegration,
+  testIpGeolocationIntegration,
+  testResendIntegration,
   updateSystemFiling,
   updateSystemSiteConfig,
   updateSystemSiteInfo,
@@ -44,4 +55,22 @@ export const adminSystemModule = new Elysia({ prefix: "/system" })
   .patch("/filing", ({ currentUser, body }) => updateSystemFiling(currentUser, body), {
     body: SystemFilingBody,
     response: { 200: SystemFilingResponse },
+  })
+  .post("/api-keys/email-code", ({ currentUser }) => createApiKeyRevealCode(currentUser), {
+    response: { 200: ApiKeyEmailCodeResponse },
+  })
+  .post("/api-keys/reveal", ({ currentUser, body }) => revealSystemApiKeys(currentUser, body), {
+    body: RevealApiKeysBody,
+    response: { 200: ApiKeysResponse },
+  })
+  .post("/api-keys/test-resend", ({ currentUser, body }) => testResendIntegration(currentUser, body), {
+    body: ResendTestBody,
+    response: { 200: IntegrationTestResponse },
+  })
+  .post("/api-keys/test-deepl", ({ currentUser, body }) => testDeepLIntegration(currentUser, body), {
+    body: DeepLTestBody,
+    response: { 200: IntegrationTestResponse },
+  })
+  .post("/api-keys/test-ipgeolocation", ({ currentUser }) => testIpGeolocationIntegration(currentUser), {
+    response: { 200: IntegrationTestResponse },
   });

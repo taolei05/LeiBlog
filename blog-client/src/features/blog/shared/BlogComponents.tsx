@@ -2,7 +2,7 @@ import { Card, Chip } from "@heroui/react";
 import { Link } from "react-router-dom";
 
 import { AppIcon, type AppIconName } from "../../../shared/icons";
-import type { BlogArticle } from "./blogContent";
+import type { BlogArticle } from "./blogApi";
 
 export function BlogPageHeader({
   description,
@@ -41,7 +41,13 @@ export function ArticleCard({
         className="article-card__media"
         to={`/articles/${article.slug}`}
       >
-        <img alt={article.title} src={article.cover} />
+        {article.cover ? (
+          <img alt={article.title} src={article.cover} />
+        ) : (
+          <span className="article-card__media-empty">
+            <AppIcon name="image" size={28} />
+          </span>
+        )}
       </Link>
       <div className="article-card__body">
         <div className="article-card__meta">
@@ -57,8 +63,8 @@ export function ArticleCard({
         <p>{article.excerpt}</p>
         <div className="article-card__tags">
           {article.tags.map((tag) => (
-            <Link key={tag} to={`/tags?tag=${encodeURIComponent(tag)}`}>
-              #{tag}
+            <Link key={tag.slug} to={`/tags?tag=${encodeURIComponent(tag.slug)}`}>
+              #{tag.name}
             </Link>
           ))}
         </div>

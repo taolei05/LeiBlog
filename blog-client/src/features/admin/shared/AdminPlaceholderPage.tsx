@@ -97,7 +97,7 @@ export function AdminPlaceholderPage({
 
         <Table className="admin-table" variant="secondary">
           <Table.ScrollContainer>
-            <Table.Content aria-label={`${title}占位表格`}>
+            <Table.Content aria-label={`${title}表格`}>
               <Table.Header>
                 <Table.Column isRowHeader>名称</Table.Column>
                 <Table.Column>状态</Table.Column>

@@ -87,7 +87,7 @@ export function ThemeSettingsPage() {
         <h2>主题系统</h2>
         <p>
           当前阶段先接好主题内核、完整
-          token、三态切换和编辑器占位，后续系统设置会扩展为可保存的主题表单。
+          token、三态切换和编辑器主题预览，站点信息与集成密钥在「站点设置」中维护。
         </p>
       </div>
 
@@ -97,7 +97,7 @@ export function ThemeSettingsPage() {
             <AppIcon name="sparkles" size={24} />
             <div>
               <Card.Header>
-                <Card.Title>主题编辑器占位</Card.Title>
+                <Card.Title>主题编辑器</Card.Title>
                 <Card.Description>
                   前台和后台共享 ThemeProviderLite，实际主题由 `data-theme`、`data-theme-mode` 和
                   CSS 变量驱动。
@@ -192,7 +192,7 @@ export function ThemeSettingsPage() {
               </Button>
             </div>
             <div className="mdxeditor-root-contenteditable theme-mdx-preview__content">
-              <h3>编辑器主题占位</h3>
+              <h3>编辑器主题</h3>
               <p>工具栏、内容区、提示块和代码字体都从主题变量继承。</p>
               <pre>
                 <code>{`const theme = "shared tokens";`}</code>

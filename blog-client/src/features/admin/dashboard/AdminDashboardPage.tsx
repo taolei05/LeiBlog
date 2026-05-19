@@ -1,22 +1,66 @@
 import { Button, Card, Chip, Table } from "@heroui/react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppIcon } from "../../../shared/icons/AppIcon";
 import { useAdminSession } from "../../../shared/routing/adminGuards";
-
-const dashboardCards = [
-  { label: "文章", value: "48", description: "已发布内容" },
-  { label: "评论", value: "5", description: "待审核" },
-  { label: "媒体", value: "21", description: "本月新增" },
-] as const;
+import { adminFetch } from "../shared/admin-api";
 
 const recentItems = [
   { name: "后台框架", status: "已完成", target: "阶段 3" },
   { name: "数据表与媒体库", status: "已完成", target: "阶段 4" },
-  { name: "前台页面占位", status: "待开始", target: "阶段 5" },
+  { name: "前台页面", status: "已完成", target: "阶段 5" },
 ] as const;
 
 export function AdminDashboardPage() {
   const session = useAdminSession();
+  const [metrics, setMetrics] = useState({
+    mediaCreatedThisMonth: 0,
+    pendingComments: 0,
+    publishedArticles: 0,
+  });
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadMetrics() {
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const [articles, comments, media] = await Promise.all([
+          adminFetch<{ total: number }>("/admin/content/articles?status=published&pageSize=1"),
+          adminFetch<{ total: number }>("/admin/comments/?status=pending&pageSize=1"),
+          adminFetch<{ total: number }>(
+            `/admin/media/?createdFrom=${encodeURIComponent(monthStart.toISOString())}&createdTo=${encodeURIComponent(nextMonthStart.toISOString())}&pageSize=1`,
+          ),
+        ]);
+
+        if (!isActive) return;
+
+        setMetrics({
+          mediaCreatedThisMonth: media.total,
+          pendingComments: comments.total,
+          publishedArticles: articles.total,
+        });
+      } catch {
+        if (!isActive) return;
+      }
+    }
+
+    void loadMetrics();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+  const dashboardCards = useMemo(
+    () => [
+      { label: "文章", value: String(metrics.publishedArticles), description: "已发布内容" },
+      { label: "评论", value: String(metrics.pendingComments), description: "待审核" },
+      { label: "媒体", value: String(metrics.mediaCreatedThisMonth), description: "本月新增" },
+    ],
+    [metrics],
+  );
 
   return (
     <section className="page-stack admin-page">
@@ -27,7 +71,7 @@ export function AdminDashboardPage() {
             <AppIcon name="analytics" />
             仪表盘
           </h2>
-          <p>后台守卫、导航、面包屑、可关闭标签页和页面占位已接入，后续阶段会继续补齐真实数据。</p>
+          <p>后台守卫、导航、面包屑和可关闭标签页已接入。</p>
         </div>
         <Button variant="tertiary">
           <AppIcon name="download" />

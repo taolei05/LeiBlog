@@ -1,80 +1,75 @@
+import { Avatar } from "@heroui/react";
+import { useEffect, useState } from "react";
+
+import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import {
-  DataStatusChip,
-  DataTable,
-  type DataTableBulkAction,
-  type DataTableColumn,
-  type DataTableFilter,
-  type DataTableRow,
-  type DataTableRowAction,
-  type DataTableToolbarAction,
+  AdminFormModal,
+  AdminInputGroupField,
+  AdminSelectGroupField,
+  AdminTextAreaGroupField,
+} from "../shared/admin-form-modal";
+import type {
+  DataTableBulkAction,
+  DataTableColumn,
+  DataTableFilter,
+  DataTableRow,
+  DataTableRowAction,
+  DataTableToolbarAction,
 } from "../shared/DataTable";
+import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
+import { MediaAssetField } from "../shared/media-asset-field";
 
 type UserRow = DataTableRow & {
+  avatarUrl: string;
+  blogUrl: string;
+  description: string;
   email: string;
   lastLogin: string;
   name: string;
   role: "admin" | "demo" | "user";
   status: "active" | "disabled";
   username: string;
+  tags: string[];
 };
 
-const userRows: UserRow[] = [
-  {
-    email: "lei@example.com",
-    id: "user-admin",
-    lastLogin: "2026-05-16 09:58",
-    name: "Lei 管理员",
-    role: "admin",
-    status: "active",
-    username: "admin",
-  },
-  {
-    email: "demo@example.com",
-    id: "user-demo",
-    lastLogin: "2026-05-15 21:16",
-    name: "Demo 账户",
-    role: "demo",
-    status: "active",
-    username: "demo",
-  },
-  {
-    email: "chen@example.com",
-    id: "user-chen",
-    lastLogin: "2026-05-14 19:20",
-    name: "陈同学",
-    role: "user",
-    status: "active",
-    username: "chen",
-  },
-  {
-    email: "mika@example.com",
-    id: "user-mika",
-    lastLogin: "2026-05-13 10:12",
-    name: "Mika",
-    role: "user",
-    status: "active",
-    username: "mika",
-  },
-  {
-    email: "old-reader@example.com",
-    id: "user-old-reader",
-    lastLogin: "2026-04-19 08:44",
-    name: "旧读者",
-    role: "user",
-    status: "disabled",
-    username: "old_reader",
-  },
-  {
-    email: "yu@example.com",
-    id: "user-yu",
-    lastLogin: "2026-05-10 20:05",
-    name: "Yu",
-    role: "user",
-    status: "active",
-    username: "yu",
-  },
-];
+type AdminUserItem = {
+  avatarUrl: string | null;
+  blogUrl: string | null;
+  createdAt: string;
+  description: string;
+  email: string | null;
+  id: string;
+  lastLoginAt: string | null;
+  name: string | null;
+  role: UserRow["role"];
+  tags: string[];
+  username: string;
+};
+
+type UserFormState = {
+  avatarUrl: string;
+  blogUrl: string;
+  description: string;
+  email: string;
+  name: string;
+  password: string;
+  role: UserRow["role"];
+  tags: string;
+  username: string;
+};
+
+type UserModalState =
+  | {
+      mode: "create";
+      setNotice: (message: string) => void;
+    }
+  | {
+      mode: "edit";
+      setNotice: (message: string) => void;
+      userId: string;
+    };
 
 const roleLabel = {
   admin: "管理员",
@@ -82,17 +77,47 @@ const roleLabel = {
   user: "普通用户",
 } as const;
 
+const userRoleOptions: Array<{ label: string; value: UserRow["role"] }> = [
+  { label: "管理员", value: "admin" },
+  { label: "Demo", value: "demo" },
+  { label: "普通用户", value: "user" },
+];
+
+const emptyUserForm: UserFormState = {
+  avatarUrl: "",
+  blogUrl: "",
+  description: "",
+  email: "",
+  name: "",
+  password: "",
+  role: "user",
+  tags: "",
+  username: "",
+};
+
 const userColumns: DataTableColumn<UserRow>[] = [
   {
     header: "用户",
     id: "username",
     isRowHeader: true,
     render: (row) => (
-      <span className="data-table-primary-cell">
-        <strong>{row.name}</strong>
-        <small>
-          {row.username} · {row.email}
-        </small>
+      <span className="user-table-cell">
+        <Avatar size="sm">
+          {row.avatarUrl ? (
+            <Avatar.Image
+              alt={row.name}
+              key={resolveApiAssetUrl(row.avatarUrl)}
+              src={resolveApiAssetUrl(row.avatarUrl)}
+            />
+          ) : null}
+          <Avatar.Fallback>{row.name.slice(0, 1).toUpperCase()}</Avatar.Fallback>
+        </Avatar>
+        <span className="data-table-primary-cell">
+          <strong>{row.name}</strong>
+          <small>
+            {row.username} · {row.email}
+          </small>
+        </span>
       </span>
     ),
     searchValue: (row) => `${row.name} ${row.username} ${row.email}`,
@@ -153,66 +178,353 @@ const userFilters: DataTableFilter<UserRow>[] = [
   },
 ];
 
-const userToolbarActions: DataTableToolbarAction<UserRow>[] = [
-  {
-    icon: "people",
-    label: "新建用户",
-    onPress: ({ setNotice }) => setNotice("新建用户表单等待接入"),
-  },
-  {
-    access: "read",
-    icon: "download",
-    label: "导出",
-    onPress: ({ setNotice }) => setNotice("用户列表导出占位任务已创建"),
-  },
-];
+function toUserRow(item: AdminUserItem): UserRow {
+  return {
+    avatarUrl: item.avatarUrl ?? "",
+    blogUrl: item.blogUrl ?? "",
+    description: item.description,
+    email: item.email ?? "未设置邮箱",
+    id: item.id,
+    lastLogin: item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString("zh-CN") : "从未登录",
+    name: item.name ?? item.username,
+    role: item.role,
+    status: "active",
+    tags: item.tags,
+    username: item.username,
+  };
+}
 
-const userBulkActions: DataTableBulkAction<UserRow>[] = [
-  {
-    icon: "ban",
-    label: "停用",
-    onPress: (rows, { clearSelection, setNotice }) => {
-      setNotice(`已选择 ${rows.length} 个用户等待停用接口`);
-      clearSelection();
-    },
-  },
-];
+function toOptional(value: string) {
+  const trimmed = value.trim();
 
-const userRowActions: DataTableRowAction<UserRow>[] = [
-  {
-    access: "read",
-    icon: "eye",
-    label: "查看",
-    onPress: (row, { setNotice }) => setNotice(`查看 ${row.name} 的资料`),
-  },
-  {
-    icon: "shield",
-    isDisabled: (row) => row.role === "admin",
-    label: "角色",
-    onPress: (row, { setNotice }) => setNotice(`${row.name} 角色变更等待后端校验`),
-  },
-  {
-    icon: "ban",
-    isDisabled: (row) => row.role === "admin",
-    label: "停用",
-    onPress: (row, { setNotice }) => setNotice(`${row.name} 停用操作等待确认`),
-  },
-];
+  return trimmed ? trimmed : null;
+}
+
+function splitTags(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(/[,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function toCreateOptional(value: string) {
+  return toOptional(value) ?? undefined;
+}
+
+function isUserRole(value: string): value is UserRow["role"] {
+  return value === "admin" || value === "demo" || value === "user";
+}
 
 export function UsersPage() {
+  const [userRows, setUserRows] = useState<UserRow[]>([]);
+  const [userModalState, setUserModalState] = useState<UserModalState | null>(null);
+  const [userForm, setUserForm] = useState<UserFormState>(emptyUserForm);
+  const [avatarLocalFile, setAvatarLocalFile] = useState<File | null>(null);
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  async function loadUsers() {
+    const response = await adminFetch<{ items: AdminUserItem[] }>("/admin/users/");
+    setUserRows(response.items.map(toUserRow));
+  }
+
+  useEffect(() => {
+    void loadUsers();
+  }, [reloadKey]);
+
+  function updateUserForm(key: keyof UserFormState, value: string) {
+    setUserForm((state) => ({ ...state, [key]: value }));
+  }
+
+  function updateUserRole(value: string) {
+    if (!isUserRole(value)) return;
+    setUserForm((state) => ({ ...state, role: value }));
+  }
+
+  async function submitUserForm() {
+    if (!userModalState) return;
+
+    const password = userForm.password.trim();
+    if (userModalState.mode === "create" && !userForm.username.trim()) {
+      userModalState.setNotice("用户名不能为空");
+      return;
+    }
+    if (userModalState.mode === "create" && password.length < 8) {
+      userModalState.setNotice("初始密码至少需要 8 位");
+      return;
+    }
+    if (userModalState.mode === "edit" && password && password.length < 8) {
+      userModalState.setNotice("新密码至少需要 8 位");
+      return;
+    }
+
+    try {
+      setIsSavingUser(true);
+      const avatarUrl = avatarLocalFile
+        ? (
+            await uploadAdminMediaFile({
+              file: avatarLocalFile,
+              folderSlug: "avatars",
+            })
+          ).item.accessUrl
+        : userForm.avatarUrl;
+
+      if (userModalState.mode === "create") {
+        await adminFetch("/admin/users/", {
+          body: {
+            avatarUrl: toCreateOptional(avatarUrl),
+            blogUrl: toCreateOptional(userForm.blogUrl),
+            description: userForm.description.trim(),
+            email: toCreateOptional(userForm.email),
+            name: toCreateOptional(userForm.name),
+            password,
+            role: userForm.role,
+            tags: splitTags(userForm.tags),
+            username: userForm.username.trim(),
+          },
+          method: "POST",
+        });
+        userModalState.setNotice("用户已创建");
+      } else {
+        await adminFetch(`/admin/users/${userModalState.userId}`, {
+          body: {
+            avatarUrl: toOptional(avatarUrl),
+            blogUrl: toOptional(userForm.blogUrl),
+            description: userForm.description,
+            email: toOptional(userForm.email),
+            name: toOptional(userForm.name),
+            password: password || undefined,
+            role: userForm.role,
+            tags: splitTags(userForm.tags),
+          },
+          method: "PATCH",
+        });
+        userModalState.setNotice("用户资料已更新");
+      }
+
+      setUserModalState(null);
+      setUserForm(emptyUserForm);
+      setAvatarLocalFile(null);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      userModalState.setNotice(error instanceof Error ? error.message : "用户保存失败");
+    } finally {
+      setIsSavingUser(false);
+    }
+  }
+
+  const userToolbarActions: DataTableToolbarAction<UserRow>[] = [
+    {
+      confirmation: "none",
+      icon: "people",
+      label: "新建用户",
+      onPress: ({ setNotice }) => {
+        setUserForm(emptyUserForm);
+        setAvatarLocalFile(null);
+        setUserModalState({ mode: "create", setNotice });
+      },
+    },
+    {
+      access: "read",
+      icon: "refresh",
+      label: "刷新",
+      onPress: ({ setNotice }) => {
+        setReloadKey((key) => key + 1);
+        setNotice("用户列表已刷新");
+      },
+    },
+  ];
+
+  const userBulkActions: DataTableBulkAction<UserRow>[] = [
+    {
+      access: "danger",
+      icon: "trash",
+      label: "批量删除",
+      onPress: async (rows, { clearSelection, setNotice }) => {
+        try {
+          await Promise.all(
+            rows.map((row) => adminFetch(`/admin/users/${row.id}`, { method: "DELETE" })),
+          );
+          clearSelection();
+          setNotice(`已删除 ${rows.length} 个用户`);
+          setReloadKey((key) => key + 1);
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "用户删除失败");
+        }
+      },
+    },
+  ];
+
+  const userRowActions: DataTableRowAction<UserRow>[] = [
+    {
+      access: "read",
+      icon: "eye",
+      label: "查看",
+      onPress: (row, { setNotice }) => setNotice(`${row.name}：${roleLabel[row.role]}`),
+    },
+    {
+      confirmation: "none",
+      icon: "pencil",
+      label: "编辑",
+      onPress: async (row, { setNotice }) => {
+        try {
+          const response = await adminFetch<{ user: AdminUserItem }>(`/admin/users/${row.id}`);
+          const user = response.user;
+          setUserForm({
+            avatarUrl: user.avatarUrl ?? "",
+            blogUrl: user.blogUrl ?? "",
+            description: user.description,
+            email: user.email ?? "",
+            name: user.name ?? "",
+            password: "",
+            role: user.role,
+            tags: user.tags.join("，"),
+            username: user.username,
+          });
+          setAvatarLocalFile(null);
+          setUserModalState({ mode: "edit", setNotice, userId: row.id });
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "用户读取失败");
+        }
+      },
+    },
+    {
+      access: "danger",
+      icon: "trash",
+      isDisabled: (row) => row.role === "admin",
+      label: "删除",
+      onPress: async (row, { setNotice }) => {
+        try {
+          await adminFetch(`/admin/users/${row.id}`, { method: "DELETE" });
+          setNotice("用户已删除");
+          setReloadKey((key) => key + 1);
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "用户删除失败");
+        }
+      },
+    },
+  ];
+  const adminCount = userRows.filter((row) => row.role === "admin").length;
+  const demoCount = userRows.filter((row) => row.role === "demo").length;
+  const userCount = userRows.filter((row) => row.role === "user").length;
+
   return (
     <AdminDataPage
-      description="用户管理已接入角色/状态筛选、搜索、排序、分页和写操作只读禁用。"
+      description="用户管理保留角色/状态筛选、搜索、排序、分页和写操作只读禁用。"
       eyebrow="系统"
       icon="people"
       metrics={[
-        { label: "管理员", value: "1" },
-        { label: "Demo", value: "1" },
-        { label: "普通用户", value: "36" },
+        { label: "管理员", value: String(adminCount) },
+        { label: "Demo", value: String(demoCount) },
+        { label: "普通用户", value: String(userCount) },
       ]}
       title="用户管理"
       wide
     >
+      <AdminFormModal
+        confirmDescription="将保存用户角色、头像、邮箱、密码和个人资料等变更。"
+        description={
+          userModalState?.mode === "edit"
+            ? "角色、头像、邮箱、密码和个人资料都在这里统一修改。"
+            : "创建普通用户、Demo 或管理员账户。"
+        }
+        icon={userModalState?.mode === "edit" ? "pencil" : "people"}
+        isBodyScrollable
+        isOpen={userModalState !== null}
+        isSubmitting={isSavingUser}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          setUserModalState(null);
+        }}
+        onSubmit={submitUserForm}
+        size="lg"
+        submitLabel={userModalState?.mode === "edit" ? "保存用户" : "新建用户"}
+        title={userModalState?.mode === "edit" ? "编辑用户" : "新建用户"}
+      >
+        <div className="admin-form-modal__grid">
+          {userModalState?.mode === "create" ? (
+            <AdminInputGroupField
+              autoComplete="username"
+              icon="personAdd"
+              isRequired
+              label="用户名"
+              onChange={(value) => updateUserForm("username", value)}
+              placeholder="输入用户名"
+              value={userForm.username}
+            />
+          ) : null}
+          <AdminInputGroupField
+            autoComplete={userModalState?.mode === "create" ? "new-password" : "off"}
+            icon="lockClosed"
+            isRequired={userModalState?.mode === "create"}
+            label={userModalState?.mode === "create" ? "初始密码" : "新密码"}
+            onChange={(value) => updateUserForm("password", value)}
+            placeholder={userModalState?.mode === "create" ? "至少 8 位" : "留空则不修改"}
+            type="password"
+            value={userForm.password}
+          />
+          <AdminSelectGroupField
+            icon="shield"
+            label="角色"
+            onChange={updateUserRole}
+            options={userRoleOptions}
+            value={userForm.role}
+          />
+          <AdminInputGroupField
+            autoComplete="email"
+            icon="mail"
+            label="邮箱"
+            onChange={(value) => updateUserForm("email", value)}
+            placeholder="name@example.com"
+            type="email"
+            value={userForm.email}
+          />
+          <AdminInputGroupField
+            autoComplete="name"
+            icon="personCircle"
+            label="昵称 / 姓名"
+            onChange={(value) => updateUserForm("name", value)}
+            placeholder="展示名称"
+            value={userForm.name}
+          />
+          <div className="admin-form-modal__field admin-form-modal__field--span">
+            <MediaAssetField
+              folderSlug="avatars"
+              label="头像"
+              localFile={avatarLocalFile}
+              onChange={(value) => updateUserForm("avatarUrl", value)}
+              onLocalFileChange={setAvatarLocalFile}
+              value={userForm.avatarUrl}
+            />
+          </div>
+          <AdminInputGroupField
+            icon="link"
+            label="博客链接"
+            onChange={(value) => updateUserForm("blogUrl", value)}
+            placeholder="https://..."
+            type="url"
+            value={userForm.blogUrl}
+          />
+          <AdminInputGroupField
+            icon="pricetags"
+            label="标签"
+            onChange={(value) => updateUserForm("tags", value)}
+            placeholder="作者，读者，朋友"
+            value={userForm.tags}
+          />
+        </div>
+        <AdminTextAreaGroupField
+          icon="documentText"
+          label="描述"
+          onChange={(value) => updateUserForm("description", value)}
+          placeholder="输入用户描述"
+          value={userForm.description}
+        />
+      </AdminFormModal>
       <DataTable
         ariaLabel="用户管理表格"
         bulkActions={userBulkActions}
@@ -223,6 +535,7 @@ export function UsersPage() {
         rows={userRows}
         searchPlaceholder="搜索用户名、昵称、邮箱"
         toolbarActions={userToolbarActions}
+        emptyText="暂无用户记录"
       />
     </AdminDataPage>
   );

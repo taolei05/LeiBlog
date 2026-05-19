@@ -7,6 +7,10 @@ const migration = readFileSync(
   join(import.meta.dir, "../src/db/migrations/001_initial_schema.sql"),
   "utf8"
 );
+const mediaFolderMigration = readFileSync(
+  join(import.meta.dir, "../src/db/migrations/002_media_folders.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("creates the required core tables", () => {
@@ -38,5 +42,13 @@ describe("initial database migration", () => {
     expect(migration).toContain("CREATE TYPE comment_target_type");
     expect(migration).toContain("target_type comment_target_type");
     expect(migration).toContain("'email_change'");
+  });
+
+  test("adds protected media folders", () => {
+    expect(mediaFolderMigration).toContain("CREATE TABLE media_folders");
+    expect(mediaFolderMigration).toContain("article-covers");
+    expect(mediaFolderMigration).toContain("avatars");
+    expect(mediaFolderMigration).toContain("comments");
+    expect(mediaFolderMigration).toContain("site");
   });
 });

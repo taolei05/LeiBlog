@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "dev": "vp dev --host 0.0.0.0",
     "build": "tsc && vp build",
     "check": "vp check --fix",
     "preview": "vp preview",
@@ -15,7 +15,7 @@
     "@heroui/react": "^3.0.5",
     "@heroui/styles": "^3.0.5",
     "@mdx-js/react": "^3.1.1",
-    "@mdxeditor/editor": "3.52.3",
+    "@mdxeditor/editor": "4.0.0",
     "date-fns": "^4.1.0",
     "ionicons": "^8.0.13",
     "react": "19",

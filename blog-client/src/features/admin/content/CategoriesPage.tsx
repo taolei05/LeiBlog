@@ -1,14 +1,17 @@
+import { useEffect, useState } from "react";
+
 import { AdminDataPage } from "../shared/AdminDataPage";
-import {
-  DataStatusChip,
-  DataTable,
-  type DataTableBulkAction,
-  type DataTableColumn,
-  type DataTableFilter,
-  type DataTableRow,
-  type DataTableRowAction,
-  type DataTableToolbarAction,
+import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
+import type {
+  DataTableBulkAction,
+  DataTableColumn,
+  DataTableFilter,
+  DataTableRow,
+  DataTableRowAction,
+  DataTableToolbarAction,
 } from "../shared/DataTable";
+import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { adminFetch } from "../shared/admin-api";
 
 type CategoryRow = DataTableRow & {
   articleCount: number;
@@ -20,68 +23,25 @@ type CategoryRow = DataTableRow & {
   updatedAt: string;
 };
 
-const categoryRows: CategoryRow[] = [
-  {
-    articleCount: 18,
-    id: "category-engineering",
-    level: "一级",
-    name: "工程札记",
-    parent: "根分类",
-    sort: 1,
-    status: "active",
-    updatedAt: "2026-05-14",
-  },
-  {
-    articleCount: 12,
-    id: "category-frontend",
-    level: "一级",
-    name: "前端",
-    parent: "根分类",
-    sort: 2,
-    status: "active",
-    updatedAt: "2026-05-13",
-  },
-  {
-    articleCount: 8,
-    id: "category-react",
-    level: "二级",
-    name: "React",
-    parent: "前端",
-    sort: 1,
-    status: "active",
-    updatedAt: "2026-05-08",
-  },
-  {
-    articleCount: 6,
-    id: "category-life",
-    level: "一级",
-    name: "生活",
-    parent: "根分类",
-    sort: 3,
-    status: "active",
-    updatedAt: "2026-05-03",
-  },
-  {
-    articleCount: 4,
-    id: "category-photo",
-    level: "一级",
-    name: "摄影",
-    parent: "根分类",
-    sort: 4,
-    status: "hidden",
-    updatedAt: "2026-04-27",
-  },
-  {
-    articleCount: 2,
-    id: "category-system",
-    level: "二级",
-    name: "系统设计",
-    parent: "工程札记",
-    sort: 2,
-    status: "active",
-    updatedAt: "2026-04-21",
-  },
-];
+type AdminCategoryItem = {
+  articleCount: number;
+  createdAt: string;
+  id: string;
+  name: string;
+  slug: string;
+  updatedAt: string;
+};
+
+type CategoryNameModalState =
+  | {
+      mode: "create";
+      setNotice: (message: string) => void;
+    }
+  | {
+      mode: "rename";
+      row: CategoryRow;
+      setNotice: (message: string) => void;
+    };
 
 const categoryColumns: DataTableColumn<CategoryRow>[] = [
   {
@@ -157,68 +117,185 @@ const categoryFilters: DataTableFilter<CategoryRow>[] = [
   },
 ];
 
-const categoryToolbarActions: DataTableToolbarAction<CategoryRow>[] = [
-  {
-    icon: "albums",
-    label: "新建分类",
-    onPress: ({ setNotice }) => setNotice("新建分类面板等待接口接入"),
-  },
-];
-
-const categoryBulkActions: DataTableBulkAction<CategoryRow>[] = [
-  {
-    icon: "pencil",
-    label: "批量改名",
-    onPress: (rows, { clearSelection, setNotice }) => {
-      setNotice(`已选择 ${rows.length} 个分类等待批量改名`);
-      clearSelection();
-    },
-  },
-  {
-    icon: "trash",
-    access: "danger",
-    label: "合并清理",
-    onPress: (rows, { clearSelection, setNotice }) => {
-      setNotice(`已标记 ${rows.length} 个分类等待合并确认`);
-      clearSelection();
-    },
-  },
-];
-
-const categoryRowActions: DataTableRowAction<CategoryRow>[] = [
-  {
-    access: "read",
-    icon: "eye",
-    label: "查看",
-    onPress: (row, { setNotice }) => setNotice(`查看 ${row.name} 下的文章`),
-  },
-  {
-    icon: "pencil",
-    label: "重命名",
-    onPress: (row, { setNotice }) => setNotice(`${row.name} 重命名表单等待接入`),
-  },
-  {
-    access: "danger",
-    icon: "trash",
-    label: "删除",
-    onPress: (row, { setNotice }) => setNotice(`${row.name} 删除前会检查文章引用`),
-  },
-];
+function toCategoryRow(item: AdminCategoryItem): CategoryRow {
+  return {
+    articleCount: item.articleCount,
+    id: item.id,
+    level: "一级",
+    name: item.name,
+    parent: "根分类",
+    sort: 0,
+    status: "active",
+    updatedAt: new Date(item.updatedAt).toLocaleString("zh-CN"),
+  };
+}
 
 export function CategoriesPage() {
+  const [categoryRows, setCategoryRows] = useState<CategoryRow[]>([]);
+  const [nameModalState, setNameModalState] = useState<CategoryNameModalState | null>(null);
+  const [categoryName, setCategoryName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  async function loadCategories() {
+    const response = await adminFetch<{ items: AdminCategoryItem[] }>("/admin/content/categories");
+    setCategoryRows(response.items.map(toCategoryRow));
+  }
+
+  useEffect(() => {
+    void loadCategories();
+  }, [reloadKey]);
+
+  async function submitCategoryName() {
+    if (!nameModalState) return;
+
+    const name = categoryName.trim();
+    if (!name) {
+      nameModalState.setNotice("分类名称不能为空");
+      return;
+    }
+
+    try {
+      setIsSavingName(true);
+
+      if (nameModalState.mode === "create") {
+        await adminFetch("/admin/content/categories", {
+          body: { name },
+          method: "POST",
+        });
+        nameModalState.setNotice("分类已创建");
+      } else {
+        await adminFetch(`/admin/content/categories/${nameModalState.row.id}`, {
+          body: { name },
+          method: "PATCH",
+        });
+        nameModalState.setNotice("分类已更新");
+      }
+
+      setNameModalState(null);
+      setCategoryName("");
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      nameModalState.setNotice(error instanceof Error ? error.message : "分类保存失败");
+    } finally {
+      setIsSavingName(false);
+    }
+  }
+
+  const categoryToolbarActions: DataTableToolbarAction<CategoryRow>[] = [
+    {
+      confirmation: "none",
+      icon: "albums",
+      label: "新建分类",
+      onPress: ({ setNotice }) => {
+        setCategoryName("");
+        setNameModalState({ mode: "create", setNotice });
+      },
+    },
+    {
+      access: "read",
+      icon: "refresh",
+      label: "刷新",
+      onPress: ({ setNotice }) => {
+        setReloadKey((key) => key + 1);
+        setNotice("分类列表已刷新");
+      },
+    },
+  ];
+
+  const categoryBulkActions: DataTableBulkAction<CategoryRow>[] = [
+    {
+      access: "danger",
+      icon: "trash",
+      label: "批量删除",
+      onPress: async (rows, { clearSelection, setNotice }) => {
+        try {
+          await Promise.all(
+            rows.map((row) =>
+              adminFetch(`/admin/content/categories/${row.id}`, { method: "DELETE" }),
+            ),
+          );
+          clearSelection();
+          setNotice(`已删除 ${rows.length} 个分类`);
+          setReloadKey((key) => key + 1);
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "分类删除失败");
+        }
+      },
+    },
+  ];
+
+  const categoryRowActions: DataTableRowAction<CategoryRow>[] = [
+    {
+      access: "read",
+      icon: "eye",
+      label: "查看",
+      onPress: (row, { setNotice }) => setNotice(`分类 slug：${row.name}`),
+    },
+    {
+      confirmation: "none",
+      icon: "pencil",
+      label: "重命名",
+      onPress: (row, { setNotice }) => {
+        setCategoryName(row.name);
+        setNameModalState({ mode: "rename", row, setNotice });
+      },
+    },
+    {
+      access: "danger",
+      icon: "trash",
+      label: "删除",
+      onPress: async (row, { setNotice }) => {
+        try {
+          await adminFetch(`/admin/content/categories/${row.id}`, { method: "DELETE" });
+          setNotice("分类已删除");
+          setReloadKey((key) => key + 1);
+        } catch (error) {
+          setNotice(error instanceof Error ? error.message : "分类删除失败");
+        }
+      },
+    },
+  ];
+
+  const activeCount = categoryRows.filter((row) => row.status === "active").length;
+  const relatedArticleCount = categoryRows.reduce((total, row) => total + row.articleCount, 0);
+
   return (
     <AdminDataPage
-      description="分类管理已提供层级/状态筛选、统计列排序和合并清理操作占位。"
+      description="分类管理保留层级/状态筛选、统计列排序和合并清理操作。"
       eyebrow="内容管理"
       icon="albums"
       metrics={[
-        { label: "一级分类", value: "6" },
-        { label: "子分类", value: "18" },
-        { label: "未归类文章", value: "2" },
+        { label: "一级分类", value: String(activeCount) },
+        { label: "子分类", value: "0" },
+        { label: "关联文章", value: String(relatedArticleCount) },
       ]}
       title="分类管理"
       wide
     >
+      <AdminFormModal
+        confirmDescription="将保存分类名称，并同步更新后台分类列表。"
+        description="分类名称会用于前台分类导航和文章归档。"
+        icon="albums"
+        isOpen={nameModalState !== null}
+        isSubmitting={isSavingName}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          setNameModalState(null);
+        }}
+        onSubmit={submitCategoryName}
+        submitLabel={nameModalState?.mode === "rename" ? "保存分类" : "创建分类"}
+        title={nameModalState?.mode === "rename" ? "重命名分类" : "新建分类"}
+      >
+        <AdminInputGroupField
+          icon="albums"
+          isRequired
+          label="分类名称"
+          onChange={setCategoryName}
+          placeholder="输入分类名称"
+          value={categoryName}
+        />
+      </AdminFormModal>
       <DataTable
         ariaLabel="分类管理表格"
         bulkActions={categoryBulkActions}
@@ -229,6 +306,7 @@ export function CategoriesPage() {
         rows={categoryRows}
         searchPlaceholder="搜索分类或父级"
         toolbarActions={categoryToolbarActions}
+        emptyText="暂无分类记录"
       />
     </AdminDataPage>
   );

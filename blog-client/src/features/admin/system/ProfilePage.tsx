@@ -1,13 +1,12 @@
 import { AdminDataPage } from "../shared/AdminDataPage";
-import {
-  DataStatusChip,
-  DataTable,
-  type DataTableColumn,
-  type DataTableFilter,
-  type DataTableRow,
-  type DataTableRowAction,
-  type DataTableToolbarAction,
+import type {
+  DataTableColumn,
+  DataTableFilter,
+  DataTableRow,
+  DataTableRowAction,
+  DataTableToolbarAction,
 } from "../shared/DataTable";
+import { DataStatusChip, DataTable } from "../shared/DataTable";
 
 type ProfileSettingRow = DataTableRow & {
   description: string;
@@ -17,48 +16,7 @@ type ProfileSettingRow = DataTableRow & {
   updatedAt: string;
 };
 
-const profileRows: ProfileSettingRow[] = [
-  {
-    description: "昵称、邮箱、头像链接和个人简介。",
-    group: "资料",
-    id: "profile-basic",
-    item: "基础资料",
-    status: "complete",
-    updatedAt: "2026-05-15",
-  },
-  {
-    description: "博客链接、社交链接和标签。",
-    group: "资料",
-    id: "profile-social",
-    item: "公开展示",
-    status: "pending",
-    updatedAt: "2026-05-12",
-  },
-  {
-    description: "当前密码、登录设备和会话退出。",
-    group: "安全",
-    id: "profile-security",
-    item: "安全设置",
-    status: "pending",
-    updatedAt: "2026-05-10",
-  },
-  {
-    description: "后台默认主题、表格密度和语言偏好。",
-    group: "偏好",
-    id: "profile-preference",
-    item: "界面偏好",
-    status: "complete",
-    updatedAt: "2026-05-08",
-  },
-  {
-    description: "demo 账户仅能查看资料，不允许保存修改。",
-    group: "安全",
-    id: "profile-demo",
-    item: "只读策略",
-    status: "readonly",
-    updatedAt: "2026-05-01",
-  },
-];
+const profileRows: ProfileSettingRow[] = [];
 
 const profileStatusMeta = {
   complete: { label: "已配置", tone: "success" },
@@ -131,9 +89,10 @@ const profileFilters: DataTableFilter<ProfileSettingRow>[] = [
 
 const profileToolbarActions: DataTableToolbarAction<ProfileSettingRow>[] = [
   {
+    confirmation: "none",
     icon: "save",
     label: "保存资料",
-    onPress: ({ setNotice }) => setNotice("个人资料保存接口等待接入"),
+    onPress: ({ setNotice }) => setNotice("请填写资料后保存。"),
   },
 ];
 
@@ -145,10 +104,11 @@ const profileRowActions: DataTableRowAction<ProfileSettingRow>[] = [
     onPress: (row, { setNotice }) => setNotice(`查看「${row.item}」设置`),
   },
   {
+    confirmation: "none",
     icon: "pencil",
     isDisabled: (row) => row.status === "readonly",
     label: "编辑",
-    onPress: (row, { setNotice }) => setNotice(`编辑「${row.item}」表单等待接入`),
+    onPress: (row, { setNotice }) => setNotice(`编辑「${row.item}」`),
   },
 ];
 
@@ -159,9 +119,9 @@ export function ProfilePage() {
       eyebrow="系统"
       icon="personCircle"
       metrics={[
-        { label: "资料完整度", value: "72%" },
-        { label: "安全项", value: "3/5" },
-        { label: "偏好项", value: "6" },
+        { label: "资料完整度", value: "0%" },
+        { label: "安全项", value: "0" },
+        { label: "偏好项", value: "0" },
       ]}
       title="个人设置"
       wide
@@ -175,6 +135,7 @@ export function ProfilePage() {
         rows={profileRows}
         searchPlaceholder="搜索资料、安全、偏好"
         toolbarActions={profileToolbarActions}
+        emptyText="暂无个人设置记录"
       />
     </AdminDataPage>
   );

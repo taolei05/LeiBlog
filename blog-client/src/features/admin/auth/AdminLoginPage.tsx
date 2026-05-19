@@ -1,15 +1,13 @@
 import { Button, Card, Chip, Form, Input, Label, TextField } from "@heroui/react";
-import { useMemo, useState, type FormEvent } from "react";
+import type { FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { AppIcon } from "../../../shared/icons";
-import {
-  isSetupComplete,
-  signInAdminSession,
-  useAdminSession,
-  type AdminRole,
-} from "../../../shared/routing/adminGuards";
+import { signInAdminSession, useAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
+import { showErrorToast, showSuccessToast } from "../../../shared/toast/operation-toast";
+import { createDemoSession, loginAdmin } from "../shared/admin-api";
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
@@ -17,28 +15,59 @@ export function AdminLoginPage() {
   const session = useAdminSession();
   const [identifier, setIdentifier] = useState("admin");
   const [password, setPassword] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const nextPath = useMemo(() => {
     const state = location.state as { next?: string } | null;
 
     return state?.next?.startsWith("/admin") ? state.next : "/admin";
   }, [location.state]);
 
-  if (!isSetupComplete()) {
-    return <Navigate replace state={{ next: nextPath }} to="/admin/setup" />;
-  }
-
   if (session.isAuthenticated && (session.role === "admin" || session.role === "demo")) {
     return <Navigate replace to={nextPath} />;
   }
 
-  function submitLogin(event: FormEvent<HTMLFormElement>) {
+  async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    completeLogin(identifier.toLowerCase() === "demo" ? "demo" : "admin");
+    setStatusMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const nextSession = await loginAdmin(identifier, password);
+      if (nextSession.user.role !== "admin" && nextSession.user.role !== "demo") {
+        setStatusMessage("普通用户不能进入后台。");
+        showErrorToast("登录失败：普通用户不能进入后台。");
+        return;
+      }
+
+      signInAdminSession(nextSession);
+      showSuccessToast(`登录成功，欢迎你 ${nextSession.user.name ?? nextSession.user.username}`);
+      void navigate(nextPath, { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "登录失败";
+      setStatusMessage(message);
+      showErrorToast(`登录失败：${message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function completeLogin(role: AdminRole) {
-    signInAdminSession(role);
-    void navigate(nextPath, { replace: true });
+  async function enterReadonlyDemo() {
+    setStatusMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const nextSession = await createDemoSession();
+      signInAdminSession(nextSession);
+      showSuccessToast(`登录成功，欢迎你 ${nextSession.user.name ?? nextSession.user.username}`);
+      void navigate(nextPath, { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "演示会话创建失败";
+      setStatusMessage(message);
+      showErrorToast(`登录失败：${message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -82,15 +111,21 @@ export function AdminLoginPage() {
             </Chip>
           </div>
           <div className="admin-login-card__actions">
-            <Button type="submit">
+            <Button isDisabled={isSubmitting} type="submit">
               <AppIcon name="logIn" />
               登录后台
             </Button>
-            <Button onPress={() => completeLogin("demo")} type="button" variant="tertiary">
+            <Button
+              isDisabled={isSubmitting}
+              onPress={() => void enterReadonlyDemo()}
+              type="button"
+              variant="tertiary"
+            >
               <AppIcon name="shield" />
               只读演示
             </Button>
           </div>
+          {statusMessage ? <p className="front-form-note">{statusMessage}</p> : null}
         </Form>
       </Card>
     </main>

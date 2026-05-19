@@ -1,7 +1,8 @@
 import { Button } from "@heroui/react";
 
-import { AppIcon, type AppIconName } from "../icons";
-import { themeModes, type ThemeMode } from "./ThemeProviderLite";
+import type { AppIconName } from "../icons";
+import type { ResolvedTheme } from "./ThemeProviderLite";
+import { AppIcon } from "../icons";
 import { useTheme } from "./ThemeProviderLite";
 
 type ThemeSwitcherProps = {
@@ -9,59 +10,43 @@ type ThemeSwitcherProps = {
 };
 
 const themeModeMeta: Record<
-  ThemeMode,
+  ResolvedTheme,
   {
-    description: string;
     icon: AppIconName;
     label: string;
+    nextLabel: string;
+    nextMode: ResolvedTheme;
   }
 > = {
-  system: {
-    description: "跟随系统外观",
-    icon: "desktop",
-    label: "系统",
-  },
   light: {
-    description: "切换到浅色主题",
     icon: "sunny",
     label: "浅色",
+    nextLabel: "深色",
+    nextMode: "dark",
   },
   dark: {
-    description: "切换到深色主题",
     icon: "moon",
     label: "深色",
+    nextLabel: "浅色",
+    nextMode: "light",
   },
 };
 
 export function ThemeSwitcher({ density = "compact" }: ThemeSwitcherProps) {
-  const { mode, resolvedTheme, setMode } = useTheme();
-  const currentMode = themeModeMeta[mode];
+  const { resolvedTheme, setMode } = useTheme();
+  const currentMode = themeModeMeta[resolvedTheme];
 
   return (
-    <div
-      aria-label={`主题切换，当前为${currentMode.label}，实际显示${resolvedTheme === "dark" ? "深色" : "浅色"}`}
+    <Button
+      aria-label={`当前为${currentMode.label}主题，切换到${currentMode.nextLabel}主题`}
       className={`theme-switcher theme-switcher--${density}`}
-      role="group"
+      onPress={() => setMode(currentMode.nextMode)}
+      size={density === "roomy" ? "lg" : "md"}
+      type="button"
+      variant="secondary"
     >
-      {themeModes.map((themeMode) => {
-        const item = themeModeMeta[themeMode];
-        const isActive = mode === themeMode;
-
-        return (
-          <Button
-            aria-label={item.description}
-            aria-pressed={isActive}
-            className="theme-switcher__button"
-            key={themeMode}
-            onPress={() => setMode(themeMode)}
-            size="sm"
-            variant={isActive ? "primary" : "tertiary"}
-          >
-            <AppIcon name={item.icon} />
-            <span>{item.label}</span>
-          </Button>
-        );
-      })}
-    </div>
+      <AppIcon name={currentMode.icon} size={16} />
+      <span>{currentMode.label}</span>
+    </Button>
   );
 }

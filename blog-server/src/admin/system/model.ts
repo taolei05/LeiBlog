@@ -56,6 +56,21 @@ export const SystemFilingBody = t.Object({
   policeUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
 });
 
+export const RevealApiKeysBody = t.Object({
+  emailCode: t.String({ minLength: 4, maxLength: 12 }),
+});
+
+export const ResendTestBody = t.Object({
+  kind: t.Union([t.Literal("domain"), t.Literal("apiKey")]),
+  resendApiKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+  resendDomain: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
+});
+
+export const DeepLTestBody = t.Object({
+  apiKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+  text: t.String({ minLength: 1, maxLength: 1000 }),
+});
+
 export const SystemSiteInfoResponse = t.Object({
   ok: t.Boolean(),
   item: t.Nullable(SystemSiteInfoItem),
@@ -69,4 +84,32 @@ export const SystemSiteConfigResponse = t.Object({
 export const SystemFilingResponse = t.Object({
   ok: t.Boolean(),
   item: t.Nullable(SystemFilingItem),
+});
+
+export const ApiKeyEmailCodeResponse = t.Object({
+  ok: t.Boolean(),
+  sent: t.Boolean(),
+  devCode: t.Optional(t.String()),
+});
+
+export const ApiKeysResponse = t.Object({
+  ok: t.Boolean(),
+  item: t.Object({
+    resendApiKey: t.Nullable(t.String()),
+    deeplApiKey: t.Nullable(t.String()),
+    ipgeolocationApiKey: t.Nullable(t.String()),
+  }),
+});
+
+export const IntegrationTestResponse = t.Object({
+  ok: t.Boolean(),
+  message: t.String(),
+  translatedText: t.Optional(t.String()),
+  login: t.Optional(
+    t.Object({
+      device: t.String(),
+      ip: t.String(),
+      location: t.String(),
+    })
+  ),
 });
