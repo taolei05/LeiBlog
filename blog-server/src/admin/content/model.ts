@@ -133,6 +133,7 @@ const ArticleRelationItem = t.Object({
 export const ArticleResponseItem = t.Object({
   id: t.String(),
   authorId: t.Nullable(t.String()),
+  authorName: t.Nullable(t.String()),
   title: t.String(),
   slug: t.String(),
   summary: t.Nullable(t.String()),

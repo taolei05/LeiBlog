@@ -87,6 +87,7 @@ interface ContributorRow {
 interface ArticleRow {
   id: string;
   author_id: string | null;
+  author_name: string | null;
   title: string;
   slug: string;
   summary: string | null;
@@ -233,6 +234,7 @@ function toArticle(row: ArticleRow) {
   return {
     id: row.id,
     authorId: row.author_id,
+    authorName: row.author_name,
     title: row.title,
     slug: row.slug,
     summary: row.summary,
@@ -665,7 +667,13 @@ async function replaceArticleRelations(
 export async function getArticleById(id: string, client: DbClient = db) {
   const [row] = await client<ArticleRow[]>`
     SELECT
-      a.id, a.author_id, a.title, a.slug, a.summary, a.content_mdx,
+      a.id, a.author_id,
+      (
+        SELECT COALESCE(NULLIF(trim(u.name), ''), u.username)
+        FROM users u
+        WHERE u.id = a.author_id
+      ) AS author_name,
+      a.title, a.slug, a.summary, a.content_mdx,
       a.cover_image_url, a.status, a.read_count,
       (
         SELECT count(*)
@@ -721,7 +729,13 @@ export async function listArticles(
   const rows = await client.unsafe<ArticleRow[]>(
     `
       SELECT
-        a.id, a.author_id, a.title, a.slug, a.summary, a.content_mdx,
+        a.id, a.author_id,
+        (
+          SELECT COALESCE(NULLIF(trim(u.name), ''), u.username)
+          FROM users u
+          WHERE u.id = a.author_id
+        ) AS author_name,
+        a.title, a.slug, a.summary, a.content_mdx,
         a.cover_image_url, a.status, a.read_count,
         (
           SELECT count(*)

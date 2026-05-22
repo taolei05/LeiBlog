@@ -108,6 +108,7 @@ describe("admin content service", () => {
     );
 
     expect(article.slug).toBe("ni-hao-elysia");
+    expect(article.authorName).toBe("admin");
     expect(article.summary).toBe("你好 这是一篇测试文章。");
     expect(article.categories[0]?.id).toBe(category.id);
     expect(article.tags[0]?.id).toBe(tag.id);
@@ -140,6 +141,7 @@ describe("admin content service", () => {
       testDb
     );
     expect(filtered.total).toBe(1);
+    expect(filtered.items[0]?.authorName).toBe("admin");
     expect(filtered.items[0]?.id).toBe(article.id);
 
     const [revisionCount] = await testDb<{ count: string }[]>`

@@ -25,7 +25,7 @@ type ArticleRow = DataTableRow & {
 };
 
 type AdminArticleItem = {
-  authorId: string | null;
+  authorName: string | null;
   categories: Array<{ name: string }>;
   commentCount: number;
   id: string;
@@ -178,7 +178,7 @@ function ArticleDataPage({ relation }: { relation?: ArticleRelationScope }) {
     );
     setArticleRows(
       response.items.map((article) => ({
-        author: article.authorId ?? "未知",
+        author: article.authorName ?? "未知",
         category: article.categories[0]?.name ?? "未分类",
         comments: article.commentCount,
         id: article.id,
