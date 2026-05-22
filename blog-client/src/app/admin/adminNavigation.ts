@@ -58,6 +58,13 @@ export const adminNavigationGroups: Array<{
         section: "内容管理",
       },
       {
+        description: "文章贡献者、头像和关联链接。",
+        icon: "personAdd",
+        label: "贡献者管理",
+        path: "/admin/content/contributors",
+        section: "内容管理",
+      },
+      {
         description: "媒体文件、链接复制和预览操作。",
         icon: "images",
         label: "媒体库",
@@ -77,9 +84,9 @@ export const adminNavigationGroups: Array<{
         section: "系统",
       },
       {
-        description: "个人资料、头像和偏好设置。",
+        description: "当前管理员资料、安全和登录信息。",
         icon: "personCircle",
-        label: "个人设置",
+        label: "管理员设置",
         path: "/admin/system/profile",
         section: "系统",
       },
@@ -131,6 +138,36 @@ export function getAdminRouteMeta(pathname: string) {
       description: "编辑文章标题、摘要和 MDX 正文。",
       icon: "pencil",
       label: "编辑文章",
+      path: pathname,
+      section: "内容管理",
+    } satisfies AdminRouteMeta;
+  }
+
+  if (/^\/admin\/content\/categories\/[^/]+\/articles$/.test(pathname)) {
+    return {
+      description: "查看这个分类下的文章并继续管理。",
+      icon: "albums",
+      label: "分类文章",
+      path: pathname,
+      section: "内容管理",
+    } satisfies AdminRouteMeta;
+  }
+
+  if (/^\/admin\/content\/tags\/[^/]+\/articles$/.test(pathname)) {
+    return {
+      description: "查看这个标签下的文章并继续管理。",
+      icon: "pricetags",
+      label: "标签文章",
+      path: pathname,
+      section: "内容管理",
+    } satisfies AdminRouteMeta;
+  }
+
+  if (/^\/admin\/content\/contributors\/[^/]+\/articles$/.test(pathname)) {
+    return {
+      description: "查看这个贡献者关联的文章并继续管理。",
+      icon: "personAdd",
+      label: "贡献者文章",
       path: pathname,
       section: "内容管理",
     } satisfies AdminRouteMeta;

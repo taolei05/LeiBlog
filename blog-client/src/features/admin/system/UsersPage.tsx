@@ -17,7 +17,7 @@ import type {
   DataTableRowAction,
   DataTableToolbarAction,
 } from "../shared/DataTable";
-import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
 import { MediaAssetField } from "../shared/media-asset-field";
 
@@ -113,7 +113,7 @@ const userColumns: DataTableColumn<UserRow>[] = [
           <Avatar.Fallback>{row.name.slice(0, 1).toUpperCase()}</Avatar.Fallback>
         </Avatar>
         <span className="data-table-primary-cell">
-          <strong>{row.name}</strong>
+          <strong title={row.name}>{truncateDataTablePrimaryText(row.name)}</strong>
           <small>
             {row.username} · {row.email}
           </small>
@@ -342,8 +342,10 @@ export function UsersPage() {
   const userBulkActions: DataTableBulkAction<UserRow>[] = [
     {
       access: "danger",
+      confirmationDescription: (rows) =>
+        `这是批量删除，将移除所选 ${rows.length} 个账号的评论、登录会话和安全记录；所写文章保留，但作者会清空。`,
       icon: "trash",
-      label: "批量删除",
+      label: "删除",
       onPress: async (rows, { clearSelection, setNotice }) => {
         try {
           await Promise.all(
@@ -394,6 +396,8 @@ export function UsersPage() {
     },
     {
       access: "danger",
+      confirmationDescription: (row) =>
+        `删除「${row.name}」后，会移除该账号的评论、登录会话和安全记录；所写文章保留，但作者会清空。`,
       icon: "trash",
       isDisabled: (row) => row.role === "admin",
       label: "删除",

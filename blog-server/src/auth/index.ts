@@ -37,7 +37,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
   })
   .post(
     "/register",
-    async ({ body, headers, jwt }) => {
+    async ({ body, headers, jwt, request, server }) => {
       const user = await registerUser(body);
       const token = await jwt.sign({
         sub: user.id,
@@ -46,8 +46,12 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         type: "access",
         exp: "7d",
       });
+      const meta = getRequestMeta({
+        headers,
+        requestIp: server?.requestIP(request)?.address,
+      });
 
-      await createAuthSession(user, token, getRequestMeta(headers));
+      await createAuthSession(user, token, meta);
 
       return {
         ok: true,
@@ -64,8 +68,12 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
   )
   .post(
     "/login",
-    async ({ body, headers, jwt }) => {
-      const user = await verifyLogin(body, getRequestMeta(headers));
+    async ({ body, headers, jwt, request, server }) => {
+      const meta = getRequestMeta({
+        headers,
+        requestIp: server?.requestIP(request)?.address,
+      });
+      const user = await verifyLogin(body, meta);
       const token = await jwt.sign({
         sub: user.id,
         role: user.role,
@@ -74,7 +82,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         exp: "7d",
       });
 
-      await createAuthSession(user, token, getRequestMeta(headers));
+      await createAuthSession(user, token, meta);
 
       return {
         ok: true,

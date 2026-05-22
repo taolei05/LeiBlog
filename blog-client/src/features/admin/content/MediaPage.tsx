@@ -1,4 +1,4 @@
-import { AlertDialog, Button, Card } from "@heroui/react";
+import { AlertDialog, Button, Card, Modal } from "@heroui/react";
 import { useEffect, useRef, useState } from "react";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
@@ -14,7 +14,7 @@ import type {
   DataTableRowAction,
   DataTableToolbarAction,
 } from "../shared/DataTable";
-import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
 import { adminFetch, downloadAdminFile } from "../shared/admin-api";
 
 type MediaRow = DataTableRow & {
@@ -112,6 +112,88 @@ function MediaThumb({ item }: { item: MediaRow }) {
   );
 }
 
+type MediaPreviewModalProps = {
+  item: MediaRow | null;
+  onCopyUrl: (row: MediaRow) => Promise<void>;
+  onOpenChange: (isOpen: boolean) => void;
+};
+
+function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalProps) {
+  return (
+    <Modal.Backdrop isOpen={item !== null} onOpenChange={onOpenChange} variant="blur">
+      <Modal.Container placement="center" scroll="inside" size="lg">
+        <Modal.Dialog className="media-preview-modal">
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Icon>
+              <AppIcon name="eye" />
+            </Modal.Icon>
+            <div>
+              <Modal.Heading>媒体预览与详细</Modal.Heading>
+              <p className="admin-form-modal__description">{item?.fileName ?? "选择媒体后查看"}</p>
+            </div>
+          </Modal.Header>
+          <Modal.Body className="media-preview-modal__body">
+            <div className="media-preview-card__visual">
+              {item?.kind === "image" ? (
+                <img alt={item.alt} src={item.url} />
+              ) : item ? (
+                <MediaThumb item={item} />
+              ) : (
+                <span className="media-thumb media-thumb--document">
+                  <AppIcon name="images" />
+                </span>
+              )}
+            </div>
+            <dl className="media-detail-list">
+              <div>
+                <dt>文件名</dt>
+                <dd>{item?.fileName ?? "暂无"}</dd>
+              </div>
+              <div>
+                <dt>链接</dt>
+                <dd>{item?.url ?? "暂无"}</dd>
+              </div>
+              <div>
+                <dt>文件夹</dt>
+                <dd>{item?.folderName ?? "暂无"}</dd>
+              </div>
+              <div>
+                <dt>类型</dt>
+                <dd>{item?.usage ?? "暂无"}</dd>
+              </div>
+              <div>
+                <dt>大小</dt>
+                <dd>{item?.size ?? "暂无"}</dd>
+              </div>
+              <div>
+                <dt>上传时间</dt>
+                <dd>{item?.uploadedAt ?? "暂无"}</dd>
+              </div>
+            </dl>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button slot="close" variant="tertiary">
+              关闭
+            </Button>
+            <Button
+              isDisabled={!item}
+              onPress={() => {
+                if (!item) return;
+                void onCopyUrl(item);
+              }}
+              variant="primary"
+            >
+              <AppIcon name="copy" />
+              复制链接
+            </Button>
+          </Modal.Footer>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
+  );
+}
+
 const mediaColumns: DataTableColumn<MediaRow>[] = [
   {
     header: "文件",
@@ -121,7 +203,7 @@ const mediaColumns: DataTableColumn<MediaRow>[] = [
       <span className="media-file-cell">
         <MediaThumb item={row} />
         <span className="data-table-primary-cell">
-          <strong>{row.fileName}</strong>
+          <strong title={row.fileName}>{truncateDataTablePrimaryText(row.fileName)}</strong>
           <small>{row.url}</small>
         </span>
       </span>
@@ -246,19 +328,6 @@ export function MediaPage() {
     activeFolderSlug === "all"
       ? mediaRows
       : mediaRows.filter((row) => row.folderSlug === activeFolderSlug);
-  const filters: DataTableFilter<MediaRow>[] = [
-    {
-      allLabel: "全部文件夹",
-      key: "folderName",
-      label: "文件夹",
-      options: folders.map((folder) => ({
-        label: folder.name,
-        predicate: (row) => row.folderSlug === folder.slug,
-        value: folder.slug,
-      })),
-    },
-    ...mediaFilters,
-  ];
 
   useEffect(() => {
     void loadMedia();
@@ -382,8 +451,10 @@ export function MediaPage() {
   const mediaBulkActions: DataTableBulkAction<MediaRow>[] = [
     {
       access: "danger",
+      confirmationDescription: (rows) =>
+        `这是批量删除，将移除所选 ${rows.length} 个媒体文件。已写入文章、头像或站点配置的链接不会自动替换，相关资源可能失效。`,
       icon: "trash",
-      label: "批量删除",
+      label: "删除",
       onPress: async (rows, { clearSelection, setNotice }) => {
         try {
           await Promise.all(
@@ -417,9 +488,8 @@ export function MediaPage() {
       access: "read",
       icon: "eye",
       label: "预览",
-      onPress: (row, { setNotice }) => {
+      onPress: (row) => {
         setPreviewItem(row);
-        setNotice(`正在预览 ${row.fileName}`);
       },
     },
     {
@@ -448,13 +518,14 @@ export function MediaPage() {
       access: "read",
       icon: "informationCircle",
       label: "详细",
-      onPress: (row, { setNotice }) => {
+      onPress: (row) => {
         setPreviewItem(row);
-        setNotice(`${row.fileName} 详细信息已展示`);
       },
     },
     {
       access: "danger",
+      confirmationDescription: (row) =>
+        `删除「${row.fileName}」后，已写入文章、头像或站点配置的链接不会自动替换，相关资源可能失效。`,
       icon: "trash",
       label: "删除",
       onPress: async (row, { setNotice }) => {
@@ -546,6 +617,14 @@ export function MediaPage() {
           value={renameFileName}
         />
       </AdminFormModal>
+      <MediaPreviewModal
+        item={previewItem}
+        onCopyUrl={copyGridMediaUrl}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          setPreviewItem(null);
+        }}
+      />
       <div className="media-library-layout">
         <input
           ref={uploadInputRef}
@@ -674,7 +753,7 @@ export function MediaPage() {
               bulkActions={mediaBulkActions}
               columns={mediaColumns}
               defaultSort={{ column: "uploadedAt", direction: "desc" }}
-              filters={filters}
+              filters={mediaFilters}
               rowActions={mediaRowActions}
               rows={visibleMediaRows}
               searchPlaceholder="搜索文件、链接、引用文章"
@@ -736,45 +815,6 @@ export function MediaPage() {
             </div>
           )}
         </div>
-
-        <Card className="media-preview-card">
-          <Card.Header>
-            <Card.Title>
-              <AppIcon name="eye" />
-              预览与详细
-            </Card.Title>
-            <Card.Description>{previewItem?.alt ?? "选择媒体后查看详细信息"}</Card.Description>
-          </Card.Header>
-          <div className="media-preview-card__visual">
-            {previewItem?.kind === "image" ? (
-              <img alt={previewItem.alt} src={previewItem.url} />
-            ) : previewItem ? (
-              <MediaThumb item={previewItem} />
-            ) : (
-              <span className="media-thumb media-thumb--document">
-                <AppIcon name="images" />
-              </span>
-            )}
-          </div>
-          <dl className="media-detail-list">
-            <div>
-              <dt>文件名</dt>
-              <dd>{previewItem?.fileName ?? "暂无"}</dd>
-            </div>
-            <div>
-              <dt>链接</dt>
-              <dd>{previewItem?.url ?? "暂无"}</dd>
-            </div>
-            <div>
-              <dt>引用</dt>
-              <dd>{previewItem?.usage ?? "暂无"}</dd>
-            </div>
-            <div>
-              <dt>大小</dt>
-              <dd>{previewItem?.size ?? "暂无"}</dd>
-            </div>
-          </dl>
-        </Card>
       </div>
     </AdminDataPage>
   );

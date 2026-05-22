@@ -13,12 +13,20 @@ export type BlogArticleTocItem = {
   title: string;
 };
 
+export type BlogArticleContributor = {
+  avatarUrl: string | null;
+  id: string;
+  linkUrl: string | null;
+  name: string;
+};
+
 export type BlogArticle = {
   categories: BlogTaxonomy[];
   category: string;
   categorySlug: string;
   commentCount: number;
   contentMdx?: string;
+  contributors: BlogArticleContributor[];
   cover: string | null;
   date: string;
   excerpt: string;
@@ -79,8 +87,10 @@ export type PublicArticleListParams = {
 };
 
 type ApiRelationItem = {
+  avatarUrl?: string | null;
   color?: string | null;
   id: string;
+  linkUrl?: string | null;
   name: string;
   slug?: string;
 };
@@ -103,6 +113,7 @@ type ApiArticleSummary = {
 
 type ApiArticleDetail = ApiArticleSummary & {
   contentMdx: string;
+  contributors: ApiRelationItem[];
 };
 
 type ApiCommentItem = {
@@ -165,8 +176,10 @@ function toRelationItem(value: unknown): ApiRelationItem {
   if (!isRecord(value)) throw new Error("文章关联项格式无效");
 
   return {
+    avatarUrl: readNullableString(value, "avatarUrl"),
     color: readNullableString(value, "color"),
     id: readString(value, "id"),
+    linkUrl: readNullableString(value, "linkUrl"),
     name: readString(value, "name"),
     slug: readNullableString(value, "slug") ?? undefined,
   };
@@ -198,6 +211,7 @@ function toArticleDetail(value: unknown): ApiArticleDetail {
   return {
     ...toArticleSummary(value),
     contentMdx: readString(value, "contentMdx"),
+    contributors: readArray(value, "contributors").map(toRelationItem),
   };
 }
 
@@ -245,6 +259,15 @@ function normalizeRelation(item: ApiRelationItem): BlogTaxonomy {
     id: item.id,
     name: item.name,
     slug: item.slug ?? item.name,
+  };
+}
+
+function normalizeContributor(item: ApiRelationItem): BlogArticleContributor {
+  return {
+    avatarUrl: resolveApiAssetUrl(item.avatarUrl) ?? null,
+    id: item.id,
+    linkUrl: item.linkUrl ?? null,
+    name: item.name,
   };
 }
 
@@ -306,6 +329,7 @@ function toBlogArticle(article: ApiArticleDetail | ApiArticleSummary): BlogArtic
     categorySlug: primaryCategory.slug,
     commentCount: article.commentCount,
     contentMdx,
+    contributors: "contributors" in article ? article.contributors.map(normalizeContributor) : [],
     cover: resolveApiAssetUrl(article.coverImageUrl) ?? null,
     date: formatDate(article.publishedAt ?? article.createdAt),
     excerpt: article.summary ?? "",

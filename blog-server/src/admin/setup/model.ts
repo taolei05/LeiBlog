@@ -68,3 +68,14 @@ export const SetupFilingBody = t.Object({
   policeNumber: t.Optional(t.String({ maxLength: 120 })),
   policeUrl: t.Optional(t.String({ maxLength: 2048 })),
 });
+
+export const SetupUploadBody = t.Object({
+  file: t.File(),
+  fileName: t.Optional(t.String({ maxLength: 255 })),
+  folderSlug: t.Union([t.Literal("avatars"), t.Literal("site")]),
+});
+
+export const SetupUploadResponse = t.Object({
+  ok: t.Boolean(),
+  accessUrl: t.String(),
+});

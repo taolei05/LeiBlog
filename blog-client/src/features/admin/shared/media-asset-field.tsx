@@ -1,4 +1,13 @@
-import { Button, Card, InputGroup, Label, Modal, TextField } from "@heroui/react";
+import {
+  Button,
+  Card,
+  Description,
+  FieldError,
+  InputGroup,
+  Label,
+  Modal,
+  TextField,
+} from "@heroui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
@@ -98,15 +107,18 @@ export function MediaAssetField({
             <AppIcon name={icon} size={16} />
           </InputGroup.Prefix>
           <InputGroup.Input
+            inputMode="url"
             onChange={(event) => {
               onChange(event.target.value);
               if (localFile) onLocalFileChange(null);
             }}
             placeholder={placeholder}
-            type="url"
+            type="text"
             value={value}
           />
         </InputGroup>
+        <Description>可填写图片链接，也可以从媒体库或本地选择。</Description>
+        <FieldError>{label}链接格式不正确</FieldError>
       </TextField>
       <input
         ref={inputRef}

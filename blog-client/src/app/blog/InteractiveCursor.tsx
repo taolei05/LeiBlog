@@ -6,13 +6,20 @@ const interactiveSelector = [
   "summary",
   "[role='button']",
   ".article-card",
+  ".admin-data-card",
+  ".admin-metric-card",
+  ".admin-status-card",
+  ".data-table-card",
   ".front-category-card",
   ".site-story-card",
   ".front-action-link",
   ".mdx-read-next",
+  ".media-grid-card",
+  ".setup-steps__item",
 ].join(",");
 
 const textSelector = ["input", "textarea", "select", "[contenteditable='true']"].join(",");
+const shellSelector = ".blog-shell, .admin-shell, .setup-page";
 const minimumCursorWidth = 768;
 
 function clampPull(value: number) {
@@ -44,7 +51,7 @@ export function InteractiveCursor() {
       return;
     }
 
-    const shell = cursorElement.closest<HTMLElement>(".blog-shell");
+    const shell = cursorElement.closest<HTMLElement>(shellSelector);
 
     if (!shell) {
       return;
@@ -52,7 +59,7 @@ export function InteractiveCursor() {
 
     const shellElement = shell;
 
-    shellElement.classList.add("blog-shell--cursor-active");
+    shellElement.classList.add("interactive-shell--cursor-active");
 
     const trails = Array.from(
       cursorElement.querySelectorAll<HTMLElement>(".interactive-cursor__trail"),
@@ -156,7 +163,7 @@ export function InteractiveCursor() {
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
-      shellElement.classList.remove("blog-shell--cursor-active");
+      shellElement.classList.remove("interactive-shell--cursor-active");
       shellElement.style.removeProperty("--cursor-x");
       shellElement.style.removeProperty("--cursor-y");
       clearMagneticTarget();

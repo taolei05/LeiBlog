@@ -1,7 +1,10 @@
 import {
+  Accordion,
+  AlertDialog,
   Button,
-  Card,
   Chip,
+  Description,
+  FieldError,
   Form,
   Input,
   InputGroup,
@@ -86,6 +89,8 @@ type ApiKeyItem = {
 
 type SecretFieldKey = "deeplApiKey" | "ipgeolocationApiKey" | "resendApiKey" | "resendDomain";
 
+type SiteSettingsSaveKind = "filing" | "site-config" | "site-info";
+
 type TestModalState =
   | {
       kind: "deepl";
@@ -102,6 +107,31 @@ type IntegrationLoginInfo = {
   device: string;
   ip: string;
   location: string;
+};
+
+const saveConfirmationCopy: Record<
+  SiteSettingsSaveKind,
+  {
+    confirmLabel: string;
+    description: string;
+    title: string;
+  }
+> = {
+  filing: {
+    confirmLabel: "确认保存",
+    description: "保存后，前台页脚会按最新备案信息展示。",
+    title: "确认保存备案配置？",
+  },
+  "site-config": {
+    confirmLabel: "确认保存",
+    description: "保存后，SEO、集成配置和评论开关会立即按最新设置生效。",
+    title: "确认保存站点配置？",
+  },
+  "site-info": {
+    confirmLabel: "确认保存",
+    description: "保存后，站点名称、Logo、favicon 和建站时间会更新。",
+    title: "确认保存站点信息？",
+  },
 };
 
 const defaultSiteInfo: SiteInfoState = {
@@ -190,7 +220,13 @@ export function SiteSettingsPage() {
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [pendingSave, setPendingSave] = useState<SiteSettingsSaveKind | null>(null);
   const isReadOnly = session.isReadOnly;
+  const isResendDomainReveal = revealKey === "resendDomain";
+  const revealModalTitle = isResendDomainReveal ? "查看 Resend 域名" : "查看 API Key";
+  const revealModalDescription = isResendDomainReveal
+    ? "Resend 域名不是密钥，可直接查看和复制。"
+    : "仅管理员可以查看密钥，查看前需要通过管理员邮箱验证码。";
 
   function updateNotice(message: string) {
     setNotice(message);
@@ -248,8 +284,40 @@ export function SiteSettingsPage() {
     void loadSettings();
   }, []);
 
-  async function saveSiteInfo(event: FormEvent<HTMLFormElement>) {
+  function requestSave(kind: SiteSettingsSaveKind, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isReadOnly || isSaving) return;
+
+    setPendingSave(kind);
+  }
+
+  function confirmPendingSave() {
+    if (!pendingSave) return;
+
+    const saveKind = pendingSave;
+
+    setPendingSave(null);
+
+    switch (saveKind) {
+      case "filing":
+        void saveFiling();
+        return;
+      case "site-config":
+        void saveSiteConfig();
+        return;
+      case "site-info":
+        void saveSiteInfo();
+        return;
+      default: {
+        const exhaustiveSaveKind: never = saveKind;
+
+        return exhaustiveSaveKind;
+      }
+    }
+  }
+
+  async function saveSiteInfo() {
     setIsSaving(true);
 
     try {
@@ -286,8 +354,7 @@ export function SiteSettingsPage() {
     }
   }
 
-  async function saveSiteConfig(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveSiteConfig() {
     setIsSaving(true);
 
     try {
@@ -319,8 +386,7 @@ export function SiteSettingsPage() {
     }
   }
 
-  async function saveFiling(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveFiling() {
     setIsSaving(true);
 
     try {
@@ -343,6 +409,8 @@ export function SiteSettingsPage() {
   }
 
   async function sendRevealCode() {
+    if (isResendDomainReveal) return;
+
     try {
       const response = await adminFetch<{ devCode?: string; sent: boolean }>(
         "/admin/system/api-keys/email-code",
@@ -358,6 +426,13 @@ export function SiteSettingsPage() {
 
   async function revealSecretValue() {
     if (!revealKey) return;
+
+    if (isResendDomainReveal) {
+      setRevealedValue(siteConfig.resendDomain || "未配置");
+      updateNotice("已显示 Resend 域名");
+      return;
+    }
+
     if (!emailCode.trim()) {
       updateNotice("请输入邮箱验证码");
       return;
@@ -369,9 +444,7 @@ export function SiteSettingsPage() {
         method: "POST",
       });
       const keys = response.item;
-      setRevealedValue(
-        revealKey === "resendDomain" ? siteConfig.resendDomain : (keys[revealKey] ?? "未配置"),
-      );
+      setRevealedValue(keys[revealKey] ?? "未配置");
       updateNotice("验证通过，已显示密钥");
     } catch (error) {
       updateNotice(error instanceof Error ? error.message : "API Key 查看失败");
@@ -381,7 +454,7 @@ export function SiteSettingsPage() {
   function openRevealModal(key: SecretFieldKey) {
     setRevealKey(key);
     setEmailCode("");
-    setRevealedValue("");
+    setRevealedValue(key === "resendDomain" ? siteConfig.resendDomain || "未配置" : "");
   }
 
   function openTestModal(state: TestModalState) {
@@ -476,19 +549,22 @@ export function SiteSettingsPage() {
         ) : null}
       </div>
 
-      <div className="site-settings-grid">
-        <SettingsCard icon="home" title="站点信息">
-          <Form className="settings-form" onSubmit={saveSiteInfo}>
+      <Accordion className="site-settings-accordion" hideSeparator variant="surface">
+        <SettingsAccordionItem icon="home" id="site-info" title="站点信息">
+          <Form className="settings-form" onSubmit={(event) => requestSave("site-info", event)}>
             <SettingsTextField
+              description="前台和后台都会显示这个站点名称。"
               isRequired
               label="站点名称"
               onChange={createInputHandler<SiteInfoState>({
                 key: "siteName",
                 setState: setSiteInfo,
               })}
+              type="text"
               value={siteInfo.siteName}
             />
             <SettingsTextArea
+              description="用于首页、SEO 和站点介绍。"
               label="描述"
               onChange={createInputHandler<SiteInfoState>({
                 key: "description",
@@ -522,6 +598,7 @@ export function SiteSettingsPage() {
               value={siteInfo.faviconUrl}
             />
             <SettingsTextField
+              description="记录站点创建时间，按本地时间编辑。"
               isRequired
               label="建站时间"
               onChange={createInputHandler<SiteInfoState>({
@@ -536,19 +613,22 @@ export function SiteSettingsPage() {
               保存站点信息
             </Button>
           </Form>
-        </SettingsCard>
+        </SettingsAccordionItem>
 
-        <SettingsCard icon="key" title="站点配置">
-          <Form className="settings-form" onSubmit={saveSiteConfig}>
+        <SettingsAccordionItem icon="key" id="site-config" title="站点配置">
+          <Form className="settings-form" onSubmit={(event) => requestSave("site-config", event)}>
             <SettingsTextField
+              description="默认用于浏览器标题和搜索结果标题。"
               label="SEO 标题"
               onChange={createInputHandler<SiteConfigState>({
                 key: "seoTitle",
                 setState: setSiteConfig,
               })}
+              type="text"
               value={siteConfig.seoTitle}
             />
             <SettingsTextArea
+              description="用于搜索结果摘要和页面默认描述。"
               label="SEO 描述"
               onChange={createInputHandler<SiteConfigState>({
                 key: "seoDescription",
@@ -557,15 +637,18 @@ export function SiteSettingsPage() {
               value={siteConfig.seoDescription}
             />
             <SettingsTextField
+              description="多个关键词请用逗号分隔。"
               label="SEO 关键词"
               onChange={createInputHandler<SiteConfigState>({
                 key: "seoKeywords",
                 setState: setSiteConfig,
               })}
               placeholder="React，Elysia，博客"
+              type="text"
               value={siteConfig.seoKeywords}
             />
             <SettingsTextArea
+              description="用于前台页脚版权展示。"
               label="版权信息"
               onChange={createInputHandler<SiteConfigState>({
                 key: "copyright",
@@ -580,6 +663,8 @@ export function SiteSettingsPage() {
               onChange={(value) => setSiteConfig((state) => ({ ...state, resendDomain: value }))}
               onReveal={() => openRevealModal("resendDomain")}
               onTest={() => openTestModal({ kind: "resend", target: "domain" })}
+              description="Resend 已验证的发信域名。"
+              inputType="text"
               testLabel="测试"
               value={siteConfig.resendDomain}
             />
@@ -595,6 +680,7 @@ export function SiteSettingsPage() {
               onChange={(value) => setSiteConfig((state) => ({ ...state, resendApiKey: value }))}
               onReveal={() => openRevealModal("resendApiKey")}
               onTest={() => openTestModal({ kind: "resend", target: "apiKey" })}
+              description="用于发送注册、找回密码和安全验证码邮件。"
               placeholder="留空则保留当前密钥"
               testLabel="测试"
               value={siteConfig.resendApiKey}
@@ -606,6 +692,7 @@ export function SiteSettingsPage() {
               onChange={(value) => setSiteConfig((state) => ({ ...state, deeplApiKey: value }))}
               onReveal={() => openRevealModal("deeplApiKey")}
               onTest={() => openTestModal({ kind: "deepl" })}
+              description="用于自动翻译标题并生成 slug。"
               placeholder="留空则保留当前密钥"
               testLabel="测试"
               value={siteConfig.deeplApiKey}
@@ -619,6 +706,7 @@ export function SiteSettingsPage() {
               }
               onReveal={() => openRevealModal("ipgeolocationApiKey")}
               onTest={() => openTestModal({ kind: "ipgeolocation" })}
+              description="用于识别登录 IP、地点和设备信息。"
               placeholder="留空则保留当前密钥"
               testLabel="测试"
               value={siteConfig.ipgeolocationApiKey}
@@ -645,19 +733,22 @@ export function SiteSettingsPage() {
               保存站点配置
             </Button>
           </Form>
-        </SettingsCard>
+        </SettingsAccordionItem>
 
-        <SettingsCard icon="documentText" title="备案配置">
-          <Form className="settings-form" onSubmit={saveFiling}>
+        <SettingsAccordionItem icon="documentText" id="filing" title="备案配置">
+          <Form className="settings-form" onSubmit={(event) => requestSave("filing", event)}>
             <SettingsTextField
+              description="工信部 ICP 备案号。"
               label="ICP备案号"
               onChange={createInputHandler<FilingState>({
                 key: "icpNumber",
                 setState: setFiling,
               })}
+              type="text"
               value={filing.icpNumber}
             />
             <SettingsTextField
+              description="ICP备案信息对应的官方链接。"
               label="ICP备案网址"
               onChange={createInputHandler<FilingState>({
                 key: "icpUrl",
@@ -667,14 +758,17 @@ export function SiteSettingsPage() {
               value={filing.icpUrl}
             />
             <SettingsTextField
+              description="公安联网备案号。"
               label="公安备案号"
               onChange={createInputHandler<FilingState>({
                 key: "policeNumber",
                 setState: setFiling,
               })}
+              type="text"
               value={filing.policeNumber}
             />
             <SettingsTextField
+              description="公安备案信息对应的官方链接。"
               label="公安备案网址"
               onChange={createInputHandler<FilingState>({
                 key: "policeUrl",
@@ -688,8 +782,47 @@ export function SiteSettingsPage() {
               保存备案配置
             </Button>
           </Form>
-        </SettingsCard>
-      </div>
+        </SettingsAccordionItem>
+      </Accordion>
+      {pendingSave ? (
+        <AlertDialog>
+          <AlertDialog.Backdrop
+            isOpen
+            onOpenChange={(isOpen) => {
+              if (isOpen) return;
+              setPendingSave(null);
+            }}
+          >
+            <AlertDialog.Container placement="center" size="sm">
+              <AlertDialog.Dialog>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="warning" />
+                  <AlertDialog.Heading>
+                    {saveConfirmationCopy[pendingSave].title}
+                  </AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>{saveConfirmationCopy[pendingSave].description}</p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    取消
+                  </Button>
+                  <Button
+                    isDisabled={isSaving}
+                    onPress={confirmPendingSave}
+                    slot="close"
+                    variant="primary"
+                  >
+                    {saveConfirmationCopy[pendingSave].confirmLabel}
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      ) : null}
       <Modal.Backdrop
         isOpen={revealKey !== null}
         onOpenChange={(isOpen) => {
@@ -698,47 +831,37 @@ export function SiteSettingsPage() {
         }}
         variant="blur"
       >
-        <Modal.Container placement="center" size="sm">
+        <Modal.Container placement="center" size="lg">
           <Modal.Dialog>
-            <div className="admin-form-modal">
+            <div className="admin-form-modal admin-form-modal--reveal">
               <Modal.CloseTrigger />
               <Modal.Header>
                 <Modal.Icon>
                   <AppIcon name="eye" />
                 </Modal.Icon>
                 <div>
-                  <Modal.Heading>查看 API Key</Modal.Heading>
-                  <p className="admin-form-modal__description">
-                    仅管理员可以查看密钥，查看前需要通过管理员邮箱验证码。
-                  </p>
+                  <Modal.Heading>{revealModalTitle}</Modal.Heading>
+                  <p className="admin-form-modal__description">{revealModalDescription}</p>
                 </div>
               </Modal.Header>
               <Modal.Body>
                 <div className="settings-form">
-                  <Button
-                    isDisabled={isReadOnly}
-                    onPress={() => void sendRevealCode()}
-                    variant="tertiary"
-                  >
-                    <AppIcon name="mail" />
-                    发送邮箱验证码
-                  </Button>
-                  <InputOTP
-                    maxLength={6}
-                    onChange={setEmailCode}
-                    value={emailCode}
-                    variant="secondary"
-                  >
-                    <InputOTP.Group>
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <InputOTP.Slot index={index} key={index} />
-                      ))}
-                    </InputOTP.Group>
-                  </InputOTP>
-                  <Button isDisabled={isReadOnly} onPress={() => void revealSecretValue()}>
-                    <AppIcon name="eye" />
-                    验证并显示
-                  </Button>
+                  {isResendDomainReveal ? null : (
+                    <InputOTP
+                      className="secret-reveal-otp"
+                      maxLength={6}
+                      onChange={setEmailCode}
+                      pushPasswordManagerStrategy="none"
+                      value={emailCode}
+                      variant="secondary"
+                    >
+                      <InputOTP.Group>
+                        {Array.from({ length: 6 }).map((_, index) => (
+                          <InputOTP.Slot index={index} key={index} />
+                        ))}
+                      </InputOTP.Group>
+                    </InputOTP>
+                  )}
                   {revealedValue ? (
                     <div className="secret-reveal-panel">
                       <SecretValue label="当前值" value={revealedValue} />
@@ -755,6 +878,22 @@ export function SiteSettingsPage() {
                   ) : null}
                 </div>
               </Modal.Body>
+              {isResendDomainReveal ? null : (
+                <Modal.Footer>
+                  <Button
+                    isDisabled={isReadOnly}
+                    onPress={() => void sendRevealCode()}
+                    variant="tertiary"
+                  >
+                    <AppIcon name="mail" />
+                    发送验证码
+                  </Button>
+                  <Button isDisabled={isReadOnly} onPress={() => void revealSecretValue()}>
+                    <AppIcon name="eye" />
+                    验证并显示
+                  </Button>
+                </Modal.Footer>
+              )}
             </div>
           </Modal.Dialog>
         </Modal.Container>
@@ -831,52 +970,67 @@ export function SiteSettingsPage() {
   );
 }
 
-function SettingsCard({
-  children,
-  icon,
-  title,
-}: {
+type SettingsAccordionItemProps = {
   children: ReactNode;
   icon: AppIconName;
+  id: string;
   title: string;
-}) {
+};
+
+function SettingsAccordionItem({ children, icon, id, title }: SettingsAccordionItemProps) {
   return (
-    <Card className="site-settings-card">
-      <Card.Header>
-        <Card.Title>
+    <Accordion.Item className="site-settings-card" id={id}>
+      <Accordion.Heading>
+        <Accordion.Trigger>
           <AppIcon name={icon} />
           {title}
-        </Card.Title>
-      </Card.Header>
-      {children}
-    </Card>
+          <Accordion.Indicator />
+        </Accordion.Trigger>
+      </Accordion.Heading>
+      <Accordion.Panel>
+        <Accordion.Body>{children}</Accordion.Body>
+      </Accordion.Panel>
+    </Accordion.Item>
   );
 }
 
 function SettingsTextField({
+  description,
+  fieldError,
   isRequired,
   label,
+  type = "text",
   ...props
 }: {
+  description?: string;
+  fieldError?: string;
   isRequired?: boolean;
   label: string;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
-  type?: string;
+  type?: "datetime-local" | "email" | "password" | "text" | "url";
   value: string;
 }) {
+  const descriptionText = description ?? (isRequired ? "必填" : undefined);
+
   return (
     <TextField fullWidth isRequired={isRequired}>
       <Label>{label}</Label>
-      <Input {...props} />
+      <Input {...props} type={type} />
+      {descriptionText ? <Description>{descriptionText}</Description> : null}
+      <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>
   );
 }
 
 function SettingsTextArea({
+  description,
+  fieldError,
   label,
   ...props
 }: {
+  description?: string;
+  fieldError?: string;
   label: string;
   onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   value: string;
@@ -885,6 +1039,8 @@ function SettingsTextArea({
     <TextField fullWidth>
       <Label>{label}</Label>
       <TextArea {...props} rows={4} />
+      {description ? <Description>{description}</Description> : null}
+      <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>
   );
 }
@@ -892,6 +1048,9 @@ function SettingsTextArea({
 type SecretSettingFieldProps = {
   canReveal: boolean;
   configured: boolean;
+  description?: string;
+  fieldError?: string;
+  inputType?: "password" | "text";
   label: string;
   onChange: (value: string) => void;
   onReveal: () => void;
@@ -904,6 +1063,9 @@ type SecretSettingFieldProps = {
 function SecretSettingField({
   canReveal,
   configured,
+  description,
+  fieldError,
+  inputType = "password",
   label,
   onChange,
   onReveal,
@@ -913,35 +1075,40 @@ function SecretSettingField({
   value,
 }: SecretSettingFieldProps) {
   return (
-    <TextField fullWidth>
+    <TextField className="secret-setting-field" fullWidth>
       <Label>{label}</Label>
-      <InputGroup fullWidth variant="secondary">
-        <InputGroup.Prefix>
-          <AppIcon name="key" size={16} />
-        </InputGroup.Prefix>
-        <InputGroup.Input
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={value ? undefined : configured ? "••••••••" : placeholder}
-          type="password"
-          value={value}
-        />
-        <InputGroup.Suffix className="secret-input-actions">
-          <Button
-            isDisabled={!canReveal}
-            isIconOnly
-            aria-label={`查看${label}`}
-            onPress={onReveal}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <AppIcon name="eye" size={16} />
-          </Button>
-          <Button onPress={onTest} size="sm" type="button" variant="tertiary">
-            {testLabel}
-          </Button>
-        </InputGroup.Suffix>
-      </InputGroup>
+      <div className="secret-setting-row">
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name="key" size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={value ? undefined : configured ? "••••••••" : placeholder}
+            type={inputType}
+            value={value}
+          />
+          <InputGroup.Suffix className="secret-input-actions">
+            <Button
+              isDisabled={!canReveal}
+              isIconOnly
+              aria-label={`查看${label}`}
+              onPress={onReveal}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <AppIcon name="eye" size={16} />
+            </Button>
+          </InputGroup.Suffix>
+        </InputGroup>
+        <Button onPress={onTest} type="button" variant="tertiary">
+          <AppIcon name="sparkles" />
+          {testLabel}
+        </Button>
+      </div>
+      {description ? <Description>{description}</Description> : null}
+      <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>
   );
 }

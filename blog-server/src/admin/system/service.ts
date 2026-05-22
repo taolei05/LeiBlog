@@ -426,7 +426,12 @@ export async function createApiKeyRevealCode(
       email: currentUser.email,
       purpose: "email_change",
     },
-    { client }
+    {
+      client,
+      emailSubject: "LeiBlog API Key 查看验证码",
+      emailText: (code, validMinutes) =>
+        `你正在查看 LeiBlog 后台 API Key，验证码：${code}，${validMinutes} 分钟内有效。`,
+    }
   );
 }
 

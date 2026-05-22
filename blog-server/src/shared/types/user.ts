@@ -23,6 +23,8 @@ export const UserProfileSchema = t.Object({
   updatedAt: t.String(),
   lastLoginAt: t.Nullable(t.String()),
   lastLoginIp: t.Nullable(t.String()),
+  lastLoginLocation: t.Nullable(t.String()),
+  lastLoginDevice: t.Nullable(t.String()),
 });
 
 export interface UserProfile {
@@ -40,6 +42,8 @@ export interface UserProfile {
   updatedAt: string;
   lastLoginAt: string | null;
   lastLoginIp: string | null;
+  lastLoginLocation: string | null;
+  lastLoginDevice: string | null;
 }
 
 export interface UserProfileRow {
@@ -57,6 +61,8 @@ export interface UserProfileRow {
   updated_at: Date | string;
   last_login_at: Date | string | null;
   last_login_ip: string | null;
+  last_login_location?: unknown;
+  last_login_device?: unknown;
 }
 
 function toIsoString(value: Date | string | null) {
@@ -71,6 +77,22 @@ function parseSocialLinks(
   if (!value) return {};
   if (typeof value === "string") return JSON.parse(value);
   return value;
+}
+
+function readJsonText(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field.trim() ? field.trim() : null;
+}
+
+function describeLocation(value: unknown) {
+  const location = readJsonText(value, "location");
+  if (location) return location;
+
+  const city = readJsonText(value, "city");
+  const country = readJsonText(value, "country_name") ?? readJsonText(value, "country");
+  const parts = [country, city].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 export function toUserProfile(row: UserProfileRow): UserProfile {
@@ -89,5 +111,7 @@ export function toUserProfile(row: UserProfileRow): UserProfile {
     updatedAt: toIsoString(row.updated_at) ?? "",
     lastLoginAt: toIsoString(row.last_login_at),
     lastLoginIp: row.last_login_ip,
+    lastLoginLocation: describeLocation(row.last_login_location),
+    lastLoginDevice: readJsonText(row.last_login_device, "userAgent"),
   };
 }

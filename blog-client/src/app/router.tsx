@@ -5,9 +5,15 @@ import { BlogLayout } from "./blog/BlogLayout";
 import { NotFoundPage } from "./errors/404";
 import { ServerErrorPage } from "./errors/500";
 import { ArticleEditPage } from "../features/admin/content/ArticleEditPage";
-import { ArticlesPage } from "../features/admin/content/ArticlesPage";
+import {
+  ArticlesPage,
+  CategoryArticlesPage,
+  ContributorArticlesPage,
+  TagArticlesPage,
+} from "../features/admin/content/ArticlesPage";
 import { CategoriesPage } from "../features/admin/content/CategoriesPage";
 import { CommentsPage } from "../features/admin/content/CommentsPage";
+import { ContributorsPage } from "../features/admin/content/ContributorsPage";
 import { MediaPage } from "../features/admin/content/MediaPage";
 import { TagsPage } from "../features/admin/content/TagsPage";
 import { AdminLoginPage } from "../features/admin/auth/AdminLoginPage";
@@ -78,8 +84,15 @@ export function AppRouter() {
           <Route path="admin/content/articles/new" element={<ArticleEditPage />} />
           <Route path="admin/content/articles/:id/edit" element={<ArticleEditPage />} />
           <Route path="admin/content/categories" element={<CategoriesPage />} />
+          <Route path="admin/content/categories/:id/articles" element={<CategoryArticlesPage />} />
           <Route path="admin/content/tags" element={<TagsPage />} />
+          <Route path="admin/content/tags/:id/articles" element={<TagArticlesPage />} />
           <Route path="admin/content/comments" element={<CommentsPage />} />
+          <Route path="admin/content/contributors" element={<ContributorsPage />} />
+          <Route
+            path="admin/content/contributors/:id/articles"
+            element={<ContributorArticlesPage />}
+          />
           <Route path="admin/content/media" element={<MediaPage />} />
           <Route path="admin/system/users" element={<UsersPage />} />
           <Route path="admin/system/profile" element={<ProfilePage />} />

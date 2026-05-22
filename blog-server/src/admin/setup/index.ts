@@ -7,6 +7,8 @@ import {
   SetupSiteConfigBody,
   SetupSiteInfoBody,
   SetupStatusResponse,
+  SetupUploadBody,
+  SetupUploadResponse,
 } from "./model";
 import {
   completeSetup,
@@ -16,6 +18,7 @@ import {
   configureSiteInfo,
   getOrCreateSetupDemoUser,
   getSetupStatus,
+  uploadSetupAsset,
 } from "./service";
 import { createAuthSession, getRequestMeta } from "../../auth/service";
 import { jwtPlugin } from "../../shared/auth/plugin";
@@ -29,7 +32,7 @@ export const setupModule = new Elysia({ prefix: "/setup" })
   })
   .post(
     "/demo-session",
-    async ({ headers, jwt }) => {
+    async ({ headers, jwt, request, server }) => {
       const { signableUser, user } = await getOrCreateSetupDemoUser();
       const token = await jwt.sign({
         sub: signableUser.id,
@@ -38,8 +41,12 @@ export const setupModule = new Elysia({ prefix: "/setup" })
         type: "access",
         exp: "7d",
       });
+      const meta = getRequestMeta({
+        headers,
+        requestIp: server?.requestIP(request)?.address,
+      });
 
-      await createAuthSession(signableUser, token, getRequestMeta(headers));
+      await createAuthSession(signableUser, token, meta);
 
       return {
         ok: true,
@@ -75,6 +82,12 @@ export const setupModule = new Elysia({ prefix: "/setup" })
     body: SetupFilingBody,
     response: {
       200: SetupStatusResponse,
+    },
+  })
+  .post("/upload", ({ body }) => uploadSetupAsset(body), {
+    body: SetupUploadBody,
+    response: {
+      200: SetupUploadResponse,
     },
   })
   .post("/complete", () => completeSetup(), {

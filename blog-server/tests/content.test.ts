@@ -132,6 +132,7 @@ describe("admin content service", () => {
         status: "published",
         categoryId: category.id,
         tagId: tag.id,
+        contributorId: contributor.id,
         isPinned: "true",
         page: "1",
         pageSize: "10",
@@ -158,6 +159,7 @@ describe("admin content service", () => {
     expect(categories.total).toBe(2);
     expect(tags.total).toBe(1);
     expect(contributors.total).toBe(1);
+    expect(contributors.items[0]?.articleCount).toBe(1);
 
     await deleteArticle(currentAdmin, article.id, testDb);
     const afterDelete = await listArticles(currentAdmin, { page: "1" }, testDb);

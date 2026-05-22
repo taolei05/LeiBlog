@@ -7,18 +7,21 @@ import {
   createAuthSession,
   createEmailCode,
   createPasswordResetToken,
+  getRequestMeta,
   registerUser,
   resetPassword,
   revokeAuthSession,
   verifyLogin,
 } from "../src/auth/service";
+import type { AuthUser } from "../src/shared/auth";
 import {
   createUserByAdmin,
   deleteUserByAdmin,
   listUsers,
   updateUserByAdmin,
 } from "../src/admin/users/service";
-import { hashPassword, verifyPassword, type AuthUser } from "../src/shared/auth";
+import { hashPassword, verifyPassword } from "../src/shared/auth";
+import { encryptSecret } from "../src/shared/crypto";
 import {
   changeMyPassword,
   confirmEmailChange,
@@ -63,6 +66,33 @@ afterAll(async () => {
 });
 
 describe("auth and user services", () => {
+  test("reads proxy and direct request IP metadata", () => {
+    expect(
+      getRequestMeta({
+        headers: {
+          "user-agent": "proxy-browser",
+          "x-forwarded-for": "invalid, 203.0.113.9, 10.0.0.2",
+        },
+        requestIp: "127.0.0.1",
+      })
+    ).toEqual({
+      ip: "203.0.113.9",
+      userAgent: "proxy-browser",
+    });
+
+    expect(
+      getRequestMeta({
+        headers: {
+          "user-agent": "direct-browser",
+        },
+        requestIp: "192.168.3.125",
+      })
+    ).toEqual({
+      ip: "192.168.3.125",
+      userAgent: "direct-browser",
+    });
+  });
+
   test("registers, logs in, updates profile, and resets password", async () => {
     const code = await createEmailCode(
       { email: "user@example.com", purpose: "register" },
@@ -101,6 +131,18 @@ describe("auth and user services", () => {
     `;
     expect(session.revoked_at).toBeNull();
 
+    await expect(
+      updateMe(
+        user.id,
+        {
+          socialLinks: {
+            github: "https://github.com/example",
+          },
+        },
+        testDb
+      )
+    ).rejects.toThrow("只有管理员可以设置社交链接");
+
     const updated = await updateMe(
       user.id,
       {
@@ -109,9 +151,6 @@ describe("auth and user services", () => {
         tags: ["小可爱", "小可爱", "读者"],
         avatarUrl: "https://example.com/avatar.png",
         blogUrl: "https://example.com",
-        socialLinks: {
-          github: "https://github.com/example",
-        },
       },
       testDb
     );
@@ -187,6 +226,67 @@ describe("auth and user services", () => {
 
     const profile = await getUserProfile(user.id, testDb);
     expect(profile.lastLoginIp).toBe("127.0.0.1");
+  });
+
+  test("stores IPGeolocation metadata for successful public IP logins", async () => {
+    const [user] = await testDb<{ id: string }[]>`
+      INSERT INTO users (username, password_hash, email, role)
+      VALUES (
+        'geo-reader',
+        ${await hashPassword("geo-password")},
+        'geo-reader@example.com',
+        'user'
+      )
+      RETURNING id
+    `;
+    const encryptedApiKey = encryptSecret("geo-secret");
+
+    await testDb`
+      INSERT INTO site_config (id, ipgeolocation_api_key_encrypted)
+      VALUES (1, ${JSON.stringify(encryptedApiKey)}::jsonb)
+    `;
+
+    const originalFetch = globalThis.fetch;
+    const locationFetch = async (..._args: Parameters<typeof fetch>) =>
+      new Response(
+        JSON.stringify({
+          country_name: "中国",
+          city: "上海",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    globalThis.fetch = Object.assign(locationFetch, {
+      preconnect: originalFetch.preconnect,
+    });
+
+    try {
+      const profile = await verifyLogin(
+        { identifier: "geo-reader", password: "geo-password" },
+        { ip: "8.8.8.8", userAgent: "geo-browser" },
+        { client: testDb }
+      );
+
+      expect(profile.lastLoginLocation).toBe("中国 上海");
+      expect(profile.lastLoginDevice).toBe("geo-browser");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const [stored] = await testDb<{ city: string | null; country_name: string | null }[]>`
+      SELECT last_login_location->>'city' AS city,
+             last_login_location->>'country_name' AS country_name
+      FROM users
+      WHERE id = ${user.id}
+    `;
+
+    expect(stored).toEqual({
+      city: "上海",
+      country_name: "中国",
+    });
   });
 
   test("allows admin user management and blocks demo writes", async () => {

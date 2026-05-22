@@ -6,6 +6,7 @@ import { encryptSecret } from "../../shared/crypto";
 import { db, withTransaction } from "../../shared/db";
 import { conflict, validationError } from "../../shared/errors";
 import { toUserProfile, type UserProfile, type UserProfileRow } from "../../shared/types/user";
+import { uploadSetupMedia } from "../media/service";
 
 export type SetupStepKey =
   | "admin"
@@ -56,6 +57,12 @@ export interface SetupFilingInput {
   icpUrl?: string;
   policeNumber?: string;
   policeUrl?: string;
+}
+
+export interface SetupUploadInput {
+  file: File;
+  fileName?: string;
+  folderSlug: "avatars" | "site";
 }
 
 interface SetupStateRow {
@@ -311,6 +318,28 @@ export async function configureAdmin(
 
   await clearSiteCache();
   return getSetupStatus({ client });
+}
+
+export async function uploadSetupAsset(
+  input: SetupUploadInput,
+  options: SetupServiceOptions = {}
+) {
+  const client = options.client ?? db;
+  await ensureSetupOpen(client);
+
+  const item = await uploadSetupMedia(
+    {
+      file: input.file,
+      fileName: input.fileName,
+      folderSlug: input.folderSlug,
+    },
+    { client }
+  );
+
+  return {
+    ok: true,
+    accessUrl: item.accessUrl,
+  };
 }
 
 export async function configureSiteInfo(

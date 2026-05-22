@@ -8,9 +8,10 @@ import {
 } from "../shared/auth";
 import { appConfig } from "../shared/config";
 import { db, withTransaction, type DbClient } from "../shared/db";
-import { conflict, unauthorized, validationError } from "../shared/errors";
+import { conflict, forbidden, unauthorized, validationError } from "../shared/errors";
 import { addMinutes } from "../shared/time";
 import { toUserProfile, type UserProfileRow } from "../shared/types/user";
+import type { AuthUser } from "../shared/auth";
 
 export interface UpdateMeInput {
   name?: string | null;
@@ -55,7 +56,7 @@ export async function getUserProfile(userId: string, client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
            social_links, blog_url, created_at, updated_at, last_login_at,
-           host(last_login_ip) AS last_login_ip
+           host(last_login_ip) AS last_login_ip, last_login_location, last_login_device
     FROM users
     WHERE id = ${userId}
   `;
@@ -66,10 +67,22 @@ export async function getUserProfile(userId: string, client: DbClient = db) {
 }
 
 export async function updateMe(
-  userId: string,
+  currentUser: AuthUser | string,
   input: UpdateMeInput,
   client: DbClient = db
 ) {
+  const userId = typeof currentUser === "string" ? currentUser : currentUser.id;
+  const currentRole =
+    typeof currentUser === "string" && input.socialLinks !== undefined
+      ? (await getUserProfile(userId, client)).role
+      : typeof currentUser === "string"
+        ? null
+        : currentUser.role;
+
+  if (input.socialLinks !== undefined && currentRole !== "admin") {
+    throw forbidden("只有管理员可以设置社交链接");
+  }
+
   const tags = input.tags === undefined ? undefined : cleanTags(input.tags);
   const socialLinks = cleanSocialLinks(input.socialLinks);
 

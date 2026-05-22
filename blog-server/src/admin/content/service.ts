@@ -29,6 +29,7 @@ export interface ArticleListQuery extends ListQuery {
   status?: ArticleStatus;
   categoryId?: string;
   tagId?: string;
+  contributorId?: string;
   isPinned?: string;
 }
 
@@ -74,6 +75,7 @@ interface TaxonomyRow {
 }
 
 interface ContributorRow {
+  article_count?: string | number | bigint;
   id: string;
   name: string;
   avatar_url: string | null;
@@ -216,6 +218,7 @@ function toContributor(row: ContributorRow) {
     name: row.name,
     avatarUrl: row.avatar_url,
     linkUrl: row.link_url,
+    articleCount: Number(row.article_count ?? 0),
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
   };
@@ -360,9 +363,15 @@ async function getTagById(id: string, client: DbClient = db) {
 
 async function getContributorById(id: string, client: DbClient = db) {
   const [row] = await client<ContributorRow[]>`
-    SELECT id, name, avatar_url, link_url, created_at, updated_at
-    FROM article_contributors
-    WHERE id = ${id}
+    SELECT
+      c.id, c.name, c.avatar_url, c.link_url, c.created_at, c.updated_at,
+      (
+        SELECT count(*)
+        FROM article_contributor_links acl
+        WHERE acl.contributor_id = c.id
+      ) AS article_count
+    FROM article_contributors c
+    WHERE c.id = ${id}
   `;
   if (!row) throw notFound("贡献者不存在");
   return toContributor(row);
@@ -541,9 +550,15 @@ export async function listContributors(
 
   const rows = await client.unsafe<ContributorRow[]>(
     `
-      SELECT id, name, avatar_url, link_url, created_at, updated_at
-      FROM article_contributors
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 OR lower(coalesce(link_url, '')) LIKE $1)
+      SELECT
+        c.id, c.name, c.avatar_url, c.link_url, c.created_at, c.updated_at,
+        (
+          SELECT count(*)
+          FROM article_contributor_links acl
+          WHERE acl.contributor_id = c.id
+        ) AS article_count
+      FROM article_contributors c
+      WHERE ($1::text IS NULL OR lower(c.name) LIKE $1 OR lower(coalesce(c.link_url, '')) LIKE $1)
       ORDER BY ${orderBy}
       LIMIT $2 OFFSET $3
     `,
@@ -552,8 +567,8 @@ export async function listContributors(
   const [count] = await client.unsafe<{ total: string }[]>(
     `
       SELECT count(*) AS total
-      FROM article_contributors
-      WHERE ($1::text IS NULL OR lower(name) LIKE $1 OR lower(coalesce(link_url, '')) LIKE $1)
+      FROM article_contributors c
+      WHERE ($1::text IS NULL OR lower(c.name) LIKE $1 OR lower(coalesce(c.link_url, '')) LIKE $1)
     `,
     [search]
   );
@@ -567,13 +582,13 @@ export async function createContributor(
   client: DbClient = db
 ) {
   assertWritableAdmin(currentUser);
-  const [row] = await client<ContributorRow[]>`
+  const [row] = await client<{ id: string }[]>`
     INSERT INTO article_contributors (name, avatar_url, link_url)
     VALUES (${input.name.trim()}, ${cleanOptional(input.avatarUrl)}, ${cleanOptional(input.linkUrl)})
-    RETURNING id, name, avatar_url, link_url, created_at, updated_at
+    RETURNING id
   `;
   await clearAllArticleCache();
-  return toContributor(row);
+  return getContributorById(row.id, client);
 }
 
 export async function updateContributor(
@@ -699,6 +714,7 @@ export async function listArticles(
   const status = query.status ?? null;
   const categoryId = query.categoryId ?? null;
   const tagId = query.tagId ?? null;
+  const contributorId = query.contributorId ?? null;
   const isPinned = parseBoolean(query.isPinned);
   const orderBy = articleOrder(query.sortBy, query.sortOrder);
 
@@ -744,11 +760,15 @@ export async function listArticles(
           SELECT 1 FROM article_tag_links atl
           WHERE atl.article_id = a.id AND atl.tag_id = $4
         ))
-        AND ($5::boolean IS NULL OR a.is_pinned = $5)
+        AND ($5::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM article_contributor_links acl
+          WHERE acl.article_id = a.id AND acl.contributor_id = $5
+        ))
+        AND ($6::boolean IS NULL OR a.is_pinned = $6)
       ORDER BY ${orderBy}
-      LIMIT $6 OFFSET $7
+      LIMIT $7 OFFSET $8
     `,
-    [search, status, categoryId, tagId, isPinned, pageSize, offset]
+    [search, status, categoryId, tagId, contributorId, isPinned, pageSize, offset]
   );
 
   const [count] = await client.unsafe<{ total: string }[]>(
@@ -765,9 +785,13 @@ export async function listArticles(
           SELECT 1 FROM article_tag_links atl
           WHERE atl.article_id = a.id AND atl.tag_id = $4
         ))
-        AND ($5::boolean IS NULL OR a.is_pinned = $5)
+        AND ($5::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM article_contributor_links acl
+          WHERE acl.article_id = a.id AND acl.contributor_id = $5
+        ))
+        AND ($6::boolean IS NULL OR a.is_pinned = $6)
     `,
-    [search, status, categoryId, tagId, isPinned]
+    [search, status, categoryId, tagId, contributorId, isPinned]
   );
 
   return { ok: true, items: rows.map(toArticle), page, pageSize, total: Number(count?.total ?? 0) };
@@ -872,7 +896,8 @@ export async function updateArticle(
 
     await tx`
       UPDATE articles
-      SET title = ${title},
+      SET author_id = COALESCE(author_id, ${currentUser.id}),
+          title = ${title},
           slug = COALESCE(${slug ?? null}, slug),
           summary = ${summary},
           content_mdx = ${contentMdx},

@@ -32,7 +32,7 @@ export const meModule = new Elysia({ prefix: "/api/me" })
   })
   .patch("/", async ({ currentUser, body }) => ({
     ok: true,
-    user: await updateMe(currentUser.id, body),
+    user: await updateMe(currentUser, body),
   }), {
     body: UpdateMeBody,
     response: {

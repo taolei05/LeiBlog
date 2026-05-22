@@ -1,6 +1,7 @@
 import { Avatar, Button, Card, Chip, Label, TextArea } from "@heroui/react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { AppIcon } from "../../../shared/icons";
 import { fetchPublicComments, type BlogComment } from "./blogApi";
@@ -32,6 +33,7 @@ export function CommentThread({
   target: CommentTarget;
   title: string;
 }) {
+  const [searchParams] = useSearchParams();
   const [comments, setComments] = useState<BlogComment[]>([]);
   const [content, setContent] = useState("");
   const [draftKey, setDraftKey] = useState(0);
@@ -42,6 +44,7 @@ export function CommentThread({
     () => comments.filter((comment) => comment.parentId === null),
     [comments],
   );
+  const highlightedCommentId = searchParams.get("comment");
 
   useEffect(() => {
     let isActive = true;
@@ -68,6 +71,18 @@ export function CommentThread({
     };
   }, [articleId, target]);
 
+  useEffect(() => {
+    if (!highlightedCommentId || comments.length === 0) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      document
+        .getElementById(`comment-${highlightedCommentId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [comments, highlightedCommentId]);
+
   function submitComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedContent = content.trim();
@@ -84,7 +99,13 @@ export function CommentThread({
     const authorName = comment.author.name ?? comment.author.username;
 
     return (
-      <article className="comment-item" key={comment.id}>
+      <article
+        className={
+          comment.id === highlightedCommentId ? "comment-item is-highlighted" : "comment-item"
+        }
+        id={`comment-${comment.id}`}
+        key={comment.id}
+      >
         <Avatar className="comment-item__avatar" size="sm">
           {comment.author.avatarUrl ? <Avatar.Image src={comment.author.avatarUrl} /> : null}
           <Avatar.Fallback>{authorName.slice(0, 1).toUpperCase()}</Avatar.Fallback>
@@ -118,7 +139,7 @@ export function CommentThread({
   }
 
   return (
-    <Card className="comment-panel">
+    <Card className="comment-panel" id="comments">
       <Card.Header>
         <Card.Title>
           <AppIcon name="chatbubbles" />

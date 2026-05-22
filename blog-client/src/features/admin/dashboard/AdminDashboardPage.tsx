@@ -1,4 +1,4 @@
-import { Button, Card, Chip, Table } from "@heroui/react";
+import { Card, Chip, Table } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppIcon } from "../../../shared/icons/AppIcon";
@@ -73,10 +73,6 @@ export function AdminDashboardPage() {
           </h2>
           <p>后台守卫、导航、面包屑和可关闭标签页已接入。</p>
         </div>
-        <Button variant="tertiary">
-          <AppIcon name="download" />
-          导出概览
-        </Button>
       </div>
 
       <div className="admin-metric-grid">

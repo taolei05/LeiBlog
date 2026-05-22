@@ -51,6 +51,7 @@ export const ArticleQuery = t.Object({
   status: t.Optional(ArticleStatus),
   categoryId: t.Optional(t.String()),
   tagId: t.Optional(t.String()),
+  contributorId: t.Optional(t.String()),
   isPinned: t.Optional(t.String()),
   sortBy: t.Optional(
     t.Union([
@@ -115,6 +116,7 @@ export const ContributorResponseItem = t.Object({
   name: t.String(),
   avatarUrl: t.Nullable(t.String()),
   linkUrl: t.Nullable(t.String()),
+  articleCount: t.Number(),
   createdAt: t.String(),
   updatedAt: t.String(),
 });

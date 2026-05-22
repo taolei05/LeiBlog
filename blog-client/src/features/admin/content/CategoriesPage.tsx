@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
@@ -10,7 +11,7 @@ import type {
   DataTableRowAction,
   DataTableToolbarAction,
 } from "../shared/DataTable";
-import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
 import { adminFetch } from "../shared/admin-api";
 
 type CategoryRow = DataTableRow & {
@@ -50,7 +51,7 @@ const categoryColumns: DataTableColumn<CategoryRow>[] = [
     isRowHeader: true,
     render: (row) => (
       <span className="data-table-primary-cell">
-        <strong>{row.name}</strong>
+        <strong title={row.name}>{truncateDataTablePrimaryText(row.name)}</strong>
         <small>{row.level}分类</small>
       </span>
     ),
@@ -131,6 +132,7 @@ function toCategoryRow(item: AdminCategoryItem): CategoryRow {
 }
 
 export function CategoriesPage() {
+  const navigate = useNavigate();
   const [categoryRows, setCategoryRows] = useState<CategoryRow[]>([]);
   const [nameModalState, setNameModalState] = useState<CategoryNameModalState | null>(null);
   const [categoryName, setCategoryName] = useState("");
@@ -206,8 +208,13 @@ export function CategoriesPage() {
   const categoryBulkActions: DataTableBulkAction<CategoryRow>[] = [
     {
       access: "danger",
+      confirmationDescription: (rows) => {
+        const articleCount = rows.reduce((total, row) => total + row.articleCount, 0);
+
+        return `这是批量删除，将解除所选分类与共 ${articleCount} 篇文章的分类关联。文章本身不会删除。`;
+      },
       icon: "trash",
-      label: "批量删除",
+      label: "删除",
       onPress: async (rows, { clearSelection, setNotice }) => {
         try {
           await Promise.all(
@@ -230,7 +237,9 @@ export function CategoriesPage() {
       access: "read",
       icon: "eye",
       label: "查看",
-      onPress: (row, { setNotice }) => setNotice(`分类 slug：${row.name}`),
+      onPress: (row) => {
+        void navigate(`/admin/content/categories/${row.id}/articles`);
+      },
     },
     {
       confirmation: "none",
@@ -243,6 +252,8 @@ export function CategoriesPage() {
     },
     {
       access: "danger",
+      confirmationDescription: (row) =>
+        `删除「${row.name}」后，会解除其与 ${row.articleCount} 篇文章的分类关联。文章本身不会删除。`,
       icon: "trash",
       label: "删除",
       onPress: async (row, { setNotice }) => {

@@ -4,6 +4,7 @@ import {
   Card,
   Checkbox,
   Chip,
+  Dropdown,
   Label,
   ListBox,
   Pagination,
@@ -66,6 +67,7 @@ export type DataTableActionContext<T extends DataTableRow> = {
 export type DataTableRowAction<T extends DataTableRow> = {
   access?: ActionAccess;
   confirmation?: ActionConfirmation;
+  confirmationDescription?: (row: T, subject: string) => string;
   icon: AppIconName;
   isDisabled?: (row: T) => boolean;
   label: string;
@@ -75,6 +77,7 @@ export type DataTableRowAction<T extends DataTableRow> = {
 export type DataTableBulkAction<T extends DataTableRow> = {
   access?: ActionAccess;
   confirmation?: ActionConfirmation;
+  confirmationDescription?: (rows: T[]) => string;
   icon: AppIconName;
   label: string;
   onPress: (rows: T[], context: DataTableActionContext<T>) => Promise<void> | void;
@@ -125,6 +128,14 @@ export type DataTableViewModel<T extends DataTableRow> = {
 };
 
 type DataTablePaginationItem = "ellipsis-end" | "ellipsis-start" | number;
+
+const dataTablePrimaryTextLimit = 12;
+
+export function truncateDataTablePrimaryText(value: string) {
+  return value.length > dataTablePrimaryTextLimit
+    ? `${value.slice(0, dataTablePrimaryTextLimit)}...`
+    : value;
+}
 
 function normalize(value: number | string) {
   return String(value).trim().toLowerCase();
@@ -439,10 +450,11 @@ function DataTableRowActionButton<T extends DataTableRow>({
               </AlertDialog.Header>
               <AlertDialog.Body>
                 <p>
-                  {interpolateConfirmMessage(
-                    `将对「{{subject}}」执行「${action.label}」。`,
-                    subject,
-                  )}
+                  {action.confirmationDescription?.(row, subject) ??
+                    interpolateConfirmMessage(
+                      `将对「{{subject}}」执行「${action.label}」。`,
+                      subject,
+                    )}
                 </p>
               </AlertDialog.Body>
               <AlertDialog.Footer>
@@ -465,6 +477,120 @@ function DataTableRowActionButton<T extends DataTableRow>({
         </AlertDialog.Backdrop>
       </AlertDialog>
     </>
+  );
+}
+
+function DataTableMobileRowActions<T extends DataTableRow>({
+  actions,
+  context,
+  row,
+  subject,
+}: {
+  actions: DataTableRowAction<T>[];
+  context: DataTableActionContext<T>;
+  row: T;
+  subject: string;
+}) {
+  const [pendingAction, setPendingAction] = useState<DataTableRowAction<T>>();
+
+  function runAction(action: DataTableRowAction<T>) {
+    const isDisabled =
+      Boolean(action.isDisabled?.(row)) || isBlockedByReadOnly(action, context.isReadOnly);
+
+    if (isDisabled) return;
+
+    if (requiresConfirmation(action)) {
+      setPendingAction(action);
+      return;
+    }
+
+    void action.onPress(row, context);
+  }
+
+  return (
+    <div className="data-table-mobile-row-actions">
+      <Dropdown>
+        <Button
+          aria-label={`操作${subject}`}
+          className="data-table-mobile-row-actions__trigger"
+          isIconOnly
+          size="sm"
+          variant="tertiary"
+        >
+          <AppIcon name="options" />
+        </Button>
+        <Dropdown.Popover className="data-table-mobile-row-actions__popover">
+          <Dropdown.Menu
+            onAction={(key) => {
+              const action = actions[Number(key)];
+
+              if (action) runAction(action);
+            }}
+          >
+            {actions.map((action, index) => {
+              const isDisabled =
+                Boolean(action.isDisabled?.(row)) ||
+                isBlockedByReadOnly(action, context.isReadOnly);
+
+              return (
+                <Dropdown.Item
+                  id={String(index)}
+                  isDisabled={isDisabled}
+                  key={action.label}
+                  textValue={action.label}
+                  variant={getActionAccess(action) === "danger" ? "danger" : undefined}
+                >
+                  <AppIcon name={action.icon} />
+                  <Label>{action.label}</Label>
+                </Dropdown.Item>
+              );
+            })}
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
+      {pendingAction ? (
+        <AlertDialog>
+          <AlertDialog.Backdrop
+            isOpen
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setPendingAction(undefined);
+            }}
+            variant="blur"
+          >
+            <AlertDialog.Container placement="center" size="sm">
+              <AlertDialog.Dialog>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status={actionTone(pendingAction)} />
+                  <AlertDialog.Heading>确认{pendingAction.label}？</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    {pendingAction.confirmationDescription?.(row, subject) ??
+                      `将对「${subject}」执行「${pendingAction.label}」。`}
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    取消
+                  </Button>
+                  <Button
+                    onPress={() => {
+                      void pendingAction.onPress(row, context);
+                      setPendingAction(undefined);
+                    }}
+                    slot="close"
+                    variant={actionTone(pendingAction) === "danger" ? "danger" : "primary"}
+                  >
+                    确认{pendingAction.label}
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      ) : null}
+    </div>
   );
 }
 
@@ -724,8 +850,11 @@ export function DataTable<T extends DataTableRow>({
 
               return requiresConfirmation(action) && !isDisabled ? (
                 <AdminActionConfirm
-                  actionLabel={action.label}
-                  description={`将对已选的 ${selectedRows.length} 项执行「${action.label}」。`}
+                  actionLabel={`批量${action.label}`}
+                  description={
+                    action.confirmationDescription?.(selectedRows) ??
+                    `这是批量操作，将对已选的 ${selectedRows.length} 项执行「${action.label}」。`
+                  }
                   key={action.label}
                   onConfirm={() => action.onPress(selectedRows, context)}
                   tone={actionTone(action)}
@@ -805,7 +934,11 @@ export function DataTable<T extends DataTableRow>({
                     : column.header}
                 </Table.Column>
               ))}
-              {hasActions ? <Table.Column id="actions">操作</Table.Column> : null}
+              {hasActions ? (
+                <Table.Column className="data-table-actions-column" id="actions">
+                  操作
+                </Table.Column>
+              ) : null}
             </Table.Header>
             <Table.Body renderEmptyState={() => <span>{emptyText}</span>}>
               {pageRows.map((row) => (
@@ -830,7 +963,7 @@ export function DataTable<T extends DataTableRow>({
                     </Table.Cell>
                   ))}
                   {hasActions ? (
-                    <Table.Cell>
+                    <Table.Cell className="data-table-actions-column">
                       <div className="data-table-row-actions">
                         {rowActions.map((action) => {
                           const isDisabled =
@@ -850,6 +983,12 @@ export function DataTable<T extends DataTableRow>({
                           );
                         })}
                       </div>
+                      <DataTableMobileRowActions
+                        actions={rowActions}
+                        context={context}
+                        row={row}
+                        subject={String(columns[0]?.value(row) ?? row.id)}
+                      />
                     </Table.Cell>
                   ) : null}
                 </Table.Row>

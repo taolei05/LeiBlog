@@ -1,24 +1,25 @@
 import { useEffect, useState } from "react";
 
 import { AdminDataPage } from "../shared/AdminDataPage";
-import {
-  DataStatusChip,
-  DataTable,
-  type DataTableBulkAction,
-  type DataTableColumn,
-  type DataTableFilter,
-  type DataTableRow,
-  type DataTableRowAction,
+import type {
+  DataTableBulkAction,
+  DataTableColumn,
+  DataTableFilter,
+  DataTableRow,
+  DataTableRowAction,
 } from "../shared/DataTable";
+import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
 import { adminFetch } from "../shared/admin-api";
 
 type CommentRow = DataTableRow & {
   article: string;
+  articleId: string | null;
   author: string;
   createdAt: string;
   excerpt: string;
   ip: string;
   status: "approved" | "pending" | "rejected";
+  targetType: "article" | "guestbook";
 };
 
 type AdminCommentItem = {
@@ -47,7 +48,7 @@ const commentColumns: DataTableColumn<CommentRow>[] = [
     isRowHeader: true,
     render: (row) => (
       <span className="data-table-primary-cell">
-        <strong>{row.excerpt}</strong>
+        <strong title={row.excerpt}>{truncateDataTablePrimaryText(row.excerpt)}</strong>
         <small>{row.article}</small>
       </span>
     ),
@@ -102,13 +103,23 @@ const commentFilters: DataTableFilter<CommentRow>[] = [
 function toCommentRow(item: AdminCommentItem): CommentRow {
   return {
     article: item.targetType === "article" ? (item.articleId ?? "未知文章") : "留言板",
+    articleId: item.articleId,
     author: item.author.name ?? item.author.username,
     createdAt: new Date(item.createdAt).toLocaleString("zh-CN"),
     excerpt: item.content.slice(0, 80),
     id: item.id,
     ip: "未记录",
     status: item.status,
+    targetType: item.targetType,
   };
+}
+
+function publicCommentPath(path: string, commentId: string) {
+  return `${path}?comment=${encodeURIComponent(commentId)}#comments`;
+}
+
+function openPublicPath(path: string) {
+  window.open(path, "_blank", "noopener,noreferrer");
 }
 
 export function CommentsPage() {
@@ -162,6 +173,8 @@ export function CommentsPage() {
     },
     {
       access: "danger",
+      confirmationDescription: (rows) =>
+        `这是批量删除，将移除所选 ${rows.length} 条评论的前台显示和审核记录；关联文章或留言页不会删除。`,
       icon: "trash",
       label: "删除",
       onPress: async (rows, { clearSelection, setNotice }) => {
@@ -180,6 +193,46 @@ export function CommentsPage() {
   ];
 
   const commentRowActions: DataTableRowAction<CommentRow>[] = [
+    {
+      access: "read",
+      confirmation: "none",
+      icon: "eye",
+      label: "查看",
+      onPress: async (row, { setNotice }) => {
+        if (row.targetType === "guestbook") {
+          openPublicPath(publicCommentPath("/guestbook", row.id));
+          return;
+        }
+
+        if (!row.articleId) {
+          setNotice("这条评论缺少文章信息，暂时无法跳转");
+          return;
+        }
+
+        const previewTab = window.open("", "_blank");
+
+        try {
+          const response = await adminFetch<{ item: { slug: string } }>(
+            `/admin/content/articles/${row.articleId}`,
+          );
+          const path = publicCommentPath(
+            `/articles/${encodeURIComponent(response.item.slug)}`,
+            row.id,
+          );
+
+          if (previewTab) {
+            previewTab.opener = null;
+            previewTab.location.href = path;
+            return;
+          }
+
+          openPublicPath(path);
+        } catch (error) {
+          previewTab?.close();
+          setNotice(error instanceof Error ? error.message : "评论公开页跳转失败");
+        }
+      },
+    },
     {
       access: "read",
       icon: "informationCircle",
@@ -216,6 +269,8 @@ export function CommentsPage() {
     },
     {
       access: "danger",
+      confirmationDescription: (row) =>
+        `删除「${row.excerpt}」后，会移除这条评论的前台显示和审核记录；关联文章或留言页不会删除。`,
       icon: "trash",
       label: "删除",
       onPress: async (row, { setNotice }) => {

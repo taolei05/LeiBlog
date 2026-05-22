@@ -1,11 +1,12 @@
 import {
   AlertDialog,
   Button,
+  Description,
+  FieldError,
   InputGroup,
   Label,
   ListBox,
   Modal,
-  ScrollShadow,
   Select,
   TextField,
 } from "@heroui/react";
@@ -57,7 +58,11 @@ export function AdminFormModal({
 
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange} variant="blur">
-      <Modal.Container placement="center" size={size}>
+      <Modal.Container
+        placement="center"
+        scroll={isBodyScrollable ? "inside" : undefined}
+        size={size}
+      >
         <Modal.Dialog>
           <form className={formClassName} onSubmit={handleSubmit}>
             <Modal.CloseTrigger />
@@ -73,13 +78,7 @@ export function AdminFormModal({
               </div>
             </Modal.Header>
             <Modal.Body className="admin-form-modal__body">
-              {isBodyScrollable ? (
-                <ScrollShadow hideScrollBar className="admin-form-modal__scroll" size={48}>
-                  <div className="admin-form-modal__fields">{children}</div>
-                </ScrollShadow>
-              ) : (
-                <div className="admin-form-modal__fields">{children}</div>
-              )}
+              <div className="admin-form-modal__fields">{children}</div>
             </Modal.Body>
             <Modal.Footer>
               <Button onPress={() => onOpenChange(false)} type="button" variant="tertiary">
@@ -131,6 +130,8 @@ export function AdminFormModal({
 
 type AdminInputGroupFieldProps = {
   autoComplete?: string;
+  description?: string;
+  fieldError?: string;
   icon: AppIconName;
   isRequired?: boolean;
   label: string;
@@ -142,6 +143,8 @@ type AdminInputGroupFieldProps = {
 
 export function AdminInputGroupField({
   autoComplete,
+  description,
+  fieldError,
   icon,
   isRequired = false,
   label,
@@ -150,6 +153,8 @@ export function AdminInputGroupField({
   type = "text",
   value,
 }: AdminInputGroupFieldProps) {
+  const descriptionText = description ?? (isRequired ? "必填" : undefined);
+
   return (
     <TextField className="admin-form-modal__field" fullWidth isRequired={isRequired}>
       <Label>{label}</Label>
@@ -166,12 +171,17 @@ export function AdminInputGroupField({
           value={value}
         />
       </InputGroup>
+      {descriptionText ? <Description>{descriptionText}</Description> : null}
+      <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>
   );
 }
 
 type AdminTextAreaGroupFieldProps = {
+  description?: string;
+  fieldError?: string;
   icon: AppIconName;
+  isRequired?: boolean;
   label: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -180,15 +190,20 @@ type AdminTextAreaGroupFieldProps = {
 };
 
 export function AdminTextAreaGroupField({
+  description,
+  fieldError,
   icon,
+  isRequired = false,
   label,
   onChange,
   placeholder,
   rows = 4,
   value,
 }: AdminTextAreaGroupFieldProps) {
+  const descriptionText = description ?? (isRequired ? "必填" : undefined);
+
   return (
-    <TextField className="admin-form-modal__field" fullWidth>
+    <TextField className="admin-form-modal__field" fullWidth isRequired={isRequired}>
       <Label>{label}</Label>
       <InputGroup fullWidth variant="secondary">
         <InputGroup.Prefix className="admin-form-modal__textarea-icon">
@@ -202,6 +217,8 @@ export function AdminTextAreaGroupField({
           value={value}
         />
       </InputGroup>
+      {descriptionText ? <Description>{descriptionText}</Description> : null}
+      <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>
   );
 }

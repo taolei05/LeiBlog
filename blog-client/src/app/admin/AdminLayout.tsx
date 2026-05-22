@@ -28,6 +28,7 @@ import { showErrorToast, showSuccessToast } from "../../shared/toast/operation-t
 import type { AdminRouteMeta } from "./adminNavigation";
 import { adminNavigationGroups, getAdminRouteMeta, getAdminSectionIcon } from "./adminNavigation";
 import { ClosableTabs } from "./ClosableTabs";
+import { InteractiveCursor } from "../blog/InteractiveCursor";
 
 type CurrentAdminProfile = {
   avatarUrl: string | null;
@@ -215,6 +216,7 @@ export function AdminLayout() {
 
   return (
     <div className={shellClassName}>
+      <InteractiveCursor />
       <a className="skip-link" href="#admin-content">
         跳到后台内容
       </a>

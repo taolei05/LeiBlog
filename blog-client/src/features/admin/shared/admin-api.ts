@@ -33,6 +33,18 @@ export type SetupStatus = {
   ok: boolean;
 };
 
+export type SetupSubmitStepKey = "admin" | "complete" | "filing" | "site-config" | "site-info";
+
+export class SetupSubmitStepError extends Error {
+  readonly step: SetupSubmitStepKey;
+
+  constructor(step: SetupSubmitStepKey, label: string, message: string) {
+    super(`${label}提交失败：${message}`);
+    this.name = "SetupSubmitStepError";
+    this.step = step;
+  }
+}
+
 type RequestOptions = {
   body?: FormData | Record<string, unknown>;
   method?: "DELETE" | "GET" | "PATCH" | "POST";
@@ -62,6 +74,110 @@ function readBoolean(source: Record<string, unknown>, key: string) {
   const value = source[key];
   if (typeof value !== "boolean") throw new Error(`接口字段 ${key} 格式无效`);
   return value;
+}
+
+function readNumber(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === "number" ? value : null;
+}
+
+function parseDetails(details: unknown) {
+  if (isRecord(details)) return details;
+  if (typeof details !== "string") return null;
+
+  try {
+    const parsed: unknown = JSON.parse(details);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFieldName(path: string | null) {
+  const key = path?.replace(/^\//, "").split("/").at(-1) ?? "";
+  const names: Record<string, string> = {
+    avatarUrl: "头像链接",
+    commentsEnabled: "是否开启评论系统",
+    copyright: "版权信息",
+    deeplApiKey: "DeepL API Key",
+    description: "描述",
+    email: "邮箱",
+    establishedAt: "建站时间",
+    faviconUrl: "favicon",
+    file: "上传文件",
+    folderSlug: "目标文件夹",
+    icpNumber: "ICP备案号",
+    icpUrl: "ICP备案网址",
+    ipgeolocationApiKey: "IPGeolocation API Key",
+    logoDarkUrl: "深色 Logo",
+    logoLightUrl: "浅色 Logo",
+    name: "显示名称",
+    password: "密码",
+    policeNumber: "公安备案号",
+    policeUrl: "公安备案网址",
+    resendApiKey: "Resend API Key",
+    resendDomain: "Resend 域名",
+    seoDescription: "SEO 描述",
+    seoKeywords: "SEO 关键词",
+    seoTitle: "SEO 标题",
+    siteName: "站点名称",
+    tags: "个人标签",
+    username: "用户名",
+  };
+
+  return names[key] ?? (key || "请求字段");
+}
+
+function describeValidationIssue(issue: unknown) {
+  if (!isRecord(issue)) return null;
+
+  const path = typeof issue.path === "string" ? issue.path : null;
+  const message = typeof issue.message === "string" ? issue.message : "";
+  const summary = typeof issue.summary === "string" ? issue.summary : "";
+  const schema = isRecord(issue.schema) ? issue.schema : {};
+  const fieldName = getFieldName(path);
+  const minLength = readNumber(schema, "minLength");
+  const maxLength = readNumber(schema, "maxLength");
+  const maxItems = readNumber(schema, "maxItems");
+  const format = typeof schema.format === "string" ? schema.format : null;
+  const type = typeof schema.type === "string" ? schema.type : null;
+  const text = `${message} ${summary}`;
+
+  if (format === "email") return `${fieldName}格式不正确`;
+  if (minLength !== null && text.includes("greater or equal")) {
+    return `${fieldName}至少需要 ${minLength} 个字符`;
+  }
+  if (maxLength !== null && text.includes("smaller or equal")) {
+    return `${fieldName}不能超过 ${maxLength} 个字符`;
+  }
+  if (maxItems !== null && text.includes("Expected array length")) {
+    return `${fieldName}最多填写 ${maxItems} 项`;
+  }
+  if (summary.includes("undefined")) return `${fieldName}不能为空`;
+  if (type === "boolean") return `${fieldName}必须是开启或关闭状态`;
+  if (type === "array") return `${fieldName}必须是列表格式`;
+  if (type === "string") return `${fieldName}必须是文本格式`;
+
+  return `${fieldName}${summary || message || "格式不正确"}`;
+}
+
+function readErrorMessage(payload: unknown) {
+  if (!isRecord(payload)) return "请求失败";
+
+  const message = typeof payload.message === "string" ? payload.message : "请求失败";
+  if (!message.includes("请求参数无效")) return message;
+
+  const details = parseDetails(payload.details);
+  const errors = details && Array.isArray(details.errors) ? details.errors : [];
+  const issueMessages = errors
+    .map(describeValidationIssue)
+    .filter((issueMessage): issueMessage is string => Boolean(issueMessage));
+
+  if (issueMessages.length > 0) {
+    return `请求参数无效：${issueMessages.join("；")}`;
+  }
+
+  return message;
 }
 
 function readAdminRole(value: unknown): AdminRole {
@@ -119,7 +235,7 @@ function buildHeaders(body: RequestOptions["body"], requireAuth: boolean) {
   const headers = new Headers();
   const session = readStoredAdminSession();
 
-  if (!(body instanceof FormData)) {
+  if (body !== undefined && !(body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -150,9 +266,7 @@ export async function adminFetch<T>(path: string, options: RequestOptions = {}) 
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      isRecord(payload) && typeof payload.message === "string" ? payload.message : "请求失败";
-    throw new Error(message);
+    throw new Error(readErrorMessage(payload));
   }
 
   return payload as T;
@@ -249,34 +363,66 @@ export async function createDemoSession() {
   };
 }
 
+export async function uploadSetupAsset({
+  file,
+  fileName,
+  folderSlug,
+}: {
+  file: File;
+  fileName?: string;
+  folderSlug: "avatars" | "site";
+}) {
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("folderSlug", folderSlug);
+  if (fileName?.trim()) {
+    formData.set("fileName", fileName.trim());
+  }
+
+  const payload = await adminFetch<unknown>("/admin/setup/upload", {
+    body: formData,
+    method: "POST",
+    requireAuth: false,
+  });
+  if (!isRecord(payload)) throw new Error("初始化上传响应格式无效");
+
+  return {
+    accessUrl: readString(payload, "accessUrl"),
+    ok: readBoolean(payload, "ok"),
+  };
+}
+
 export async function completeInitialSetup(input: {
   admin: Record<string, unknown>;
   filing: Record<string, unknown>;
   siteConfig: Record<string, unknown>;
   siteInfo: Record<string, unknown>;
 }) {
-  await adminFetch("/admin/setup/admin", {
-    body: input.admin,
-    method: "POST",
-    requireAuth: false,
-  });
-  await adminFetch("/admin/setup/site-info", {
-    body: input.siteInfo,
-    method: "POST",
-    requireAuth: false,
-  });
-  await adminFetch("/admin/setup/site-config", {
-    body: input.siteConfig,
-    method: "POST",
-    requireAuth: false,
-  });
-  await adminFetch("/admin/setup/filing", {
-    body: input.filing,
-    method: "POST",
-    requireAuth: false,
-  });
-  await adminFetch("/admin/setup/complete", {
-    method: "POST",
-    requireAuth: false,
-  });
+  await submitSetupStep("admin", "管理员配置", "/admin/setup/admin", input.admin);
+  await submitSetupStep("site-info", "站点信息", "/admin/setup/site-info", input.siteInfo);
+  await submitSetupStep("site-config", "站点配置", "/admin/setup/site-config", input.siteConfig);
+  await submitSetupStep("filing", "备案配置", "/admin/setup/filing", input.filing);
+  await submitSetupStep("complete", "完成配置", "/admin/setup/complete");
+}
+
+export function isSetupSubmitStepError(error: unknown): error is SetupSubmitStepError {
+  return error instanceof SetupSubmitStepError;
+}
+
+async function submitSetupStep(
+  step: SetupSubmitStepKey,
+  label: string,
+  path: string,
+  body?: Record<string, unknown>,
+) {
+  try {
+    await adminFetch(path, {
+      body,
+      method: "POST",
+      requireAuth: false,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "请求失败";
+    throw new SetupSubmitStepError(step, label, message);
+  }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { AdminDataPage } from "../shared/AdminDataPage";
 import type {
@@ -10,13 +10,14 @@ import type {
   DataTableRowAction,
   DataTableToolbarAction,
 } from "../shared/DataTable";
-import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
 import { adminFetch } from "../shared/admin-api";
 
 type ArticleRow = DataTableRow & {
   author: string;
   category: string;
   comments: number;
+  slug: string;
   status: "draft" | "offline" | "published";
   title: string;
   updatedAt: string;
@@ -35,6 +36,18 @@ type AdminArticleItem = {
   updatedAt: string;
 };
 
+type ArticleRelationKind = "category" | "contributor" | "tag";
+
+type ArticleRelationScope = {
+  id: string;
+  kind: ArticleRelationKind;
+};
+
+type AdminArticleRelationItem = {
+  id: string;
+  name: string;
+};
+
 const statusMeta = {
   draft: { label: "草稿", tone: "default" },
   offline: { label: "已下架", tone: "danger" },
@@ -48,7 +61,7 @@ const articleColumns: DataTableColumn<ArticleRow>[] = [
     isRowHeader: true,
     render: (row) => (
       <span className="data-table-primary-cell">
-        <strong>{row.title}</strong>
+        <strong title={row.title}>{truncateDataTablePrimaryText(row.title)}</strong>
         <small>{row.category}</small>
       </span>
     ),
@@ -106,39 +119,70 @@ const articleFilters: DataTableFilter<ArticleRow>[] = [
   },
 ];
 
-export function ArticlesPage() {
+function openPublicArticle(slug: string) {
+  window.open(`/articles/${encodeURIComponent(slug)}`, "_blank", "noopener,noreferrer");
+}
+
+function relationConfig(kind: ArticleRelationKind) {
+  if (kind === "category") {
+    return {
+      emptyName: "当前分类",
+      icon: "albums" as const,
+      queryKey: "categoryId",
+      resource: "categories",
+      title: "分类文章",
+    };
+  }
+
+  if (kind === "contributor") {
+    return {
+      emptyName: "当前贡献者",
+      icon: "personAdd" as const,
+      queryKey: "contributorId",
+      resource: "contributors",
+      title: "贡献者文章",
+    };
+  }
+
+  return {
+    emptyName: "当前标签",
+    icon: "pricetags" as const,
+    queryKey: "tagId",
+    resource: "tags",
+    title: "标签文章",
+  };
+}
+
+function ArticleDataPage({ relation }: { relation?: ArticleRelationScope }) {
   const navigate = useNavigate();
   const [articleRows, setArticleRows] = useState<ArticleRow[]>([]);
+  const [relationName, setRelationName] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const articleCategoryOptions = useMemo(
-    () => [...new Set(articleRows.map((row) => row.category).filter(Boolean))],
-    [articleRows],
-  );
-  const filters = useMemo<DataTableFilter<ArticleRow>[]>(
-    () => [
-      ...articleFilters,
-      {
-        allLabel: "全部分类",
-        key: "category",
-        label: "分类",
-        options: articleCategoryOptions.map((category) => ({
-          label: category,
-          predicate: (row) => row.category === category,
-          value: category,
-        })),
-      },
-    ],
-    [articleCategoryOptions],
+  const relationId = relation?.id ?? "";
+  const relationKind = relation?.kind ?? null;
+  const activeRelation = useMemo(
+    () => (relationKind ? relationConfig(relationKind) : null),
+    [relationKind],
   );
 
   async function loadArticles() {
-    const response = await adminFetch<{ items: AdminArticleItem[] }>("/admin/content/articles");
+    const query = new URLSearchParams();
+
+    if (activeRelation && relationId) {
+      query.set(activeRelation.queryKey, relationId);
+    }
+
+    const queryString = query.toString();
+    const response = await adminFetch<{ items: AdminArticleItem[] }>(
+      `/admin/content/articles${queryString ? `?${queryString}` : ""}`,
+    );
     setArticleRows(
       response.items.map((article) => ({
         author: article.authorId ?? "未知",
         category: article.categories[0]?.name ?? "未分类",
         comments: article.commentCount,
         id: article.id,
+        slug: article.slug,
         status: article.status,
         title: article.title,
         updatedAt: new Date(article.updatedAt).toLocaleString("zh-CN"),
@@ -149,7 +193,38 @@ export function ArticlesPage() {
 
   useEffect(() => {
     void loadArticles();
-  }, [reloadKey]);
+  }, [reloadKey, relationId, relationKind]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadRelation() {
+      if (!activeRelation || !relationId) {
+        setRelationName("");
+        return;
+      }
+
+      try {
+        const response = await adminFetch<{ item: AdminArticleRelationItem }>(
+          `/admin/content/${activeRelation.resource}/${relationId}`,
+        );
+
+        if (isActive) {
+          setRelationName(response.item.name);
+        }
+      } catch {
+        if (isActive) {
+          setRelationName(activeRelation.emptyName);
+        }
+      }
+    }
+
+    void loadRelation();
+
+    return () => {
+      isActive = false;
+    };
+  }, [activeRelation, relationId]);
 
   async function updateArticleStatus(
     row: ArticleRow,
@@ -187,7 +262,7 @@ export function ArticlesPage() {
   const articleBulkActions: DataTableBulkAction<ArticleRow>[] = [
     {
       icon: "checkmarkCircle",
-      label: "批量发布",
+      label: "发布",
       onPress: async (rows, { clearSelection, setNotice }) => {
         await Promise.all(
           rows.map((row) =>
@@ -219,6 +294,28 @@ export function ArticlesPage() {
         setReloadKey((key) => key + 1);
       },
     },
+    {
+      access: "danger",
+      confirmationDescription: (rows) => {
+        const commentCount = rows.reduce((total, row) => total + row.comments, 0);
+
+        return `这是批量删除，将移除所选文章、共 ${commentCount} 条评论，以及分类、标签和贡献者关联。`;
+      },
+      icon: "trash",
+      label: "删除",
+      onPress: async (rows, { clearSelection, setNotice }) => {
+        await Promise.all(
+          rows.map((row) =>
+            adminFetch(`/admin/content/articles/${row.id}`, {
+              method: "DELETE",
+            }),
+          ),
+        );
+        clearSelection();
+        setNotice(`已删除 ${rows.length} 篇文章`);
+        setReloadKey((key) => key + 1);
+      },
+    },
   ];
 
   const articleRowActions: DataTableRowAction<ArticleRow>[] = [
@@ -226,7 +323,7 @@ export function ArticlesPage() {
       access: "read",
       icon: "eye",
       label: "查看",
-      onPress: (row, { setNotice }) => setNotice(`查看《${row.title}》`),
+      onPress: (row) => openPublicArticle(row.slug),
     },
     {
       confirmation: "none",
@@ -256,6 +353,8 @@ export function ArticlesPage() {
     },
     {
       access: "danger",
+      confirmationDescription: (row) =>
+        `删除《${row.title}》后，会移除文章、${row.comments} 条评论，以及分类、标签和贡献者关联。`,
       icon: "trash",
       label: "删除",
       onPress: async (row, { setNotice }) => {
@@ -268,18 +367,24 @@ export function ArticlesPage() {
   const publishedCount = articleRows.filter((row) => row.status === "published").length;
   const draftCount = articleRows.filter((row) => row.status === "draft").length;
   const offlineCount = articleRows.filter((row) => row.status === "offline").length;
+  const scopeName = relationName || activeRelation?.emptyName;
+  const pageTitle = activeRelation ? `${activeRelation.title}：${scopeName}` : "文章管理";
 
   return (
     <AdminDataPage
-      description="文章管理保留搜索、状态/分类筛选、列排序、分页和批量操作。"
+      description={
+        activeRelation
+          ? `这里汇总「${scopeName}」关联的文章，可继续查看、编辑、发布、下架和删除。`
+          : "文章管理保留搜索、状态筛选、列排序、分页和批量操作。"
+      }
       eyebrow="内容管理"
-      icon="documentText"
+      icon={activeRelation?.icon ?? "documentText"}
       metrics={[
         { label: "草稿", value: String(draftCount) },
         { label: "已发布", value: String(publishedCount) },
         { label: "已下架", value: String(offlineCount) },
       ]}
-      title="文章管理"
+      title={pageTitle}
       wide
     >
       <DataTable
@@ -287,7 +392,7 @@ export function ArticlesPage() {
         bulkActions={articleBulkActions}
         columns={articleColumns}
         defaultSort={{ column: "updatedAt", direction: "desc" }}
-        filters={filters}
+        filters={articleFilters}
         rowActions={articleRowActions}
         rows={articleRows}
         searchPlaceholder="搜索标题、分类、作者"
@@ -296,4 +401,26 @@ export function ArticlesPage() {
       />
     </AdminDataPage>
   );
+}
+
+export function ArticlesPage() {
+  return <ArticleDataPage />;
+}
+
+export function CategoryArticlesPage() {
+  const { id } = useParams();
+
+  return <ArticleDataPage relation={id ? { id, kind: "category" } : undefined} />;
+}
+
+export function TagArticlesPage() {
+  const { id } = useParams();
+
+  return <ArticleDataPage relation={id ? { id, kind: "tag" } : undefined} />;
+}
+
+export function ContributorArticlesPage() {
+  const { id } = useParams();
+
+  return <ArticleDataPage relation={id ? { id, kind: "contributor" } : undefined} />;
 }

@@ -1,4 +1,4 @@
-import { Chip } from "@heroui/react";
+import { Avatar, Chip, Link as HeroLink } from "@heroui/react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -106,6 +106,30 @@ export function BlogArticleDetailPage() {
             返回文章列表
           </Link>
         </footer>
+
+        {article.contributors.length > 0 ? (
+          <section aria-label="文章贡献者" className="article-contributors">
+            <p className="eyebrow">贡献者</p>
+            <div className="article-contributors__list">
+              {article.contributors.map((contributor) => (
+                <div className="article-contributors__item" key={contributor.id}>
+                  <Avatar size="sm">
+                    {contributor.avatarUrl ? <Avatar.Image src={contributor.avatarUrl} /> : null}
+                    <Avatar.Fallback>{contributor.name.slice(0, 1)}</Avatar.Fallback>
+                  </Avatar>
+                  <HeroLink
+                    href={contributor.linkUrl ?? undefined}
+                    isDisabled={!contributor.linkUrl}
+                    rel="noreferrer"
+                    target={contributor.linkUrl ? "_blank" : undefined}
+                  >
+                    {contributor.name}
+                  </HeroLink>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <CommentThread
           articleId={article.id}

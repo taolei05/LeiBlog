@@ -135,15 +135,18 @@ export function BlogLayout() {
           )}
           <span>{siteName}</span>
         </NavLink>
-        <Button
-          aria-label="打开前台菜单"
-          className="blog-shell__menu-button"
-          isIconOnly
-          onPress={() => setIsMenuOpen((open) => !open)}
-          variant="tertiary"
-        >
-          <AppIcon name={isMenuOpen ? "close" : "menu"} />
-        </Button>
+        <div className="blog-shell__header-controls">
+          <ThemeSwitcher />
+          <Button
+            aria-label="打开前台菜单"
+            className="blog-shell__menu-button"
+            isIconOnly
+            onPress={() => setIsMenuOpen((open) => !open)}
+            variant="tertiary"
+          >
+            <AppIcon name={isMenuOpen ? "close" : "menu"} />
+          </Button>
+        </div>
         <div className={isMenuOpen ? "blog-shell__actions is-open" : "blog-shell__actions"}>
           <form className="blog-search" onSubmit={submitSearch}>
             <SearchField
@@ -167,7 +170,6 @@ export function BlogLayout() {
             <BlogMenu icon="reader" items={articleNavItems} label="文章" />
             <BlogMenu icon="library" items={siteNavItems} label="站点" />
           </nav>
-          <ThemeSwitcher />
         </div>
       </header>
       <main className="blog-shell__main" id="main-content">

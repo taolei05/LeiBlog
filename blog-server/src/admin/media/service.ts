@@ -48,6 +48,11 @@ export interface MediaServiceOptions {
   config?: AppConfig;
 }
 
+interface StoreMediaAssetInput extends UploadMediaInput {
+  allowedFileTypes?: MediaType[];
+  uploadedBy: string | null;
+}
+
 interface MediaRow {
   access_url: string;
   created_at: Date | string;
@@ -605,10 +610,42 @@ export async function uploadMedia(
   options: MediaServiceOptions = {}
 ) {
   assertWritableAdmin(currentUser);
+  return storeMediaAsset(
+    {
+      ...input,
+      uploadedBy: currentUser.id,
+    },
+    options
+  );
+}
+
+export async function uploadSetupMedia(
+  input: UploadMediaInput,
+  options: MediaServiceOptions = {}
+) {
+  return storeMediaAsset(
+    {
+      ...input,
+      allowedFileTypes: ["image"],
+      uploadedBy: null,
+    },
+    options
+  );
+}
+
+async function storeMediaAsset(
+  input: StoreMediaAssetInput,
+  options: MediaServiceOptions = {}
+) {
   const config = getConfig(options);
   const client = getClient(options);
   await ensureDefaultMediaFolders(client);
   const fileInfo = await validateUploadFile(input.file, config);
+
+  if (input.allowedFileTypes && !input.allowedFileTypes.includes(fileInfo.fileType)) {
+    throw validationError("初始化上传只支持图片文件");
+  }
+
   const folder = await resolveFolder({
     client,
     folderId: input.folderId,
@@ -639,7 +676,7 @@ export async function uploadMedia(
         ${input.file.size},
         ${accessUrl},
         ${folder?.id ?? null},
-        ${currentUser.id}
+        ${input.uploadedBy}
       )
     `;
   } catch (error) {
@@ -647,7 +684,8 @@ export async function uploadMedia(
     throw error;
   }
 
-  return getMediaById(currentUser, id, options);
+  const stored = await getMediaRow(id, client);
+  return toMediaItem(stored);
 }
 
 export async function renameMedia(

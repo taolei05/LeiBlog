@@ -1,8 +1,19 @@
-import { Button, Card, Chip, Form, Input, Label, TextField } from "@heroui/react";
+import {
+  Button,
+  Card,
+  Chip,
+  Description,
+  FieldError,
+  Form,
+  Input,
+  Label,
+  TextField,
+} from "@heroui/react";
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import { InteractiveCursor } from "../../../app/blog/InteractiveCursor";
 import { AppIcon } from "../../../shared/icons";
 import { signInAdminSession, useAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
@@ -72,6 +83,7 @@ export function AdminLoginPage() {
 
   return (
     <main className="setup-page admin-login-page">
+      <InteractiveCursor />
       <Card className="admin-login-card">
         <Card.Header className="admin-login-card__header">
           <div>
@@ -90,8 +102,11 @@ export function AdminLoginPage() {
             <Input
               autoComplete="username"
               onChange={(event) => setIdentifier(event.target.value)}
+              type="text"
               value={identifier}
             />
+            <Description>请输入管理员或 demo 账户的用户名/邮箱。</Description>
+            <FieldError>用户名或邮箱不能为空</FieldError>
           </TextField>
           <TextField fullWidth isRequired>
             <Label>密码</Label>
@@ -101,6 +116,8 @@ export function AdminLoginPage() {
               type="password"
               value={password}
             />
+            <Description>后台登录密码区分大小写。</Description>
+            <FieldError>密码不能为空</FieldError>
           </TextField>
           <div className="admin-login-card__meta">
             <Chip color="accent" variant="soft">

@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 import type { UserRole } from "../shared/auth";
 import {
   createNumericCode,
@@ -8,15 +10,23 @@ import {
   verifyPassword,
 } from "../shared/auth";
 import { appConfig } from "../shared/config";
-import { db, withTransaction, type DbClient } from "../shared/db";
+import type { StoredEncryptedSecret } from "../shared/crypto";
+import { decryptSecret } from "../shared/crypto";
+import type { DbClient } from "../shared/db";
+import { db, withTransaction } from "../shared/db";
 import { conflict, unauthorized, validationError } from "../shared/errors";
-import { decryptSecret, type StoredEncryptedSecret } from "../shared/crypto";
 import { addDays, addMinutes } from "../shared/time";
-import { toUserProfile, type UserProfileRow } from "../shared/types/user";
+import type { UserProfileRow } from "../shared/types/user";
+import { toUserProfile } from "../shared/types/user";
 
 export interface RequestMeta {
   ip: string | null;
   userAgent: string | null;
+}
+
+export interface RequestMetaInput {
+  headers: Record<string, string | undefined>;
+  requestIp?: string | null;
 }
 
 export interface AuthUserInput {
@@ -51,8 +61,14 @@ interface ResendConfigRow {
   resend_api_key_encrypted: StoredEncryptedSecret | null;
 }
 
+interface IpGeolocationConfigRow {
+  ipgeolocation_api_key_encrypted: StoredEncryptedSecret | null;
+}
+
 interface AuthServiceOptions {
   client?: DbClient;
+  emailSubject?: string;
+  emailText?: (code: string, validMinutes: number) => string;
 }
 
 const SESSION_DAYS = 7;
@@ -110,12 +126,96 @@ export async function sendResendEmail(
   return true;
 }
 
-export function getRequestMeta(headers: Record<string, string | undefined>): RequestMeta {
-  const forwarded = headers["x-forwarded-for"]?.split(",")[0]?.trim();
-  const realIp = headers["x-real-ip"]?.trim();
+function normalizeIp(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const unwrapped = trimmed.match(/^\[([^\]]+)\]$/)?.[1] ?? trimmed;
+  return isIP(unwrapped) ? unwrapped : null;
+}
+
+function readForwardedIp(value: string | undefined) {
+  return value
+    ?.split(",")
+    .map((candidate) => normalizeIp(candidate))
+    .find((candidate) => candidate !== null) ?? null;
+}
+
+function isPrivateIp(ip: string): boolean {
+  if (isIP(ip) === 4) {
+    const [first, second] = ip.split(".").map(Number);
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 100 && second >= 64 && second <= 127) ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168)
+    );
+  }
+
+  const normalized = ip.toLowerCase();
+  if (normalized.startsWith("::ffff:")) {
+    const mappedIpv4 = normalized.slice("::ffff:".length);
+    return isIP(mappedIpv4) === 4 ? isPrivateIp(mappedIpv4) : false;
+  }
+
+  return (
+    normalized === "::" ||
+    normalized === "::1" ||
+    normalized.startsWith("fc") ||
+    normalized.startsWith("fd") ||
+    /^fe[89ab]/.test(normalized)
+  );
+}
+
+async function getIpGeolocationApiKey(client: DbClient) {
+  const [config] = await client<IpGeolocationConfigRow[]>`
+    SELECT ipgeolocation_api_key_encrypted
+    FROM site_config
+    WHERE id = 1
+  `;
+
+  return decryptSecret(config?.ipgeolocation_api_key_encrypted);
+}
+
+async function resolveLoginLocation(meta: RequestMeta, client: DbClient) {
+  if (!meta.ip || isPrivateIp(meta.ip)) return null;
+
+  const apiKey = await getIpGeolocationApiKey(client);
+  if (!apiKey) return null;
+
+  const apiUrl = new URL("https://api.ipgeolocation.io/ipgeo");
+  apiUrl.searchParams.set("apiKey", apiKey);
+  apiUrl.searchParams.set("ip", meta.ip);
+  apiUrl.searchParams.set("lang", "cn");
+
+  try {
+    const response = await fetch(apiUrl, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return null;
+
+    const location: unknown = await response.json();
+    return location && typeof location === "object" && !Array.isArray(location)
+      ? location
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getRequestMeta({
+  headers,
+  requestIp,
+}: RequestMetaInput): RequestMeta {
+  const forwarded = readForwardedIp(headers["x-forwarded-for"]);
+  const realIp = normalizeIp(headers["x-real-ip"]);
+  const directIp = normalizeIp(requestIp);
 
   return {
-    ip: forwarded || realIp || null,
+    ip: forwarded ?? realIp ?? directIp,
     userAgent: headers["user-agent"] ?? null,
   };
 }
@@ -124,7 +224,8 @@ async function getUserProfileById(userId: string, client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
            social_links, blog_url, created_at, updated_at, last_login_at,
-           host(last_login_ip) AS last_login_ip
+           host(last_login_ip) AS last_login_ip, last_login_location,
+           last_login_device
     FROM users
     WHERE id = ${userId}
   `;
@@ -183,12 +284,15 @@ export async function createEmailCode(
   const sent = await sendResendEmail(client, {
     to: email,
     subject:
-      input.purpose === "register"
+      options.emailSubject ??
+      (input.purpose === "register"
         ? "LeiBlog 注册验证码"
         : input.purpose === "email_change"
           ? "LeiBlog 邮箱变更验证码"
-          : "LeiBlog 找回密码验证码",
-    text: `验证码：${code}，${EMAIL_CODE_MINUTES} 分钟内有效。`,
+          : "LeiBlog 找回密码验证码"),
+    text:
+      options.emailText?.(code, EMAIL_CODE_MINUTES) ??
+      `验证码：${code}，${EMAIL_CODE_MINUTES} 分钟内有效。`,
   });
 
   return {
@@ -263,6 +367,8 @@ export async function verifyLogin(
   const isValid = user
     ? await verifyPassword(input.password, user.password_hash)
     : false;
+  const location = isValid ? await resolveLoginLocation(meta, client) : null;
+  const device = { userAgent: meta.userAgent };
 
   await client`
     INSERT INTO login_audit_logs (
@@ -271,8 +377,8 @@ export async function verifyLogin(
     VALUES (
       ${user?.id ?? null},
       ${meta.ip},
-      ${null}::jsonb,
-      ${JSON.stringify({ userAgent: meta.userAgent })}::jsonb,
+      ${location}::jsonb,
+      ${device}::jsonb,
       ${meta.userAgent},
       ${isValid},
       ${isValid ? null : "INVALID_CREDENTIALS"}
@@ -287,11 +393,18 @@ export async function verifyLogin(
     UPDATE users
     SET last_login_at = now(),
         last_login_ip = ${meta.ip},
-        last_login_device = ${JSON.stringify({ userAgent: meta.userAgent })}::jsonb
+        last_login_location = ${location}::jsonb,
+        last_login_device = ${device}::jsonb
     WHERE id = ${user.id}
   `;
 
-  return toUserProfile(user);
+  return toUserProfile({
+    ...user,
+    last_login_at: new Date(),
+    last_login_ip: meta.ip,
+    last_login_location: location,
+    last_login_device: device,
+  });
 }
 
 export async function createAuthSession(

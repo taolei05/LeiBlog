@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
@@ -10,7 +11,7 @@ import type {
   DataTableRowAction,
   DataTableToolbarAction,
 } from "../shared/DataTable";
-import { DataStatusChip, DataTable } from "../shared/DataTable";
+import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
 import { adminFetch } from "../shared/admin-api";
 
 type TagRow = DataTableRow & {
@@ -56,7 +57,7 @@ const tagColumns: DataTableColumn<TagRow>[] = [
     isRowHeader: true,
     render: (row) => (
       <span className="data-table-primary-cell">
-        <strong>{row.name}</strong>
+        <strong title={row.name}>{truncateDataTablePrimaryText(row.name)}</strong>
         <small>{row.group}</small>
       </span>
     ),
@@ -139,6 +140,7 @@ function toTagRow(item: AdminTagItem): TagRow {
 }
 
 export function TagsPage() {
+  const navigate = useNavigate();
   const [tagRows, setTagRows] = useState<TagRow[]>([]);
   const [nameModalState, setNameModalState] = useState<TagNameModalState | null>(null);
   const [tagName, setTagName] = useState("");
@@ -214,8 +216,13 @@ export function TagsPage() {
   const tagBulkActions: DataTableBulkAction<TagRow>[] = [
     {
       access: "danger",
+      confirmationDescription: (rows) => {
+        const articleCount = rows.reduce((total, row) => total + row.articles, 0);
+
+        return `这是批量删除，将解除所选标签与共 ${articleCount} 篇文章的标签关联。文章本身不会删除。`;
+      },
       icon: "trash",
-      label: "批量删除",
+      label: "删除",
       onPress: async (rows, { clearSelection, setNotice }) => {
         try {
           await Promise.all(
@@ -236,7 +243,9 @@ export function TagsPage() {
       access: "read",
       icon: "eye",
       label: "查看",
-      onPress: (row, { setNotice }) => setNotice(`查看标签「${row.name}」关联文章`),
+      onPress: (row) => {
+        void navigate(`/admin/content/tags/${row.id}/articles`);
+      },
     },
     {
       confirmation: "none",
@@ -249,6 +258,8 @@ export function TagsPage() {
     },
     {
       access: "danger",
+      confirmationDescription: (row) =>
+        `删除「${row.name}」后，会解除其与 ${row.articles} 篇文章的标签关联。文章本身不会删除。`,
       icon: "trash",
       label: "删除",
       onPress: async (row, { setNotice }) => {
