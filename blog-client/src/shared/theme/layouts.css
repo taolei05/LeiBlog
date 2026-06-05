@@ -3852,6 +3852,7 @@
 
 .article-detail {
   display: grid;
+  width: 100%;
   max-width: 48rem;
   gap: 1.5rem;
   margin: 0 auto;
