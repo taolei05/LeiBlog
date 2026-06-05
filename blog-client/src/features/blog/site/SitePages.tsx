@@ -406,14 +406,21 @@ function GuestbookGuidelineCard({ item }: { item: AboutSiteCardItem }) {
 
 export function AboutSitePage() {
   const [articles, setArticles] = useState<BlogArticle[]>([]);
+  const [author, setAuthor] = useState<PublicSiteAuthor | null>(null);
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
   const categories = useMemo(() => deriveBlogCategories(articles), [articles]);
   const tags = useMemo(() => deriveBlogTags(articles), [articles]);
+  const authorName = getAuthorDisplayName(author);
   const siteName = siteInfo?.siteName.trim() || defaultSiteInfo.siteName;
   const siteDescription = siteInfo?.description.trim() || defaultSiteInfo.description;
   const siteUrl = getCurrentSiteUrl();
   const infoItems: AboutSiteInfoItem[] = [
+    {
+      icon: "personCircle",
+      label: "站点作者",
+      value: authorName,
+    },
     {
       icon: "globe",
       label: "站点名称",
@@ -463,9 +470,10 @@ export function AboutSitePage() {
 
     async function loadAboutSiteData() {
       setStatus("loading");
-      const [articlesResult, siteInfoResult] = await Promise.allSettled([
+      const [articlesResult, siteInfoResult, authorResult] = await Promise.allSettled([
         fetchPublicArticles({ pageSize: 100 }),
         fetchPublicSiteInfo(),
+        fetchPublicSiteAuthor(),
       ]);
 
       if (!isActive) return;
@@ -480,6 +488,12 @@ export function AboutSitePage() {
         setSiteInfo(siteInfoResult.value);
       } else {
         setSiteInfo(null);
+      }
+
+      if (authorResult.status === "fulfilled") {
+        setAuthor(authorResult.value);
+      } else {
+        setAuthor(null);
       }
 
       setStatus(articlesResult.status === "rejected" ? "error" : "idle");

@@ -40,6 +40,8 @@ describe("AboutSitePage", () => {
     expect(html).toContain("网站特色");
     expect(html).toContain("技术栈");
     expect(html).toContain("本站信息");
+    expect(html.indexOf("站点作者")).toBeGreaterThan(-1);
+    expect(html.indexOf("站点作者")).toBeLessThan(html.indexOf("站点名称"));
     expect(html).toContain("联系与反馈");
     expect(html).toContain('href="/about-author"');
     expect(html).toContain('href="/guestbook"');
