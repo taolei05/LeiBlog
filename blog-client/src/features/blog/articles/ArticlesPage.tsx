@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 import { AppIcon } from "../../../shared/icons";
 import type { PublicSiteInfo } from "../../../shared/site/site-info";
 import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
-import { EmptyPlaceholder } from "../shared/BlogComponents";
+import { ArticleTagLink, EmptyPlaceholder } from "../shared/BlogComponents";
 import type { BlogArticle } from "../shared/blogApi";
 import { fetchPublicArticles } from "../shared/blogApi";
 
@@ -117,9 +117,7 @@ function ArticleIndexCard({ article, index }: ArticleIndexCardProps) {
         <div className="articles-index-card__footer">
           <div className="articles-index-card__tags">
             {article.tags.slice(0, 3).map((tag) => (
-              <Link key={tag.slug} to={`/tags/${encodeURIComponent(tag.slug)}`}>
-                #{tag.name}
-              </Link>
+              <ArticleTagLink key={tag.slug} tag={tag} />
             ))}
           </div>
           <Link className="articles-index-card__read" to={`/articles/${article.slug}`}>

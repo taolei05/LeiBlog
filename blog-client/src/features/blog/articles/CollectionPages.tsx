@@ -11,6 +11,7 @@ import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { BlogPageHeader, EmptyPlaceholder } from "../shared/BlogComponents";
 import type { BlogArticle, BlogCategory, BlogTag } from "../shared/blogApi";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
+import { getArchiveTagColorStyle, normalizeBlogTagColor } from "../shared/tagColors";
 
 function useArticleIndex() {
   const [articles, setArticles] = useState<BlogArticle[]>([]);
@@ -164,10 +165,6 @@ type TagCloudStyle = CSSProperties & {
   "--tag-color"?: string;
 };
 
-type ArchiveTagStyle = CSSProperties & {
-  "--archive-tag-color"?: string;
-};
-
 type ArchiveArticleEntry = {
   article: BlogArticle;
   day: string;
@@ -201,16 +198,6 @@ function buildCategoryGroups(articles: BlogArticle[]): BlogCategoryGroup[] {
       tone: categoryTones[index % categoryTones.length],
     };
   });
-}
-
-function normalizeBlogTagColor(color: string | null | undefined) {
-  const value = color?.trim();
-
-  if (value && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) {
-    return value;
-  }
-
-  return "#ec4899";
 }
 
 function buildTagGroups(articles: BlogArticle[]): BlogTagGroup[] {
@@ -540,9 +527,7 @@ function CategoryArticleRow({ article, category, index }: CategoryArticleRowProp
             {article.readTime}
           </span>
           {article.tags.slice(0, 4).map((tag) => {
-            const style: ArchiveTagStyle = {
-              "--archive-tag-color": normalizeBlogTagColor(tag.color),
-            };
+            const style = getArchiveTagColorStyle(tag.color);
 
             return (
               <Link
@@ -598,9 +583,7 @@ function TagArticleRow({ article, index, tag }: TagArticleRowProps) {
             {article.readTime}
           </span>
           {article.tags.slice(0, 4).map((item) => {
-            const style: ArchiveTagStyle = {
-              "--archive-tag-color": normalizeBlogTagColor(item.color),
-            };
+            const style = getArchiveTagColorStyle(item.color);
 
             return (
               <Link
@@ -1068,9 +1051,7 @@ function ArchiveArticleRow({ entry }: ArchiveArticleRowProps) {
           {article.category}
         </span>
         {article.tags.slice(0, 5).map((tag) => {
-          const style: ArchiveTagStyle = {
-            "--archive-tag-color": normalizeBlogTagColor(tag.color),
-          };
+          const style = getArchiveTagColorStyle(tag.color);
 
           return (
             <span

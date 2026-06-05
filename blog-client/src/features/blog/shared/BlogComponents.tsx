@@ -2,7 +2,8 @@ import { Card, Chip } from "@heroui/react";
 import { Link } from "react-router-dom";
 
 import { AppIcon, type AppIconName } from "../../../shared/icons";
-import type { BlogArticle } from "./blogApi";
+import type { BlogArticle, BlogTaxonomy } from "./blogApi";
+import { getArticleTagColorStyle } from "./tagColors";
 
 export function BlogPageHeader({
   description,
@@ -63,13 +64,19 @@ export function ArticleCard({
         <p>{article.excerpt}</p>
         <div className="article-card__tags">
           {article.tags.map((tag) => (
-            <Link key={tag.slug} to={`/tags/${encodeURIComponent(tag.slug)}`}>
-              #{tag.name}
-            </Link>
+            <ArticleTagLink key={tag.slug} tag={tag} />
           ))}
         </div>
       </div>
     </Card>
+  );
+}
+
+export function ArticleTagLink({ tag }: { tag: Pick<BlogTaxonomy, "color" | "name" | "slug"> }) {
+  return (
+    <Link style={getArticleTagColorStyle(tag.color)} to={`/tags/${encodeURIComponent(tag.slug)}`}>
+      #{tag.name}
+    </Link>
   );
 }
 
