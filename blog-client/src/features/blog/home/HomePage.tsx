@@ -11,6 +11,7 @@ import { fetchPublicSiteAuthor, fetchPublicSiteInfo } from "../../../shared/site
 import { BlogPageHeader, EmptyPlaceholder } from "../shared/BlogComponents";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
 import {
+  createRandomCoverAssignments,
   getHeroCoverUrls,
   HeroCoverCarousel,
   useHeroCoverCarousel,
@@ -62,10 +63,6 @@ function getArticleExcerpt(article: BlogArticle) {
   return bodyText.length > 120 ? `${bodyText.slice(0, 120)}...` : bodyText;
 }
 
-function getHomeHeroCover(siteInfo: PublicSiteInfo | null) {
-  return getHeroCoverUrls(siteInfo)[0] ?? null;
-}
-
 function getHomeSlogan(siteInfo: PublicSiteInfo | null) {
   return siteInfo?.homeSlogan.trim() || null;
 }
@@ -79,7 +76,7 @@ export function BlogHomePage() {
   const latestArticles = useMemo(() => getArticleList(articles, false), [articles]);
   const pinnedArticles = useMemo(() => getArticleList(articles, true), [articles]);
   const tags = useMemo(() => deriveBlogTags(articles), [articles]);
-  const homeCoverUrl = getHomeHeroCover(siteInfo);
+  const homeCoverUrls = useMemo(() => getHeroCoverUrls(siteInfo), [siteInfo]);
 
   useEffect(() => {
     let isActive = true;
@@ -138,7 +135,7 @@ export function BlogHomePage() {
             <HomeArticleSection
               articles={pinnedArticles}
               emptyText={status === "error" ? "文章接口暂时不可用。" : "暂无置顶文章。"}
-              fallbackCoverUrl={homeCoverUrl}
+              fallbackCoverUrls={homeCoverUrls}
               icon="bookmark"
               section="pinned"
               title="置顶文章"
@@ -146,7 +143,7 @@ export function BlogHomePage() {
             <HomeArticleSection
               articles={latestArticles.length > 0 ? latestArticles : articles.slice(0, 8)}
               emptyText={status === "error" ? "文章接口暂时不可用。" : "正在读取最新文章。"}
-              fallbackCoverUrl={homeCoverUrl}
+              fallbackCoverUrls={homeCoverUrls}
               icon="reader"
               section="latest"
               title="最新文章"
@@ -456,7 +453,7 @@ function HomeHeroWaves() {
 type HomeArticleSectionProps = {
   articles: BlogArticle[];
   emptyText: string;
-  fallbackCoverUrl: null | string;
+  fallbackCoverUrls: string[];
   icon: "bookmark" | "reader";
   section: "latest" | "pinned";
   title: string;
@@ -465,11 +462,21 @@ type HomeArticleSectionProps = {
 function HomeArticleSection({
   articles,
   emptyText,
-  fallbackCoverUrl,
+  fallbackCoverUrls,
   icon,
   section,
   title,
 }: HomeArticleSectionProps) {
+  const fallbackCoverAssignments = useMemo(
+    () =>
+      createRandomCoverAssignments({
+        coverUrls: fallbackCoverUrls,
+        getKey: (article: BlogArticle) => article.slug,
+        items: articles.filter((article) => !article.cover),
+      }),
+    [articles, fallbackCoverUrls],
+  );
+
   return (
     <Card className={`home-doc-panel home-doc-panel--${section}`}>
       <div className="home-doc-panel__heading">
@@ -484,7 +491,7 @@ function HomeArticleSection({
           {articles.map((article, index) => (
             <HomeArticleRow
               article={article}
-              fallbackCoverUrl={fallbackCoverUrl}
+              fallbackCoverUrl={fallbackCoverAssignments[article.slug]}
               index={index}
               key={article.slug}
               section={section}
@@ -500,14 +507,14 @@ function HomeArticleSection({
 
 type HomeArticleRowProps = {
   article: BlogArticle;
-  fallbackCoverUrl: null | string;
+  fallbackCoverUrl?: string;
   index: number;
   section: "latest" | "pinned";
 };
 
 function getHomeArticleRowClassName(
   article: BlogArticle,
-  fallbackCoverUrl: null | string,
+  fallbackCoverUrl: string | undefined,
   index: number,
   section: "latest" | "pinned",
 ) {

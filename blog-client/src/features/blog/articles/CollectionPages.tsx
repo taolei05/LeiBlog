@@ -11,7 +11,11 @@ import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { BlogPageHeader, EmptyPlaceholder } from "../shared/BlogComponents";
 import type { BlogArticle, BlogCategory, BlogTag } from "../shared/blogApi";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
-import { PageHeroCoverCarousel } from "../shared/HeroCoverCarousel";
+import {
+  createRandomCoverAssignments,
+  getHeroCoverUrls,
+  PageHeroCoverCarousel,
+} from "../shared/HeroCoverCarousel";
 import { getArchiveTagColorStyle, normalizeBlogTagColor } from "../shared/tagColors";
 
 function useArticleIndex() {
@@ -317,15 +321,17 @@ function CategoryHeroWaves() {
 
 type CategoryOverviewCardProps = {
   category: BlogCategoryGroup;
+  fallbackCoverUrl?: string;
 };
 
 type CategoryOverviewCardStyle = CSSProperties & {
   "--category-cover"?: string;
 };
 
-function CategoryOverviewCard({ category }: CategoryOverviewCardProps) {
-  const coverStyle: CategoryOverviewCardStyle | undefined = category.coverUrl
-    ? { "--category-cover": `url("${category.coverUrl.replace(/"/g, '\\"')}")` }
+function CategoryOverviewCard({ category, fallbackCoverUrl }: CategoryOverviewCardProps) {
+  const coverUrl = category.coverUrl || fallbackCoverUrl;
+  const coverStyle: CategoryOverviewCardStyle | undefined = coverUrl
+    ? { "--category-cover": `url("${coverUrl.replace(/"/g, '\\"')}")` }
     : undefined;
 
   return (
@@ -333,7 +339,7 @@ function CategoryOverviewCard({ category }: CategoryOverviewCardProps) {
       className={[
         "category-overview-card",
         `category-overview-card--${category.tone}`,
-        category.coverUrl ? "has-cover" : "has-empty-cover",
+        coverUrl ? "has-cover" : "has-empty-cover",
       ].join(" ")}
       style={coverStyle}
       to={getCategoryPath(category)}
@@ -683,6 +689,16 @@ export function CategoriesPage() {
   const category = activeCategory
     ? (categories.find((item) => item.slug === activeCategory) ?? null)
     : null;
+  const homeCoverUrls = useMemo(() => getHeroCoverUrls(siteInfo), [siteInfo]);
+  const categoryFallbackCoverAssignments = useMemo(
+    () =>
+      createRandomCoverAssignments({
+        coverUrls: homeCoverUrls,
+        getKey: (item: BlogCategoryGroup) => item.slug,
+        items: categories.filter((item) => !item.coverUrl),
+      }),
+    [categories, homeCoverUrls],
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -739,7 +755,11 @@ export function CategoriesPage() {
         {categories.length > 0 ? (
           <div className="category-card-grid">
             {categories.map((item) => (
-              <CategoryOverviewCard category={item} key={item.slug} />
+              <CategoryOverviewCard
+                category={item}
+                fallbackCoverUrl={categoryFallbackCoverAssignments[item.slug]}
+                key={item.slug}
+              />
             ))}
           </div>
         ) : (

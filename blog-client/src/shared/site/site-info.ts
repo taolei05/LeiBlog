@@ -6,7 +6,6 @@ export type PublicSiteInfo = {
   description: string;
   establishedAt: string;
   faviconUrl?: string;
-  homeCoverUrl?: string;
   homeCoverUrls: string[];
   homeSlogan: string;
   logoDarkUrl?: string;
@@ -95,17 +94,13 @@ function resolveAssetUrlList(values: string[]) {
 function toPublicSiteInfo(value: unknown): PublicSiteInfo {
   if (!isRecord(value)) throw new Error("站点信息格式无效");
 
-  const homeCoverUrl = resolveApiAssetUrl(readOptionalString(value, "homeCoverUrl"));
   const homeCoverUrls = resolveAssetUrlList(readOptionalStringArray(value, "homeCoverUrls"));
-  const resolvedHomeCoverUrls =
-    homeCoverUrls.length > 0 ? homeCoverUrls : homeCoverUrl ? [homeCoverUrl] : [];
 
   return {
     description: readString(value, "description"),
     establishedAt: readString(value, "establishedAt"),
     faviconUrl: resolveApiAssetUrl(readOptionalString(value, "faviconUrl")),
-    homeCoverUrl: homeCoverUrl ?? resolvedHomeCoverUrls[0],
-    homeCoverUrls: resolvedHomeCoverUrls,
+    homeCoverUrls,
     homeSlogan: readString(value, "homeSlogan"),
     logoDarkUrl: resolveApiAssetUrl(readOptionalString(value, "logoDarkUrl")),
     logoLightUrl: resolveApiAssetUrl(readOptionalString(value, "logoLightUrl")),

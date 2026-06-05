@@ -20,7 +20,6 @@ export interface SystemSiteInfoInput {
   logoDarkUrl?: string | null;
   logoLightUrl?: string | null;
   faviconUrl?: string | null;
-  homeCoverUrl?: string | null;
   homeCoverUrls?: string[];
   homeSlogan?: string;
   establishedAt: string;
@@ -51,7 +50,6 @@ interface SiteInfoRow {
   logo_dark_url: string | null;
   logo_light_url: string | null;
   favicon_url: string | null;
-  home_cover_url: string | null;
   home_cover_urls: string[] | string;
   home_slogan: string;
   established_at: Date | string;
@@ -103,19 +101,8 @@ function cleanList(values: string[] | undefined) {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
 
-function cleanCoverUrls(values: string[] | undefined, legacyCoverUrl?: string | null) {
-  if (values !== undefined) return cleanList(values);
-
-  const legacyCover = cleanOptional(legacyCoverUrl);
-  return legacyCover ? [legacyCover] : [];
-}
-
-function cleanStoredCoverUrls(values: string[] | undefined, legacyCoverUrl?: string | null) {
-  const cleanedValues = cleanList(values);
-  if (cleanedValues.length > 0) return cleanedValues;
-
-  const legacyCover = cleanOptional(legacyCoverUrl);
-  return legacyCover ? [legacyCover] : [];
+function cleanCoverUrls(values: string[] | undefined) {
+  return cleanList(values);
 }
 
 function parseDate(value: string) {
@@ -142,10 +129,7 @@ function parseTextArray(value: string[] | string) {
 }
 
 function toSiteInfo(row: SiteInfoRow) {
-  const homeCoverUrls = cleanStoredCoverUrls(
-    parseTextArray(row.home_cover_urls),
-    row.home_cover_url
-  );
+  const homeCoverUrls = cleanCoverUrls(parseTextArray(row.home_cover_urls));
 
   return {
     siteName: row.site_name,
@@ -153,7 +137,6 @@ function toSiteInfo(row: SiteInfoRow) {
     logoDarkUrl: row.logo_dark_url,
     logoLightUrl: row.logo_light_url,
     faviconUrl: row.favicon_url,
-    homeCoverUrl: homeCoverUrls[0] ?? row.home_cover_url,
     homeCoverUrls,
     homeSlogan: row.home_slogan,
     establishedAt: toIso(row.established_at),
@@ -293,7 +276,7 @@ export async function getSystemSiteInfo(currentUser: AuthUser, client: DbClient 
 
   const [row] = await client<SiteInfoRow[]>`
     SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url,
-           home_cover_url, home_cover_urls, home_slogan, established_at
+           home_cover_urls, home_slogan, established_at
     FROM site_info
     WHERE id = 1
   `;
@@ -308,13 +291,12 @@ export async function updateSystemSiteInfo(
 ) {
   assertWritableAdmin(currentUser);
 
-  const homeCoverUrls = cleanCoverUrls(input.homeCoverUrls, input.homeCoverUrl);
-  const homeCoverUrl = homeCoverUrls[0] ?? null;
+  const homeCoverUrls = cleanCoverUrls(input.homeCoverUrls);
 
   await client`
     INSERT INTO site_info (
       id, site_name, description, logo_dark_url, logo_light_url, favicon_url,
-      home_cover_url, home_cover_urls, home_slogan, established_at
+      home_cover_urls, home_slogan, established_at
     )
     VALUES (
       1,
@@ -323,7 +305,6 @@ export async function updateSystemSiteInfo(
       ${cleanOptional(input.logoDarkUrl)},
       ${cleanOptional(input.logoLightUrl)},
       ${cleanOptional(input.faviconUrl)},
-      ${homeCoverUrl},
       ${client.array(homeCoverUrls, "TEXT")},
       ${input.homeSlogan?.trim() ?? ""},
       ${parseDate(input.establishedAt)}
@@ -334,7 +315,6 @@ export async function updateSystemSiteInfo(
         logo_dark_url = EXCLUDED.logo_dark_url,
         logo_light_url = EXCLUDED.logo_light_url,
         favicon_url = EXCLUDED.favicon_url,
-        home_cover_url = EXCLUDED.home_cover_url,
         home_cover_urls = EXCLUDED.home_cover_urls,
         home_slogan = EXCLUDED.home_slogan,
         established_at = EXCLUDED.established_at

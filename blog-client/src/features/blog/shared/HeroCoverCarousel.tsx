@@ -14,15 +14,60 @@ type PageHeroCoverCarouselProps = {
   siteInfo: PublicSiteInfo | null;
 };
 
+type RandomCoverAssignmentParams<TItem> = {
+  coverUrls: string[];
+  getKey: (item: TItem) => string;
+  items: TItem[];
+  random?: () => number;
+};
+
 export function getHeroCoverUrls(siteInfo: PublicSiteInfo | null) {
-  const coverUrls = [
-    ...new Set((siteInfo?.homeCoverUrls ?? []).map((url) => url.trim()).filter(Boolean)),
-  ];
+  return [...new Set((siteInfo?.homeCoverUrls ?? []).map((url) => url.trim()).filter(Boolean))];
+}
 
-  if (coverUrls.length > 0) return coverUrls;
+function getRandomIndex(length: number, random: () => number) {
+  return Math.min(Math.floor(random() * length), length - 1);
+}
 
-  const legacyCoverUrl = siteInfo?.homeCoverUrl?.trim();
-  return legacyCoverUrl ? [legacyCoverUrl] : [];
+function shuffleCoverUrls(coverUrls: string[], random: () => number) {
+  const shuffledCoverUrls = [...coverUrls];
+
+  for (let index = shuffledCoverUrls.length - 1; index > 0; index -= 1) {
+    const swapIndex = getRandomIndex(index + 1, random);
+    const currentCoverUrl = shuffledCoverUrls[index];
+    const swapCoverUrl = shuffledCoverUrls[swapIndex];
+
+    if (currentCoverUrl === undefined || swapCoverUrl === undefined) continue;
+
+    shuffledCoverUrls[index] = swapCoverUrl;
+    shuffledCoverUrls[swapIndex] = currentCoverUrl;
+  }
+
+  return shuffledCoverUrls;
+}
+
+export function createRandomCoverAssignments<TItem>({
+  coverUrls,
+  getKey,
+  items,
+  random = Math.random,
+}: RandomCoverAssignmentParams<TItem>): Record<string, string> {
+  const cleanCoverUrls = [...new Set(coverUrls.map((url) => url.trim()).filter(Boolean))];
+
+  if (cleanCoverUrls.length === 0) return {};
+
+  const shuffledCoverUrls = shuffleCoverUrls(cleanCoverUrls, random);
+
+  const assignments: Record<string, string> = {};
+
+  items.forEach((item, index) => {
+    const coverUrl = shuffledCoverUrls[index % shuffledCoverUrls.length];
+    if (coverUrl === undefined) return;
+
+    assignments[getKey(item)] = coverUrl;
+  });
+
+  return assignments;
 }
 
 export function useHeroCoverCarousel(siteInfo: PublicSiteInfo | null, intervalMs = 6500) {

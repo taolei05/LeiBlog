@@ -59,7 +59,6 @@ type SiteInfoItem = {
   description: string;
   establishedAt: string;
   faviconUrl: string | null;
-  homeCoverUrl: string | null;
   homeCoverUrls?: string[];
   homeSlogan: string;
   logoDarkUrl: string | null;
@@ -231,12 +230,7 @@ function toOptionalList(values: string[]) {
 }
 
 function getLoadedHomeCoverUrls(item: SiteInfoItem) {
-  const homeCoverUrls = toOptionalList(item.homeCoverUrls ?? []);
-
-  if (homeCoverUrls.length > 0) return homeCoverUrls;
-
-  const legacyCoverUrl = item.homeCoverUrl?.trim();
-  return legacyCoverUrl ? [legacyCoverUrl] : [];
+  return toOptionalList(item.homeCoverUrls ?? []);
 }
 
 function formatCountdown(seconds: number) {
@@ -548,7 +542,6 @@ export function SiteSettingsPage() {
           description: siteInfo.description,
           establishedAt: new Date(siteInfo.establishedAt).toISOString(),
           faviconUrl: toOptional(faviconUrl),
-          homeCoverUrl: homeCoverUrls[0] ?? null,
           homeCoverUrls,
           homeSlogan: siteInfo.homeSlogan,
           logoDarkUrl: toOptional(logoDarkUrl),

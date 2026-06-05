@@ -10,7 +10,11 @@ import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { ArticleTagLink, EmptyPlaceholder } from "../shared/BlogComponents";
 import type { BlogArticle } from "../shared/blogApi";
 import { fetchPublicArticles } from "../shared/blogApi";
-import { PageHeroCoverCarousel } from "../shared/HeroCoverCarousel";
+import {
+  createRandomCoverAssignments,
+  getHeroCoverUrls,
+  PageHeroCoverCarousel,
+} from "../shared/HeroCoverCarousel";
 
 type ArticleSortMode = "earliest" | "latest" | "views";
 
@@ -57,10 +61,12 @@ function sortArticles(articles: BlogArticle[], sortMode: ArticleSortMode) {
 
 type ArticleIndexCardProps = {
   article: BlogArticle;
+  fallbackCoverUrl?: string;
   index: number;
 };
 
-function ArticleIndexCard({ article, index }: ArticleIndexCardProps) {
+function ArticleIndexCard({ article, fallbackCoverUrl, index }: ArticleIndexCardProps) {
+  const coverUrl = article.cover || fallbackCoverUrl;
   const excerpt = getArticleExcerpt(article);
 
   return (
@@ -70,8 +76,8 @@ function ArticleIndexCard({ article, index }: ArticleIndexCardProps) {
         className="articles-index-card__cover"
         to={`/articles/${article.slug}`}
       >
-        {article.cover ? (
-          <img alt={article.title} src={article.cover} />
+        {coverUrl ? (
+          <img alt={article.cover ? article.title : ""} src={coverUrl} />
         ) : (
           <span className="articles-index-card__cover-empty">
             <AppIcon name={index % 2 === 0 ? "reader" : "documentText"} size={34} />
@@ -163,6 +169,16 @@ export function BlogArticlesPage() {
   const [sortMode, setSortMode] = useState<ArticleSortMode>("latest");
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
   const sortedArticles = useMemo(() => sortArticles(articles, sortMode), [articles, sortMode]);
+  const homeCoverUrls = useMemo(() => getHeroCoverUrls(siteInfo), [siteInfo]);
+  const fallbackCoverAssignments = useMemo(
+    () =>
+      createRandomCoverAssignments({
+        coverUrls: homeCoverUrls,
+        getKey: (article: BlogArticle) => article.slug,
+        items: sortedArticles.filter((article) => !article.cover),
+      }),
+    [homeCoverUrls, sortedArticles],
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -265,7 +281,12 @@ export function BlogArticlesPage() {
         {sortedArticles.length > 0 ? (
           <div className="articles-index-grid">
             {sortedArticles.map((article, index) => (
-              <ArticleIndexCard article={article} index={index} key={article.slug} />
+              <ArticleIndexCard
+                article={article}
+                fallbackCoverUrl={fallbackCoverAssignments[article.slug]}
+                index={index}
+                key={article.slug}
+              />
             ))}
           </div>
         ) : (

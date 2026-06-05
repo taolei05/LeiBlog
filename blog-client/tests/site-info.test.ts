@@ -12,7 +12,6 @@ function mockSiteInfoResponse(item: Record<string, unknown>) {
           description: "站点描述",
           establishedAt: "2026-06-05T12:00:00.000Z",
           faviconUrl: null,
-          homeCoverUrl: null,
           homeSlogan: "首页文案",
           logoDarkUrl: null,
           logoLightUrl: null,
@@ -33,7 +32,6 @@ describe("fetchPublicSiteInfo", () => {
 
   it("reads and cleans multiple homepage cover URLs", async () => {
     mockSiteInfoResponse({
-      homeCoverUrl: "https://cdn.example.com/legacy.jpg",
       homeCoverUrls: [
         "https://cdn.example.com/cover-a.jpg",
         "",
@@ -43,22 +41,17 @@ describe("fetchPublicSiteInfo", () => {
 
     const siteInfo = await fetchPublicSiteInfo();
 
-    expect((siteInfo as { homeCoverUrls?: string[] }).homeCoverUrls).toEqual([
+    expect(siteInfo.homeCoverUrls).toEqual([
       "https://cdn.example.com/cover-a.jpg",
       "https://cdn.example.com/cover-b.jpg",
     ]);
-    expect(siteInfo.homeCoverUrl).toBe("https://cdn.example.com/legacy.jpg");
   });
 
-  it("falls back to the legacy cover as a single-item cover list", async () => {
-    mockSiteInfoResponse({
-      homeCoverUrl: "https://cdn.example.com/legacy-only.jpg",
-    });
+  it("uses an empty cover list when no homepage covers are configured", async () => {
+    mockSiteInfoResponse({});
 
     const siteInfo = await fetchPublicSiteInfo();
 
-    expect((siteInfo as { homeCoverUrls?: string[] }).homeCoverUrls).toEqual([
-      "https://cdn.example.com/legacy-only.jpg",
-    ]);
+    expect(siteInfo.homeCoverUrls).toEqual([]);
   });
 });
