@@ -7,6 +7,7 @@ export const SiteInfoItem = t.Object({
   logoLightUrl: t.Nullable(t.String()),
   faviconUrl: t.Nullable(t.String()),
   homeCoverUrl: t.Nullable(t.String()),
+  homeCoverUrls: t.Array(t.String()),
   homeSlogan: t.String(),
   establishedAt: t.String(),
 });

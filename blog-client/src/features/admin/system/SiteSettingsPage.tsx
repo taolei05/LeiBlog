@@ -23,13 +23,13 @@ import { AppIcon } from "../../../shared/icons";
 import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
-import { MediaAssetField } from "../shared/media-asset-field";
+import { MediaAssetField, MultiMediaAssetField } from "../shared/media-asset-field";
 
 type SiteInfoState = {
   description: string;
   establishedAt: string;
   faviconUrl: string;
-  homeCoverUrl: string;
+  homeCoverUrls: string[];
   homeSlogan: string;
   logoDarkUrl: string;
   logoLightUrl: string;
@@ -60,6 +60,7 @@ type SiteInfoItem = {
   establishedAt: string;
   faviconUrl: string | null;
   homeCoverUrl: string | null;
+  homeCoverUrls?: string[];
   homeSlogan: string;
   logoDarkUrl: string | null;
   logoLightUrl: string | null;
@@ -184,7 +185,7 @@ const defaultSiteInfo: SiteInfoState = {
   description: "",
   establishedAt: toLocalDateTimeValue(new Date()),
   faviconUrl: "",
-  homeCoverUrl: "",
+  homeCoverUrls: [],
   homeSlogan: "",
   logoDarkUrl: "",
   logoLightUrl: "",
@@ -223,6 +224,19 @@ function toOptional(value: string) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed : null;
+}
+
+function toOptionalList(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function getLoadedHomeCoverUrls(item: SiteInfoItem) {
+  const homeCoverUrls = toOptionalList(item.homeCoverUrls ?? []);
+
+  if (homeCoverUrls.length > 0) return homeCoverUrls;
+
+  const legacyCoverUrl = item.homeCoverUrl?.trim();
+  return legacyCoverUrl ? [legacyCoverUrl] : [];
 }
 
 function formatCountdown(seconds: number) {
@@ -329,7 +343,7 @@ export function SiteSettingsPage() {
   const [logoLightFile, setLogoLightFile] = useState<File | null>(null);
   const [logoDarkFile, setLogoDarkFile] = useState<File | null>(null);
   const [faviconFile, setFaviconFile] = useState<File | null>(null);
-  const [homeCoverFile, setHomeCoverFile] = useState<File | null>(null);
+  const [homeCoverFiles, setHomeCoverFiles] = useState<File[]>([]);
   const [keyFlags, setKeyFlags] = useState({
     hasDeepLApiKey: false,
     hasIpgeolocationApiKey: false,
@@ -380,7 +394,7 @@ export function SiteSettingsPage() {
         description: siteInfoResponse.item.description,
         establishedAt: toLocalDateTimeValue(new Date(siteInfoResponse.item.establishedAt)),
         faviconUrl: siteInfoResponse.item.faviconUrl ?? "",
-        homeCoverUrl: siteInfoResponse.item.homeCoverUrl ?? "",
+        homeCoverUrls: getLoadedHomeCoverUrls(siteInfoResponse.item),
         homeSlogan: siteInfoResponse.item.homeSlogan,
         logoDarkUrl: siteInfoResponse.item.logoDarkUrl ?? "",
         logoLightUrl: siteInfoResponse.item.logoLightUrl ?? "",
@@ -521,16 +535,21 @@ export function SiteSettingsPage() {
       const faviconUrl = faviconFile
         ? (await uploadAdminMediaFile({ file: faviconFile, folderSlug: "site" })).item.accessUrl
         : siteInfo.faviconUrl;
-      const homeCoverUrl = homeCoverFile
-        ? (await uploadAdminMediaFile({ file: homeCoverFile, folderSlug: "site" })).item.accessUrl
-        : siteInfo.homeCoverUrl;
+      const uploadedHomeCoverUrls = await Promise.all(
+        homeCoverFiles.map(async (file) => {
+          const response = await uploadAdminMediaFile({ file, folderSlug: "site" });
+          return response.item.accessUrl;
+        }),
+      );
+      const homeCoverUrls = toOptionalList([...siteInfo.homeCoverUrls, ...uploadedHomeCoverUrls]);
 
       await adminFetch("/admin/system/site-info", {
         body: {
           description: siteInfo.description,
           establishedAt: new Date(siteInfo.establishedAt).toISOString(),
           faviconUrl: toOptional(faviconUrl),
-          homeCoverUrl: toOptional(homeCoverUrl),
+          homeCoverUrl: homeCoverUrls[0] ?? null,
+          homeCoverUrls,
           homeSlogan: siteInfo.homeSlogan,
           logoDarkUrl: toOptional(logoDarkUrl),
           logoLightUrl: toOptional(logoLightUrl),
@@ -541,7 +560,7 @@ export function SiteSettingsPage() {
       setLogoLightFile(null);
       setLogoDarkFile(null);
       setFaviconFile(null);
-      setHomeCoverFile(null);
+      setHomeCoverFiles([]);
       updateNotice("站点信息已保存");
       await loadSettings();
     } catch (error) {
@@ -802,13 +821,13 @@ export function SiteSettingsPage() {
               })}
               value={siteInfo.description}
             />
-            <MediaAssetField
+            <MultiMediaAssetField
               folderSlug="site"
               label="主页封面"
-              localFile={homeCoverFile}
-              onChange={(value) => setSiteInfo((state) => ({ ...state, homeCoverUrl: value }))}
-              onLocalFileChange={setHomeCoverFile}
-              value={siteInfo.homeCoverUrl}
+              localFiles={homeCoverFiles}
+              onChange={(values) => setSiteInfo((state) => ({ ...state, homeCoverUrls: values }))}
+              onLocalFilesChange={setHomeCoverFiles}
+              values={siteInfo.homeCoverUrls}
             />
             <SettingsTextArea
               description="前台主页首屏会以打字效果展示这段文案。"

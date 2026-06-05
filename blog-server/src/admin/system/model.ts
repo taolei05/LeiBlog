@@ -7,6 +7,7 @@ const SystemSiteInfoItem = t.Object({
   logoLightUrl: t.Nullable(t.String()),
   faviconUrl: t.Nullable(t.String()),
   homeCoverUrl: t.Nullable(t.String()),
+  homeCoverUrls: t.Array(t.String()),
   homeSlogan: t.String(),
   establishedAt: t.String(),
 });
@@ -37,6 +38,7 @@ export const SystemSiteInfoBody = t.Object({
   logoLightUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
   faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
   homeCoverUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+  homeCoverUrls: t.Optional(t.Array(t.String({ maxLength: 2048 }), { maxItems: 12 })),
   homeSlogan: t.Optional(t.String({ maxLength: 500 })),
   establishedAt: t.String(),
 });

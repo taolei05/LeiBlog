@@ -58,7 +58,18 @@ function getArticleExcerpt(article: BlogArticle) {
 }
 
 function getHomeHeroCover(siteInfo: PublicSiteInfo | null) {
-  return siteInfo?.homeCoverUrl?.trim() || null;
+  return getHomeHeroCovers(siteInfo)[0] ?? null;
+}
+
+function getHomeHeroCovers(siteInfo: PublicSiteInfo | null) {
+  const coverUrls = [
+    ...new Set((siteInfo?.homeCoverUrls ?? []).map((url) => url.trim()).filter(Boolean)),
+  ];
+
+  if (coverUrls.length > 0) return coverUrls;
+
+  const legacyCoverUrl = siteInfo?.homeCoverUrl?.trim();
+  return legacyCoverUrl ? [legacyCoverUrl] : [];
 }
 
 function getHomeSlogan(siteInfo: PublicSiteInfo | null) {
@@ -164,16 +175,42 @@ type HomeHeroProps = {
   siteInfo: PublicSiteInfo | null;
 };
 
-function HomeHero({ author, siteInfo }: HomeHeroProps) {
-  const coverUrl = getHomeHeroCover(siteInfo);
+export function HomeHero({ author, siteInfo }: HomeHeroProps) {
+  const coverUrls = useMemo(() => getHomeHeroCovers(siteInfo), [siteInfo]);
+  const [activeCoverIndex, setActiveCoverIndex] = useState(0);
   const slogan = getHomeSlogan(siteInfo);
   const siteName = siteInfo?.siteName ?? "LeiBlog";
   const authorName = getAuthorName(author, siteInfo);
 
+  useEffect(() => {
+    setActiveCoverIndex(0);
+  }, [coverUrls]);
+
+  useEffect(() => {
+    if (coverUrls.length <= 1) return undefined;
+
+    const timer = window.setInterval(() => {
+      setActiveCoverIndex((index) => (index + 1) % coverUrls.length);
+    }, 6500);
+
+    return () => window.clearInterval(timer);
+  }, [coverUrls.length]);
+
   return (
     <section aria-label="主页首屏" className="home-hero-showcase">
-      {coverUrl ? (
-        <img alt={`${siteName} 主页封面`} className="home-hero-showcase__image" src={coverUrl} />
+      {coverUrls.length > 0 ? (
+        <div aria-hidden className="home-hero-showcase__carousel">
+          {coverUrls.map((coverUrl, index) => (
+            <img
+              alt=""
+              className={`home-hero-showcase__slide${
+                index === activeCoverIndex ? " home-hero-showcase__slide--active" : ""
+              }`}
+              key={coverUrl}
+              src={coverUrl}
+            />
+          ))}
+        </div>
       ) : null}
       <div className="home-hero-showcase__shade" />
       <div className="home-hero-showcase__content">
@@ -205,6 +242,19 @@ function HomeHero({ author, siteInfo }: HomeHeroProps) {
             归档
           </Link>
         </nav>
+        {coverUrls.length > 1 ? (
+          <div aria-label="主页封面轮播" className="home-hero-showcase__dots" role="group">
+            {coverUrls.map((coverUrl, index) => (
+              <button
+                aria-current={index === activeCoverIndex ? "true" : undefined}
+                aria-label={`封面 ${index + 1} / ${coverUrls.length}`}
+                key={coverUrl}
+                onClick={() => setActiveCoverIndex(index)}
+                type="button"
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
       <HomeHeroWaves />
     </section>

@@ -7,7 +7,7 @@ type LeiBlogRedisClient = ReturnType<typeof createClient>;
 let redisClient: LeiBlogRedisClient | null = null;
 
 export const redisKeys = {
-  siteInfo: "site:info",
+  siteInfo: "site:info:v2",
   siteConfig: "site:config",
   siteFiling: "site:filing",
   post: (slug: string) => `post:${slug}`,

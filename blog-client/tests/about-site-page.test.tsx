@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { AboutSitePage } from "../src/features/blog/site/SitePages";
+import { AboutAuthorPage, AboutSitePage, GuestbookPage } from "../src/features/blog/site/SitePages";
 
 const originalLocation = globalThis.location;
 
@@ -57,5 +57,40 @@ describe("AboutSitePage", () => {
     expect(html).toContain('href="http://192.168.1.24:5173"');
     expect(html).toContain("http://192.168.1.24:5173");
     expect(html).not.toContain("https://taolei.net");
+  });
+});
+
+describe("AboutAuthorPage", () => {
+  it("renders a wave hero and complete author sections", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <AboutAuthorPage />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain("about-author-page");
+    expect(html).toContain("articles-index-hero__waves");
+    expect(html).toContain("关于作者");
+    expect(html).toContain("写作坐标");
+    expect(html).toContain("常用工具");
+    expect(html).toContain("继续探索");
+    expect(html).toContain('href="/articles"');
+    expect(html).toContain('href="/guestbook"');
+  });
+});
+
+describe("GuestbookPage", () => {
+  it("renders a wave hero above the guestbook thread", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <GuestbookPage />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain("guestbook-page");
+    expect(html).toContain("articles-index-hero__waves");
+    expect(html).toContain("留言板");
+    expect(html).toContain("留言前的小约定");
+    expect(html).toContain("站点留言");
   });
 });

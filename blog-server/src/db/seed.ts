@@ -497,7 +497,7 @@ async function seedSite(client: DbClient) {
   await client`
     INSERT INTO site_info (
       id, site_name, description, logo_dark_url, logo_light_url, favicon_url,
-      home_cover_url, home_slogan, established_at
+      home_cover_url, home_cover_urls, home_slogan, established_at
     )
     VALUES (
       1,
@@ -507,6 +507,7 @@ async function seedSite(client: DbClient) {
       'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=320&q=80',
       '/favicon.svg',
       NULL,
+      ${client.array([], "TEXT")},
       '',
       '2026-05-01 09:00:00+08'::timestamptz
     )
@@ -517,6 +518,7 @@ async function seedSite(client: DbClient) {
         logo_light_url = EXCLUDED.logo_light_url,
         favicon_url = EXCLUDED.favicon_url,
         home_cover_url = EXCLUDED.home_cover_url,
+        home_cover_urls = EXCLUDED.home_cover_urls,
         home_slogan = EXCLUDED.home_slogan,
         established_at = EXCLUDED.established_at
   `;

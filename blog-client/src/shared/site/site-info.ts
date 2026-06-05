@@ -7,6 +7,7 @@ export type PublicSiteInfo = {
   establishedAt: string;
   faviconUrl?: string;
   homeCoverUrl?: string;
+  homeCoverUrls: string[];
   homeSlogan: string;
   logoDarkUrl?: string;
   logoLightUrl?: string;
@@ -59,6 +60,17 @@ function readStringArray(source: Record<string, unknown>, key: string) {
   });
 }
 
+function readOptionalStringArray(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error(`接口字段 ${key} 不是数组`);
+
+  return value.map((item) => {
+    if (typeof item !== "string") throw new Error(`接口字段 ${key} 的成员不是字符串`);
+    return item;
+  });
+}
+
 function readStringRecord(source: Record<string, unknown>, key: string) {
   const value = source[key];
   if (!isRecord(value)) throw new Error(`接口字段 ${key} 不是对象`);
@@ -70,14 +82,30 @@ function readStringRecord(source: Record<string, unknown>, key: string) {
   );
 }
 
+function resolveAssetUrlList(values: string[]) {
+  return [
+    ...new Set(
+      values
+        .map((value) => resolveApiAssetUrl(value))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+}
+
 function toPublicSiteInfo(value: unknown): PublicSiteInfo {
   if (!isRecord(value)) throw new Error("站点信息格式无效");
+
+  const homeCoverUrl = resolveApiAssetUrl(readOptionalString(value, "homeCoverUrl"));
+  const homeCoverUrls = resolveAssetUrlList(readOptionalStringArray(value, "homeCoverUrls"));
+  const resolvedHomeCoverUrls =
+    homeCoverUrls.length > 0 ? homeCoverUrls : homeCoverUrl ? [homeCoverUrl] : [];
 
   return {
     description: readString(value, "description"),
     establishedAt: readString(value, "establishedAt"),
     faviconUrl: resolveApiAssetUrl(readOptionalString(value, "faviconUrl")),
-    homeCoverUrl: resolveApiAssetUrl(readOptionalString(value, "homeCoverUrl")),
+    homeCoverUrl: homeCoverUrl ?? resolvedHomeCoverUrls[0],
+    homeCoverUrls: resolvedHomeCoverUrls,
     homeSlogan: readString(value, "homeSlogan"),
     logoDarkUrl: resolveApiAssetUrl(readOptionalString(value, "logoDarkUrl")),
     logoLightUrl: resolveApiAssetUrl(readOptionalString(value, "logoLightUrl")),

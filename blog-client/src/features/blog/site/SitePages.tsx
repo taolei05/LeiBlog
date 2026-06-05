@@ -6,14 +6,13 @@ import { Link } from "react-router-dom";
 
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
-import type { PublicSiteInfo } from "../../../shared/site/site-info";
-import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
-import { BlogPageHeader } from "../shared/BlogComponents";
+import type { PublicSiteAuthor, PublicSiteInfo } from "../../../shared/site/site-info";
+import { fetchPublicSiteAuthor, fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { CommentThread } from "../shared/CommentThread";
 import type { BlogArticle } from "../shared/blogApi";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
 
-type AboutSiteHeroStyle = CSSProperties & {
+type SiteHeroStyle = CSSProperties & {
   "--articles-index-cover"?: string;
 };
 
@@ -34,6 +33,13 @@ const defaultSiteInfo = {
   description: "记录技术实践、产品体验和长期写作的个人博客。",
   establishedYear: "2024 年",
   siteName: "LeiBlog",
+};
+
+const defaultAuthor = {
+  description: "把工程问题写成可复用的经验，也把生活里的观察放在同一个地方。",
+  name: "Lei Tao",
+  tags: ["全栈", "写作", "React", "Elysia", "摄影"],
+  username: "taolei",
 };
 
 const featureItems: AboutSiteCardItem[] = [
@@ -102,42 +108,116 @@ const technologyItems: AboutSiteCardItem[] = [
   },
 ];
 
-function AboutSiteHeroWaves() {
+const authorFocusItems: AboutSiteCardItem[] = [
+  {
+    description: "把踩过的坑、做过的取舍和最终落地的方案整理成可复用经验。",
+    icon: "construct",
+    title: "工程实践",
+  },
+  {
+    description: "关注界面层级、交互效率和真实使用场景里的细节判断。",
+    icon: "desktop",
+    title: "前端体验",
+  },
+  {
+    description: "从接口、数据、权限到部署，把一件事完整跑起来。",
+    icon: "server",
+    title: "系统搭建",
+  },
+  {
+    description: "保留技术之外的观察，让博客不只是一份问题清单。",
+    icon: "sparkles",
+    title: "个人记录",
+  },
+];
+
+const authorToolItems: AboutSiteCardItem[] = [
+  {
+    description: "构建界面、状态和阅读体验。",
+    icon: "codeSlash",
+    title: "React",
+  },
+  {
+    description: "约束数据流，减少隐式错误。",
+    icon: "terminal",
+    title: "TypeScript",
+  },
+  {
+    description: "支撑运行时、脚本和后端服务。",
+    icon: "refresh",
+    title: "Bun",
+  },
+  {
+    description: "保持文章内容可写、可扩展。",
+    icon: "documentText",
+    title: "MDX",
+  },
+  {
+    description: "提供稳定的组件基础。",
+    icon: "colorPalette",
+    title: "HeroUI",
+  },
+  {
+    description: "负责接口、认证与业务边界。",
+    icon: "server",
+    title: "Elysia",
+  },
+];
+
+const guestbookGuidelines: AboutSiteCardItem[] = [
+  {
+    description: "欢迎提问题、补充视角，也欢迎指出文章里不严谨的地方。",
+    icon: "chatbubbles",
+    title: "真实交流",
+  },
+  {
+    description: "技术讨论、阅读反馈、站点建议都会比泛泛寒暄更容易跟进。",
+    icon: "reader",
+    title: "聚焦内容",
+  },
+  {
+    description: "留言会按公开评论规则展示，忙的时候回复可能慢一些。",
+    icon: "shield",
+    title: "耐心等待",
+  },
+];
+
+function SiteHeroWaves() {
   return (
     <svg
       aria-hidden
-      className="articles-index-hero__waves about-site-hero__waves"
+      className="articles-index-hero__waves site-hero__waves"
       preserveAspectRatio="none"
       viewBox="0 24 150 28"
     >
       <defs>
         <path
           d="M-160 44c30 0 58-18 88-18s58 18 88 18 58-18 88-18 58 18 88 18v44h-352z"
-          id="about-site-hero-wave-path"
+          id="site-hero-wave-path"
         />
       </defs>
       <g className="articles-index-hero__waves-parallax">
         <use
           className="articles-index-hero__wave articles-index-hero__wave--one"
-          href="#about-site-hero-wave-path"
+          href="#site-hero-wave-path"
           x="48"
           y="0"
         />
         <use
           className="articles-index-hero__wave articles-index-hero__wave--two"
-          href="#about-site-hero-wave-path"
+          href="#site-hero-wave-path"
           x="48"
           y="3"
         />
         <use
           className="articles-index-hero__wave articles-index-hero__wave--three"
-          href="#about-site-hero-wave-path"
+          href="#site-hero-wave-path"
           x="48"
           y="5"
         />
         <use
           className="articles-index-hero__wave articles-index-hero__wave--four"
-          href="#about-site-hero-wave-path"
+          href="#site-hero-wave-path"
           x="48"
           y="7"
         />
@@ -146,7 +226,7 @@ function AboutSiteHeroWaves() {
   );
 }
 
-function getAboutSiteHeroStyle(siteInfo: PublicSiteInfo | null): AboutSiteHeroStyle | undefined {
+function getSiteHeroStyle(siteInfo: PublicSiteInfo | null): SiteHeroStyle | undefined {
   const coverUrl = siteInfo?.homeCoverUrl?.trim();
 
   if (!coverUrl) return undefined;
@@ -154,6 +234,38 @@ function getAboutSiteHeroStyle(siteInfo: PublicSiteInfo | null): AboutSiteHeroSt
   return {
     "--articles-index-cover": `url("${coverUrl.replace(/"/g, '\\"')}")`,
   };
+}
+
+function SiteHero({
+  className,
+  description,
+  eyebrow,
+  icon,
+  siteInfo,
+  title,
+}: {
+  className: string;
+  description: string;
+  eyebrow: string;
+  icon: AppIconName;
+  siteInfo: PublicSiteInfo | null;
+  title: string;
+}) {
+  const heroStyle = useMemo(() => getSiteHeroStyle(siteInfo), [siteInfo]);
+
+  return (
+    <header className={`articles-index-hero site-hero ${className}`} style={heroStyle}>
+      <div className="articles-index-hero__content site-hero__content">
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>
+          <AppIcon name={icon} size="clamp(2.25rem, 5vw, 4.5rem)" />
+          {title}
+        </h1>
+        <p>{description}</p>
+      </div>
+      <SiteHeroWaves />
+    </header>
+  );
 }
 
 function formatEstablishedYear(value: string | undefined) {
@@ -173,6 +285,34 @@ function getCurrentSiteUrl() {
   const origin = globalThis.location?.origin?.trim();
 
   return origin && origin !== "null" ? origin : "";
+}
+
+function getAuthorDisplayName(author: PublicSiteAuthor | null) {
+  return author?.name?.trim() || defaultAuthor.name;
+}
+
+function getAuthorDescription(author: PublicSiteAuthor | null) {
+  return author?.description.trim() || defaultAuthor.description;
+}
+
+function getAuthorTags(author: PublicSiteAuthor | null) {
+  return author?.tags.length ? author.tags : defaultAuthor.tags;
+}
+
+function getSocialLabel(key: string) {
+  const normalized = key.toLowerCase();
+  const labels: Record<string, string> = {
+    bilibili: "Bilibili",
+    blog: "Blog",
+    email: "Email",
+    github: "GitHub",
+    juejin: "掘金",
+    twitter: "Twitter",
+    x: "X",
+    zhihu: "知乎",
+  };
+
+  return labels[normalized] ?? key;
 }
 
 function AboutSiteSection({
@@ -243,13 +383,47 @@ function AboutSiteInfoCard({ item }: { item: AboutSiteInfoItem }) {
   );
 }
 
+function AboutAuthorMiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="about-author-stat">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function AboutAuthorCard({ item }: { item: AboutSiteCardItem }) {
+  return (
+    <Card className="about-author-card">
+      <span className="about-author-card__icon">
+        <AppIcon name={item.icon} size={24} />
+      </span>
+      <Card.Header>
+        <Card.Title>{item.title}</Card.Title>
+        <Card.Description>{item.description}</Card.Description>
+      </Card.Header>
+    </Card>
+  );
+}
+
+function GuestbookGuidelineCard({ item }: { item: AboutSiteCardItem }) {
+  return (
+    <Card className="guestbook-guideline-card">
+      <AppIcon name={item.icon} size={26} />
+      <Card.Header>
+        <Card.Title>{item.title}</Card.Title>
+        <Card.Description>{item.description}</Card.Description>
+      </Card.Header>
+    </Card>
+  );
+}
+
 export function AboutSitePage() {
   const [articles, setArticles] = useState<BlogArticle[]>([]);
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
   const categories = useMemo(() => deriveBlogCategories(articles), [articles]);
   const tags = useMemo(() => deriveBlogTags(articles), [articles]);
-  const heroStyle = useMemo(() => getAboutSiteHeroStyle(siteInfo), [siteInfo]);
   const siteName = siteInfo?.siteName.trim() || defaultSiteInfo.siteName;
   const siteDescription = siteInfo?.description.trim() || defaultSiteInfo.description;
   const siteUrl = getCurrentSiteUrl();
@@ -334,17 +508,14 @@ export function AboutSitePage() {
 
   return (
     <section className="about-site-page">
-      <header className="articles-index-hero about-site-hero" style={heroStyle}>
-        <div className="articles-index-hero__content about-site-hero__content">
-          <p className="eyebrow">站点</p>
-          <h1>
-            <AppIcon name="informationCircle" size="clamp(2.25rem, 5vw, 4.5rem)" />
-            关于本站
-          </h1>
-          <p>{siteDescription}</p>
-        </div>
-        <AboutSiteHeroWaves />
-      </header>
+      <SiteHero
+        className="about-site-hero"
+        description={siteDescription}
+        eyebrow="站点"
+        icon="informationCircle"
+        siteInfo={siteInfo}
+        title="关于本站"
+      />
 
       <div className="about-site-content">
         <AboutSiteSection icon="sparkles" title="网站特色">
@@ -394,48 +565,208 @@ export function AboutSitePage() {
 }
 
 export function AboutAuthorPage() {
+  const [articles, setArticles] = useState<BlogArticle[]>([]);
+  const [author, setAuthor] = useState<PublicSiteAuthor | null>(null);
+  const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
+  const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
+  const categories = useMemo(() => deriveBlogCategories(articles), [articles]);
+  const tags = useMemo(() => deriveBlogTags(articles), [articles]);
+  const authorName = getAuthorDisplayName(author);
+  const authorDescription = getAuthorDescription(author);
+  const authorTags = getAuthorTags(author);
+  const socialLinks = Object.entries(author?.socialLinks ?? {}).filter((entry) => entry[1].trim());
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadAuthorData() {
+      setStatus("loading");
+      const [authorResult, siteInfoResult, articlesResult] = await Promise.allSettled([
+        fetchPublicSiteAuthor(),
+        fetchPublicSiteInfo(),
+        fetchPublicArticles({ pageSize: 100 }),
+      ]);
+
+      if (!isActive) return;
+
+      setAuthor(authorResult.status === "fulfilled" ? authorResult.value : null);
+      setSiteInfo(siteInfoResult.status === "fulfilled" ? siteInfoResult.value : null);
+      setArticles(articlesResult.status === "fulfilled" ? articlesResult.value : []);
+      setStatus(articlesResult.status === "rejected" ? "error" : "idle");
+    }
+
+    void loadAuthorData();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
   return (
-    <section className="front-stack about-author">
-      <BlogPageHeader
-        description="作者页先保留个人信息、标签和社交链接区域，后续和用户资料接口打通。"
-        eyebrow="站点"
+    <section className="about-author-page">
+      <SiteHero
+        className="about-author-hero"
+        description={authorDescription}
+        eyebrow="作者"
         icon="personCircle"
+        siteInfo={siteInfo}
         title="关于作者"
       />
-      <div className="author-panel">
-        <img
-          alt="作者工作桌面"
-          src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80"
-        />
-        <div>
-          <p>
-            我喜欢把复杂系统拆成能解释清楚的小块，也喜欢在夜晚出门拍一点城市光线。这个博客会慢慢变成工程和生活的交汇处。
-          </p>
-          <div className="front-tag-list">
-            {["全栈", "写作", "摄影", "React", "Elysia"].map((tag) => (
-              <span key={tag}>#{tag}</span>
+
+      <div className="about-author-content">
+        <section className="about-author-profile" aria-labelledby="about-author-profile-title">
+          <div className="about-author-profile__visual">
+            {author?.avatarUrl ? (
+              <img alt={authorName} src={author.avatarUrl} />
+            ) : (
+              <span className="about-author-profile__avatar">
+                <AppIcon name="personCircle" size={72} />
+              </span>
+            )}
+          </div>
+          <div className="about-author-profile__body">
+            <p className="eyebrow">@{author?.username || defaultAuthor.username}</p>
+            <h2 id="about-author-profile-title">{authorName}</h2>
+            <p>{authorDescription}</p>
+            <div className="front-tag-list">
+              {authorTags.map((tag) => (
+                <span key={tag}>#{tag}</span>
+              ))}
+            </div>
+            <div className="about-author-stats">
+              <AboutAuthorMiniStat
+                label="公开文章"
+                value={formatStatValue(articles.length, "篇", status)}
+              />
+              <AboutAuthorMiniStat
+                label="内容分类"
+                value={formatStatValue(categories.length, "个", status)}
+              />
+              <AboutAuthorMiniStat
+                label="文章标签"
+                value={formatStatValue(tags.length, "个", status)}
+              />
+            </div>
+            <div className="about-author-links">
+              {author?.blogUrl ? (
+                <a
+                  className="front-action-link"
+                  href={author.blogUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <AppIcon name="open" size={18} />
+                  个人主页
+                </a>
+              ) : null}
+              {socialLinks.map(([key, value]) => (
+                <a
+                  className="front-action-link"
+                  href={value}
+                  key={key}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <AppIcon name={key.toLowerCase() === "github" ? "codeSlash" : "link"} size={18} />
+                  {getSocialLabel(key)}
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <AboutSiteSection icon="map" title="写作坐标">
+          <div className="about-author-focus-grid">
+            {authorFocusItems.map((item) => (
+              <AboutAuthorCard item={item} key={item.title} />
             ))}
           </div>
-        </div>
+        </AboutSiteSection>
+
+        <AboutSiteSection icon="construct" title="常用工具">
+          <div className="about-author-tool-grid">
+            {authorToolItems.map((item) => (
+              <AboutAuthorCard item={item} key={item.title} />
+            ))}
+          </div>
+        </AboutSiteSection>
+
+        <section className="about-author-next" aria-labelledby="about-author-next-title">
+          <div>
+            <p className="eyebrow">Next</p>
+            <h2 id="about-author-next-title">继续探索</h2>
+            <p>从文章列表了解更多技术实践，或者去留言板留下一段想法。</p>
+          </div>
+          <div className="about-author-next__actions">
+            <Link className="front-action-link" to="/articles">
+              <AppIcon name="reader" size={18} />
+              全部文章
+            </Link>
+            <Link className="front-action-link" to="/guestbook">
+              <AppIcon name="chatbubbles" size={18} />
+              留言板
+            </Link>
+          </div>
+        </section>
       </div>
     </section>
   );
 }
 
 export function GuestbookPage() {
+  const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSiteInfo() {
+      try {
+        const nextSiteInfo = await fetchPublicSiteInfo();
+        if (!isActive) return;
+        setSiteInfo(nextSiteInfo);
+      } catch {
+        if (!isActive) return;
+        setSiteInfo(null);
+      }
+    }
+
+    void loadSiteInfo();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
   return (
-    <section className="front-stack">
-      <BlogPageHeader
-        description="留言板复用评论系统，支持登录用户留言、回复和后台审核。"
-        eyebrow="站点"
+    <section className="guestbook-page">
+      <SiteHero
+        className="guestbook-hero"
+        description="把问题、建议和想继续聊的话题留在这里。"
+        eyebrow="交流"
         icon="chatbubbles"
+        siteInfo={siteInfo}
         title="留言板"
       />
-      <CommentThread
-        description="这里的数据目标类型是 guestbook，和文章评论分开筛选。"
-        target="guestbook"
-        title="站点留言"
-      />
+
+      <div className="guestbook-content">
+        <section className="guestbook-guidelines" aria-labelledby="guestbook-guidelines-title">
+          <div className="about-site-section__heading">
+            <AppIcon name="sparkles" size={24} />
+            <h2 id="guestbook-guidelines-title">留言前的小约定</h2>
+          </div>
+          <div className="guestbook-guideline-grid">
+            {guestbookGuidelines.map((item) => (
+              <GuestbookGuidelineCard item={item} key={item.title} />
+            ))}
+          </div>
+        </section>
+
+        <CommentThread
+          description="这里的数据目标类型是 guestbook，和文章评论分开筛选。"
+          target="guestbook"
+          title="站点留言"
+        />
+      </div>
     </section>
   );
 }

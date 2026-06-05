@@ -13,6 +13,7 @@ interface SiteInfoRow {
   logo_light_url: string | null;
   favicon_url: string | null;
   home_cover_url: string | null;
+  home_cover_urls: string[] | string;
   home_slogan: string;
   established_at: Date | string;
 }
@@ -47,16 +48,35 @@ function parseTextArray(value: string[] | string) {
     .filter(Boolean);
 }
 
+function cleanOptional(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function cleanList(values: string[] | undefined) {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+function getStoredCoverUrls(values: string[] | string, legacyCoverUrl: string | null) {
+  const homeCoverUrls = cleanList(parseTextArray(values));
+  if (homeCoverUrls.length > 0) return homeCoverUrls;
+
+  const legacyCover = cleanOptional(legacyCoverUrl);
+  return legacyCover ? [legacyCover] : [];
+}
+
 export async function getPublicSiteInfo(client: DbClient = db) {
   return cacheRememberJson(redisKeys.siteInfo, async () => {
     const [row] = await client<SiteInfoRow[]>`
       SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url,
-             home_cover_url, home_slogan, established_at
+             home_cover_url, home_cover_urls, home_slogan, established_at
       FROM site_info
       WHERE id = 1
     `;
 
     if (!row) throw notFound("站点信息尚未配置");
+
+    const homeCoverUrls = getStoredCoverUrls(row.home_cover_urls, row.home_cover_url);
 
     return {
       siteName: row.site_name,
@@ -64,7 +84,8 @@ export async function getPublicSiteInfo(client: DbClient = db) {
       logoDarkUrl: row.logo_dark_url,
       logoLightUrl: row.logo_light_url,
       faviconUrl: row.favicon_url,
-      homeCoverUrl: row.home_cover_url,
+      homeCoverUrl: homeCoverUrls[0] ?? row.home_cover_url,
+      homeCoverUrls,
       homeSlogan: row.home_slogan,
       establishedAt: toIso(row.established_at),
     };
