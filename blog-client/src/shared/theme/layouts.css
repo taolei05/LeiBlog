@@ -1974,7 +1974,9 @@
   overflow: hidden;
   isolation: isolate;
   place-items: center;
-  background: var(--cursor-ink);
+  background:
+    radial-gradient(circle at 50% 42%, rgb(236 72 153 / 28%), transparent 22rem),
+    linear-gradient(135deg, #0a0a0f, #171724 52%, #0b1620);
 }
 
 .articles-index-hero::after,
@@ -1985,7 +1987,7 @@
 }
 
 .articles-index-hero::before {
-  z-index: -2;
+  z-index: -3;
   background-image: var(--articles-index-cover);
   background-position: center;
   background-size: cover;
@@ -1993,7 +1995,34 @@
 
 .articles-index-hero::after {
   z-index: -1;
-  background: rgb(0 0 0 / 56%);
+  background:
+    radial-gradient(circle at 50% 42%, rgb(255 255 255 / 18%), transparent 18rem),
+    linear-gradient(180deg, rgb(9 9 11 / 52%), rgb(9 9 11 / 72%));
+}
+
+.articles-index-hero__carousel {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  overflow: hidden;
+}
+
+.articles-index-hero__cover-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.035);
+  transition:
+    opacity 900ms ease,
+    transform 6500ms ease;
+}
+
+.articles-index-hero__cover-slide--active {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .articles-index-hero__content {
@@ -3181,6 +3210,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .articles-index-hero__cover-slide,
   .home-hero-showcase__slide,
   .home-hero-showcase__dots button {
     transform: none;

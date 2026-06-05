@@ -10,6 +10,11 @@ import { AppIcon } from "../../../shared/icons/AppIcon";
 import { fetchPublicSiteAuthor, fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { BlogPageHeader, EmptyPlaceholder } from "../shared/BlogComponents";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
+import {
+  getHeroCoverUrls,
+  HeroCoverCarousel,
+  useHeroCoverCarousel,
+} from "../shared/HeroCoverCarousel";
 
 const SOCIAL_LABELS: Record<string, string> = {
   bilibili: "Bilibili",
@@ -58,18 +63,7 @@ function getArticleExcerpt(article: BlogArticle) {
 }
 
 function getHomeHeroCover(siteInfo: PublicSiteInfo | null) {
-  return getHomeHeroCovers(siteInfo)[0] ?? null;
-}
-
-function getHomeHeroCovers(siteInfo: PublicSiteInfo | null) {
-  const coverUrls = [
-    ...new Set((siteInfo?.homeCoverUrls ?? []).map((url) => url.trim()).filter(Boolean)),
-  ];
-
-  if (coverUrls.length > 0) return coverUrls;
-
-  const legacyCoverUrl = siteInfo?.homeCoverUrl?.trim();
-  return legacyCoverUrl ? [legacyCoverUrl] : [];
+  return getHeroCoverUrls(siteInfo)[0] ?? null;
 }
 
 function getHomeSlogan(siteInfo: PublicSiteInfo | null) {
@@ -176,42 +170,20 @@ type HomeHeroProps = {
 };
 
 export function HomeHero({ author, siteInfo }: HomeHeroProps) {
-  const coverUrls = useMemo(() => getHomeHeroCovers(siteInfo), [siteInfo]);
-  const [activeCoverIndex, setActiveCoverIndex] = useState(0);
+  const { activeCoverIndex, coverUrls, setActiveCoverIndex } = useHeroCoverCarousel(siteInfo);
   const slogan = getHomeSlogan(siteInfo);
   const siteName = siteInfo?.siteName ?? "LeiBlog";
   const authorName = getAuthorName(author, siteInfo);
 
-  useEffect(() => {
-    setActiveCoverIndex(0);
-  }, [coverUrls]);
-
-  useEffect(() => {
-    if (coverUrls.length <= 1) return undefined;
-
-    const timer = window.setInterval(() => {
-      setActiveCoverIndex((index) => (index + 1) % coverUrls.length);
-    }, 6500);
-
-    return () => window.clearInterval(timer);
-  }, [coverUrls.length]);
-
   return (
     <section aria-label="主页首屏" className="home-hero-showcase">
-      {coverUrls.length > 0 ? (
-        <div aria-hidden className="home-hero-showcase__carousel">
-          {coverUrls.map((coverUrl, index) => (
-            <img
-              alt=""
-              className={`home-hero-showcase__slide${
-                index === activeCoverIndex ? " home-hero-showcase__slide--active" : ""
-              }`}
-              key={coverUrl}
-              src={coverUrl}
-            />
-          ))}
-        </div>
-      ) : null}
+      <HeroCoverCarousel
+        activeIndex={activeCoverIndex}
+        activeSlideClassName="home-hero-showcase__slide--active"
+        className="home-hero-showcase__carousel"
+        coverUrls={coverUrls}
+        slideClassName="home-hero-showcase__slide"
+      />
       <div className="home-hero-showcase__shade" />
       <div className="home-hero-showcase__content">
         <Avatar className="home-hero-showcase__avatar">

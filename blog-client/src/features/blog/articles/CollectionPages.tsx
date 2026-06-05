@@ -11,6 +11,7 @@ import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { BlogPageHeader, EmptyPlaceholder } from "../shared/BlogComponents";
 import type { BlogArticle, BlogCategory, BlogTag } from "../shared/blogApi";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
+import { PageHeroCoverCarousel } from "../shared/HeroCoverCarousel";
 import { getArchiveTagColorStyle, normalizeBlogTagColor } from "../shared/tagColors";
 
 function useArticleIndex() {
@@ -130,20 +131,6 @@ function sortArchiveArticles(articles: BlogArticle[], sortMode: ArchiveSortMode)
     const rightTime = getCategoryArticleTime(right);
     return sortMode === "latest" ? rightTime - leftTime : leftTime - rightTime;
   });
-}
-
-type CategoryHeroStyle = CSSProperties & {
-  "--articles-index-cover"?: string;
-};
-
-function getCategoryHeroStyle(siteInfo: PublicSiteInfo | null): CategoryHeroStyle | undefined {
-  const coverUrl = siteInfo?.homeCoverUrl?.trim();
-
-  if (!coverUrl) return undefined;
-
-  return {
-    "--articles-index-cover": `url("${coverUrl.replace(/"/g, '\\"')}")`,
-  };
 }
 
 const categoryTones = ["violet", "pink", "cyan", "green", "amber"] as const;
@@ -606,8 +593,8 @@ type CategoryDetailViewProps = {
   allArticles: BlogArticle[];
   categories: BlogCategoryGroup[];
   category: BlogCategoryGroup | null;
-  heroStyle: CategoryHeroStyle | undefined;
   onSortChange: (sortMode: CategorySortMode) => void;
+  siteInfo: PublicSiteInfo | null;
   sortMode: CategorySortMode;
   status: "error" | "idle" | "loading";
 };
@@ -616,8 +603,8 @@ function CategoryDetailView({
   allArticles,
   categories,
   category,
-  heroStyle,
   onSortChange,
+  siteInfo,
   sortMode,
   status,
 }: CategoryDetailViewProps) {
@@ -625,7 +612,8 @@ function CategoryDetailView({
 
   return (
     <section className="category-detail-page">
-      <header className="articles-index-hero category-hero" style={heroStyle}>
+      <header className="articles-index-hero category-hero">
+        <PageHeroCoverCarousel siteInfo={siteInfo} />
         <div className="articles-index-hero__content category-hero__content">
           <p className="eyebrow">分类索引</p>
           <h1>
@@ -695,7 +683,6 @@ export function CategoriesPage() {
   const category = activeCategory
     ? (categories.find((item) => item.slug === activeCategory) ?? null)
     : null;
-  const heroStyle = useMemo(() => getCategoryHeroStyle(siteInfo), [siteInfo]);
 
   useEffect(() => {
     let isActive = true;
@@ -724,8 +711,8 @@ export function CategoriesPage() {
         allArticles={allArticles}
         categories={categories}
         category={category}
-        heroStyle={heroStyle}
         onSortChange={setSortMode}
+        siteInfo={siteInfo}
         sortMode={sortMode}
         status={status}
       />
@@ -734,7 +721,8 @@ export function CategoriesPage() {
 
   return (
     <section className="category-index-page">
-      <header className="articles-index-hero category-hero" style={heroStyle}>
+      <header className="articles-index-hero category-hero">
+        <PageHeroCoverCarousel siteInfo={siteInfo} />
         <div className="articles-index-hero__content category-hero__content">
           <p className="eyebrow">分类索引</p>
           <h1>
@@ -764,8 +752,8 @@ export function CategoriesPage() {
 
 type TagDetailViewProps = {
   allArticles: BlogArticle[];
-  heroStyle: CategoryHeroStyle | undefined;
   onSortChange: (sortMode: CategorySortMode) => void;
+  siteInfo: PublicSiteInfo | null;
   sortMode: CategorySortMode;
   status: "error" | "idle" | "loading";
   tag: BlogTagGroup | null;
@@ -774,8 +762,8 @@ type TagDetailViewProps = {
 
 function TagDetailView({
   allArticles,
-  heroStyle,
   onSortChange,
+  siteInfo,
   sortMode,
   status,
   tag,
@@ -786,7 +774,8 @@ function TagDetailView({
 
   return (
     <section className="tag-detail-page">
-      <header className="articles-index-hero tag-hero" style={heroStyle}>
+      <header className="articles-index-hero tag-hero">
+        <PageHeroCoverCarousel siteInfo={siteInfo} />
         <div className="articles-index-hero__content category-hero__content">
           <p className="eyebrow">标签索引</p>
           <h1>
@@ -849,7 +838,6 @@ export function TagsPage() {
   const [sortMode, setSortMode] = useState<CategorySortMode>("latest");
   const tags = useMemo(() => buildTagGroups(allArticles), [allArticles]);
   const tag = activeTag ? (tags.find((item) => item.slug === activeTag) ?? null) : null;
-  const heroStyle = useMemo(() => getCategoryHeroStyle(siteInfo), [siteInfo]);
   const linkedArticleCount = useMemo(() => {
     const articleIds = new Set<string>();
     for (const item of tags) {
@@ -886,8 +874,8 @@ export function TagsPage() {
     return (
       <TagDetailView
         allArticles={allArticles}
-        heroStyle={heroStyle}
         onSortChange={setSortMode}
+        siteInfo={siteInfo}
         sortMode={sortMode}
         status={status}
         tag={tag}
@@ -898,7 +886,8 @@ export function TagsPage() {
 
   return (
     <section className="tag-index-page">
-      <header className="articles-index-hero tag-hero" style={heroStyle}>
+      <header className="articles-index-hero tag-hero">
+        <PageHeroCoverCarousel siteInfo={siteInfo} />
         <div className="articles-index-hero__content category-hero__content">
           <p className="eyebrow">标签索引</p>
           <h1>
@@ -943,7 +932,6 @@ export function ArchivesPage() {
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [sortMode, setSortMode] = useState<ArchiveSortMode>("latest");
   const archiveGroups = useMemo(() => buildArchiveGroups(articles, sortMode), [articles, sortMode]);
-  const heroStyle = useMemo(() => getCategoryHeroStyle(siteInfo), [siteInfo]);
 
   useEffect(() => {
     let isActive = true;
@@ -968,7 +956,8 @@ export function ArchivesPage() {
 
   return (
     <section className="archive-page">
-      <header className="articles-index-hero archive-hero" style={heroStyle}>
+      <header className="articles-index-hero archive-hero">
+        <PageHeroCoverCarousel siteInfo={siteInfo} />
         <div className="articles-index-hero__content archive-hero__content">
           <p className="eyebrow">文章索引</p>
           <h1>

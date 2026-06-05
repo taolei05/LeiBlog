@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { Key } from "@heroui/react";
 
 import { Label, ListBox, Select } from "@heroui/react";
@@ -11,6 +10,7 @@ import { fetchPublicSiteInfo } from "../../../shared/site/site-info";
 import { ArticleTagLink, EmptyPlaceholder } from "../shared/BlogComponents";
 import type { BlogArticle } from "../shared/blogApi";
 import { fetchPublicArticles } from "../shared/blogApi";
+import { PageHeroCoverCarousel } from "../shared/HeroCoverCarousel";
 
 type ArticleSortMode = "earliest" | "latest" | "views";
 
@@ -53,22 +53,6 @@ function sortArticles(articles: BlogArticle[], sortMode: ArticleSortMode) {
     const rightTime = getArticleTime(right);
     return sortMode === "latest" ? rightTime - leftTime : leftTime - rightTime;
   });
-}
-
-type ArticlesIndexHeroStyle = CSSProperties & {
-  "--articles-index-cover"?: string;
-};
-
-function getArticlesIndexHeroStyle(
-  siteInfo: PublicSiteInfo | null,
-): ArticlesIndexHeroStyle | undefined {
-  const coverUrl = siteInfo?.homeCoverUrl?.trim();
-
-  if (!coverUrl) return undefined;
-
-  return {
-    "--articles-index-cover": `url("${coverUrl.replace(/"/g, '\\"')}")`,
-  };
 }
 
 type ArticleIndexCardProps = {
@@ -178,7 +162,6 @@ export function BlogArticlesPage() {
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [sortMode, setSortMode] = useState<ArticleSortMode>("latest");
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
-  const heroStyle = useMemo(() => getArticlesIndexHeroStyle(siteInfo), [siteInfo]);
   const sortedArticles = useMemo(() => sortArticles(articles, sortMode), [articles, sortMode]);
 
   useEffect(() => {
@@ -230,7 +213,8 @@ export function BlogArticlesPage() {
 
   return (
     <section className="articles-index-page">
-      <header className="articles-index-hero" style={heroStyle}>
+      <header className="articles-index-hero">
+        <PageHeroCoverCarousel siteInfo={siteInfo} />
         <div className="articles-index-hero__content">
           <p className="eyebrow">文章索引</p>
           <h1>

@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Card } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
@@ -11,10 +11,7 @@ import { fetchPublicSiteAuthor, fetchPublicSiteInfo } from "../../../shared/site
 import { CommentThread } from "../shared/CommentThread";
 import type { BlogArticle } from "../shared/blogApi";
 import { deriveBlogCategories, deriveBlogTags, fetchPublicArticles } from "../shared/blogApi";
-
-type SiteHeroStyle = CSSProperties & {
-  "--articles-index-cover"?: string;
-};
+import { PageHeroCoverCarousel } from "../shared/HeroCoverCarousel";
 
 type AboutSiteCardItem = {
   description: string;
@@ -226,16 +223,6 @@ function SiteHeroWaves() {
   );
 }
 
-function getSiteHeroStyle(siteInfo: PublicSiteInfo | null): SiteHeroStyle | undefined {
-  const coverUrl = siteInfo?.homeCoverUrl?.trim();
-
-  if (!coverUrl) return undefined;
-
-  return {
-    "--articles-index-cover": `url("${coverUrl.replace(/"/g, '\\"')}")`,
-  };
-}
-
 function SiteHero({
   className,
   description,
@@ -251,10 +238,9 @@ function SiteHero({
   siteInfo: PublicSiteInfo | null;
   title: string;
 }) {
-  const heroStyle = useMemo(() => getSiteHeroStyle(siteInfo), [siteInfo]);
-
   return (
-    <header className={`articles-index-hero site-hero ${className}`} style={heroStyle}>
+    <header className={`articles-index-hero site-hero ${className}`}>
+      <PageHeroCoverCarousel siteInfo={siteInfo} />
       <div className="articles-index-hero__content site-hero__content">
         <p className="eyebrow">{eyebrow}</p>
         <h1>
