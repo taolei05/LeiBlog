@@ -29,6 +29,8 @@ type SiteInfoState = {
   description: string;
   establishedAt: string;
   faviconUrl: string;
+  homeCoverUrl: string;
+  homeSlogan: string;
   logoDarkUrl: string;
   logoLightUrl: string;
   siteName: string;
@@ -57,6 +59,8 @@ type SiteInfoItem = {
   description: string;
   establishedAt: string;
   faviconUrl: string | null;
+  homeCoverUrl: string | null;
+  homeSlogan: string;
   logoDarkUrl: string | null;
   logoLightUrl: string | null;
   siteName: string;
@@ -87,6 +91,12 @@ type ApiKeyItem = {
   resendApiKey: string | null;
 };
 
+type ApiKeyEmailCodeResult = {
+  expiresAt: string;
+  sent: boolean;
+  validMinutes: number;
+};
+
 type SecretFieldKey = "deeplApiKey" | "ipgeolocationApiKey" | "resendApiKey" | "resendDomain";
 
 type SiteSettingsSaveKind = "filing" | "site-config" | "site-info";
@@ -102,6 +112,42 @@ type TestModalState =
       kind: "resend";
       target: "apiKey" | "domain";
     };
+
+type TestResultState = {
+  message: string;
+  status: "danger" | "success";
+};
+
+const secretRevealCopy: Record<
+  SecretFieldKey,
+  {
+    description: string;
+    title: string;
+    valueLabel: string;
+  }
+> = {
+  deeplApiKey: {
+    description: "正在查看 DeepL API Key。查看前需要通过管理员邮箱验证码。",
+    title: "查看 DeepL API Key",
+    valueLabel: "DeepL API Key",
+  },
+  ipgeolocationApiKey: {
+    description: "正在查看 IPGeolocation API Key。查看前需要通过管理员邮箱验证码。",
+    title: "查看 IPGeolocation API Key",
+    valueLabel: "IPGeolocation API Key",
+  },
+  resendApiKey: {
+    description:
+      "正在查看 Resend API Key。验证码会发送到管理员邮箱；Resend 未配置已验证域名时，只能向注册 Resend 的邮箱发送邮件，请先配置 Resend 域名。",
+    title: "查看 Resend API Key",
+    valueLabel: "Resend API Key",
+  },
+  resendDomain: {
+    description: "Resend 域名不是密钥，可直接复制。",
+    title: "查看 Resend 域名",
+    valueLabel: "Resend 域名",
+  },
+};
 
 type IntegrationLoginInfo = {
   device: string;
@@ -129,7 +175,7 @@ const saveConfirmationCopy: Record<
   },
   "site-info": {
     confirmLabel: "确认保存",
-    description: "保存后，站点名称、Logo、favicon 和建站时间会更新。",
+    description: "保存后，站点名称、Logo、favicon、首页封面和首页文案会更新。",
     title: "确认保存站点信息？",
   },
 };
@@ -138,6 +184,8 @@ const defaultSiteInfo: SiteInfoState = {
   description: "",
   establishedAt: toLocalDateTimeValue(new Date()),
   faviconUrl: "",
+  homeCoverUrl: "",
+  homeSlogan: "",
   logoDarkUrl: "",
   logoLightUrl: "",
   siteName: "",
@@ -162,6 +210,9 @@ const defaultFiling: FilingState = {
   policeUrl: "",
 };
 
+const revealCodeResendCooldownMs = 60_000;
+const revealCodeResendStorageKey = "leiblog:admin:api-key-reveal-code-resend-available-at";
+
 function toLocalDateTimeValue(date: Date) {
   const timezoneOffset = date.getTimezoneOffset() * 60_000;
 
@@ -172,6 +223,79 @@ function toOptional(value: string) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed : null;
+}
+
+function formatCountdown(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+function readRevealCodeResendAvailableAt() {
+  const rawValue = window.localStorage.getItem(revealCodeResendStorageKey);
+
+  if (!rawValue) {
+    return null;
+  }
+
+  const availableAt = Number(rawValue);
+
+  if (!Number.isFinite(availableAt) || availableAt <= Date.now()) {
+    window.localStorage.removeItem(revealCodeResendStorageKey);
+
+    return null;
+  }
+
+  return availableAt;
+}
+
+function getTestModalCopy(state: TestModalState | null) {
+  if (!state) {
+    return {
+      actionLabel: "开始测试",
+      description: "测试结果会在当前弹窗中反馈。",
+      resultTitle: "测试结果",
+      title: "测试配置",
+    };
+  }
+
+  switch (state.kind) {
+    case "deepl":
+      return {
+        actionLabel: "翻译测试",
+        description: "输入一段中文文本，验证 DeepL API Key 是否可正常翻译。",
+        resultTitle: "DeepL API Key 测试结果",
+        title: "测试 DeepL API Key",
+      };
+    case "ipgeolocation":
+      return {
+        actionLabel: "开始测试",
+        description: "读取当前管理员最近一次登录 IP、地点和设备，验证定位服务是否可用。",
+        resultTitle: "IPGeolocation API Key 测试结果",
+        title: "测试 IPGeolocation API Key",
+      };
+    case "resend":
+      return state.target === "domain"
+        ? {
+            actionLabel: "测试域名",
+            description: "验证 Resend 发信域名配置是否可用；成功后会发送提醒邮件到管理员邮箱。",
+            resultTitle: "Resend 域名测试结果",
+            title: "测试 Resend 域名",
+          }
+        : {
+            actionLabel: "测试 API Key",
+            description: "验证 Resend API Key 是否可用；成功后会发送提醒邮件到管理员邮箱。",
+            resultTitle: "Resend API Key 测试结果",
+            title: "测试 Resend API Key",
+          };
+    default: {
+      const exhaustiveState: never = state;
+
+      return exhaustiveState;
+    }
+  }
 }
 
 function splitKeywords(value: string) {
@@ -205,6 +329,7 @@ export function SiteSettingsPage() {
   const [logoLightFile, setLogoLightFile] = useState<File | null>(null);
   const [logoDarkFile, setLogoDarkFile] = useState<File | null>(null);
   const [faviconFile, setFaviconFile] = useState<File | null>(null);
+  const [homeCoverFile, setHomeCoverFile] = useState<File | null>(null);
   const [keyFlags, setKeyFlags] = useState({
     hasDeepLApiKey: false,
     hasIpgeolocationApiKey: false,
@@ -213,9 +338,14 @@ export function SiteSettingsPage() {
   const [revealKey, setRevealKey] = useState<SecretFieldKey | null>(null);
   const [emailCode, setEmailCode] = useState("");
   const [revealedValue, setRevealedValue] = useState("");
+  const [revealCodeExpiresAt, setRevealCodeExpiresAt] = useState<string | null>(null);
+  const [revealCodeValidMinutes, setRevealCodeValidMinutes] = useState<number | null>(null);
+  const [revealCountdownSeconds, setRevealCountdownSeconds] = useState(0);
+  const [revealResendAvailableAt, setRevealResendAvailableAt] = useState<number | null>(null);
+  const [revealResendCountdownSeconds, setRevealResendCountdownSeconds] = useState(0);
   const [testModalState, setTestModalState] = useState<TestModalState | null>(null);
   const [testText, setTestText] = useState("你好，LeiBlog");
-  const [testResult, setTestResult] = useState("");
+  const [testResult, setTestResult] = useState<TestResultState | null>(null);
   const [testLogin, setTestLogin] = useState<IntegrationLoginInfo | null>(null);
   const [notice, setNotice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -223,10 +353,15 @@ export function SiteSettingsPage() {
   const [pendingSave, setPendingSave] = useState<SiteSettingsSaveKind | null>(null);
   const isReadOnly = session.isReadOnly;
   const isResendDomainReveal = revealKey === "resendDomain";
-  const revealModalTitle = isResendDomainReveal ? "查看 Resend 域名" : "查看 API Key";
-  const revealModalDescription = isResendDomainReveal
-    ? "Resend 域名不是密钥，可直接查看和复制。"
-    : "仅管理员可以查看密钥，查看前需要通过管理员邮箱验证码。";
+  const revealCopy = revealKey ? secretRevealCopy[revealKey] : secretRevealCopy.resendApiKey;
+  const isSecretRevealed = Boolean(revealedValue);
+  const revealSendLabel =
+    revealResendCountdownSeconds > 0
+      ? `重新发送验证码 ${revealResendCountdownSeconds}s`
+      : revealCodeExpiresAt
+        ? "重新发送验证码"
+        : "发送验证码";
+  const testModalCopy = getTestModalCopy(testModalState);
 
   function updateNotice(message: string) {
     setNotice(message);
@@ -245,6 +380,8 @@ export function SiteSettingsPage() {
         description: siteInfoResponse.item.description,
         establishedAt: toLocalDateTimeValue(new Date(siteInfoResponse.item.establishedAt)),
         faviconUrl: siteInfoResponse.item.faviconUrl ?? "",
+        homeCoverUrl: siteInfoResponse.item.homeCoverUrl ?? "",
+        homeSlogan: siteInfoResponse.item.homeSlogan,
         logoDarkUrl: siteInfoResponse.item.logoDarkUrl ?? "",
         logoLightUrl: siteInfoResponse.item.logoLightUrl ?? "",
         siteName: siteInfoResponse.item.siteName,
@@ -283,6 +420,60 @@ export function SiteSettingsPage() {
   useEffect(() => {
     void loadSettings();
   }, []);
+
+  useEffect(() => {
+    setRevealResendAvailableAt(readRevealCodeResendAvailableAt());
+  }, []);
+
+  useEffect(() => {
+    if (!revealCodeExpiresAt) {
+      setRevealCountdownSeconds(0);
+
+      return;
+    }
+
+    const expiresAt = revealCodeExpiresAt;
+
+    function updateCountdown() {
+      const remainingSeconds = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000);
+
+      setRevealCountdownSeconds(Math.max(0, remainingSeconds));
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [revealCodeExpiresAt]);
+
+  useEffect(() => {
+    if (!revealResendAvailableAt) {
+      setRevealResendCountdownSeconds(0);
+
+      return;
+    }
+
+    const availableAt = revealResendAvailableAt;
+
+    function updateCountdown() {
+      const remainingSeconds = Math.ceil((availableAt - Date.now()) / 1000);
+
+      if (remainingSeconds <= 0) {
+        window.localStorage.removeItem(revealCodeResendStorageKey);
+        setRevealResendAvailableAt(null);
+        setRevealResendCountdownSeconds(0);
+
+        return;
+      }
+
+      setRevealResendCountdownSeconds(remainingSeconds);
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [revealResendAvailableAt]);
 
   function requestSave(kind: SiteSettingsSaveKind, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -330,12 +521,17 @@ export function SiteSettingsPage() {
       const faviconUrl = faviconFile
         ? (await uploadAdminMediaFile({ file: faviconFile, folderSlug: "site" })).item.accessUrl
         : siteInfo.faviconUrl;
+      const homeCoverUrl = homeCoverFile
+        ? (await uploadAdminMediaFile({ file: homeCoverFile, folderSlug: "site" })).item.accessUrl
+        : siteInfo.homeCoverUrl;
 
       await adminFetch("/admin/system/site-info", {
         body: {
           description: siteInfo.description,
           establishedAt: new Date(siteInfo.establishedAt).toISOString(),
           faviconUrl: toOptional(faviconUrl),
+          homeCoverUrl: toOptional(homeCoverUrl),
+          homeSlogan: siteInfo.homeSlogan,
           logoDarkUrl: toOptional(logoDarkUrl),
           logoLightUrl: toOptional(logoLightUrl),
           siteName: siteInfo.siteName,
@@ -345,6 +541,7 @@ export function SiteSettingsPage() {
       setLogoLightFile(null);
       setLogoDarkFile(null);
       setFaviconFile(null);
+      setHomeCoverFile(null);
       updateNotice("站点信息已保存");
       await loadSettings();
     } catch (error) {
@@ -409,23 +606,53 @@ export function SiteSettingsPage() {
   }
 
   async function sendRevealCode() {
-    if (isResendDomainReveal) return;
+    if (isResendDomainReveal) {
+      return;
+    }
+
+    if (revealResendCountdownSeconds > 0) {
+      updateNotice(`请 ${revealResendCountdownSeconds} 秒后再发送验证码`);
+
+      return;
+    }
 
     try {
-      const response = await adminFetch<{ devCode?: string; sent: boolean }>(
+      const response = await adminFetch<ApiKeyEmailCodeResult>(
         "/admin/system/api-keys/email-code",
-        { method: "POST" },
+        {
+          method: "POST",
+        },
       );
+
+      if (response.sent) {
+        const resendAvailableAt = Date.now() + revealCodeResendCooldownMs;
+
+        setRevealCodeExpiresAt(response.expiresAt);
+        setRevealCodeValidMinutes(response.validMinutes);
+        setRevealResendAvailableAt(resendAvailableAt);
+        setRevealResendCountdownSeconds(Math.ceil(revealCodeResendCooldownMs / 1000));
+        window.localStorage.setItem(revealCodeResendStorageKey, String(resendAvailableAt));
+      } else {
+        setRevealCodeExpiresAt(null);
+        setRevealCodeValidMinutes(null);
+      }
+
       updateNotice(
-        response.devCode ? `验证码已生成：${response.devCode}` : "验证码已发送到管理员邮箱",
+        response.sent
+          ? "验证码已发送到管理员邮箱"
+          : "验证码未发送：请先配置 Resend API Key 和已验证的 Resend 域名",
       );
     } catch (error) {
+      setRevealCodeExpiresAt(null);
+      setRevealCodeValidMinutes(null);
       updateNotice(error instanceof Error ? error.message : "验证码发送失败");
     }
   }
 
   async function revealSecretValue() {
-    if (!revealKey) return;
+    if (!revealKey) {
+      return;
+    }
 
     if (isResendDomainReveal) {
       setRevealedValue(siteConfig.resendDomain || "未配置");
@@ -445,7 +672,7 @@ export function SiteSettingsPage() {
       });
       const keys = response.item;
       setRevealedValue(keys[revealKey] ?? "未配置");
-      updateNotice("验证通过，已显示密钥");
+      updateNotice(`验证通过，已显示 ${secretRevealCopy[revealKey].valueLabel}`);
     } catch (error) {
       updateNotice(error instanceof Error ? error.message : "API Key 查看失败");
     }
@@ -455,11 +682,14 @@ export function SiteSettingsPage() {
     setRevealKey(key);
     setEmailCode("");
     setRevealedValue(key === "resendDomain" ? siteConfig.resendDomain || "未配置" : "");
+    setRevealCodeExpiresAt(null);
+    setRevealCodeValidMinutes(null);
+    setRevealCountdownSeconds(0);
   }
 
   function openTestModal(state: TestModalState) {
     setTestModalState(state);
-    setTestResult("");
+    setTestResult(null);
     setTestLogin(null);
   }
 
@@ -474,11 +704,11 @@ export function SiteSettingsPage() {
         },
         method: "POST",
       });
-      setTestResult(response.message);
+      setTestResult({ message: response.message, status: "success" });
       showOperationToast(response.message, "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Resend 测试失败";
-      setTestResult(message);
+      setTestResult({ message, status: "danger" });
       showOperationToast(message, "danger");
     } finally {
       setIsTesting(false);
@@ -499,11 +729,11 @@ export function SiteSettingsPage() {
         },
       );
       const message = `${response.message}：${response.translatedText ?? ""}`;
-      setTestResult(message);
+      setTestResult({ message, status: "success" });
       showOperationToast(message, "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "DeepL 测试失败";
-      setTestResult(message);
+      setTestResult({ message, status: "danger" });
       showOperationToast(message, "danger");
     } finally {
       setIsTesting(false);
@@ -519,12 +749,12 @@ export function SiteSettingsPage() {
       }>("/admin/system/api-keys/test-ipgeolocation", {
         method: "POST",
       });
-      setTestResult(response.message);
+      setTestResult({ message: response.message, status: "success" });
       setTestLogin(response.login ?? null);
       showOperationToast(response.message, "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "IPGeolocation 测试失败";
-      setTestResult(message);
+      setTestResult({ message, status: "danger" });
       showOperationToast(message, "danger");
     } finally {
       setIsTesting(false);
@@ -571,6 +801,23 @@ export function SiteSettingsPage() {
                 setState: setSiteInfo,
               })}
               value={siteInfo.description}
+            />
+            <MediaAssetField
+              folderSlug="site"
+              label="主页封面"
+              localFile={homeCoverFile}
+              onChange={(value) => setSiteInfo((state) => ({ ...state, homeCoverUrl: value }))}
+              onLocalFileChange={setHomeCoverFile}
+              value={siteInfo.homeCoverUrl}
+            />
+            <SettingsTextArea
+              description="前台主页首屏会以打字效果展示这段文案。"
+              label="主页文案"
+              onChange={createInputHandler<SiteInfoState>({
+                key: "homeSlogan",
+                setState: setSiteInfo,
+              })}
+              value={siteInfo.homeSlogan}
             />
             <MediaAssetField
               folderSlug="site"
@@ -657,14 +904,14 @@ export function SiteSettingsPage() {
               value={siteConfig.copyright}
             />
             <SecretSettingField
-              canReveal={Boolean(siteConfig.resendDomain)}
               configured={Boolean(siteConfig.resendDomain)}
               label="Resend 域名"
               onChange={(value) => setSiteConfig((state) => ({ ...state, resendDomain: value }))}
-              onReveal={() => openRevealModal("resendDomain")}
               onTest={() => openTestModal({ kind: "resend", target: "domain" })}
               description="Resend 已验证的发信域名。"
               inputType="text"
+              prefixIcon="globe"
+              suffixAction="copy"
               testLabel="测试"
               value={siteConfig.resendDomain}
             />
@@ -831,7 +1078,7 @@ export function SiteSettingsPage() {
         }}
         variant="blur"
       >
-        <Modal.Container placement="center" size="lg">
+        <Modal.Container placement="auto" size="lg">
           <Modal.Dialog>
             <div className="admin-form-modal admin-form-modal--reveal">
               <Modal.CloseTrigger />
@@ -840,31 +1087,51 @@ export function SiteSettingsPage() {
                   <AppIcon name="eye" />
                 </Modal.Icon>
                 <div>
-                  <Modal.Heading>{revealModalTitle}</Modal.Heading>
-                  <p className="admin-form-modal__description">{revealModalDescription}</p>
+                  <Modal.Heading>{revealCopy.title}</Modal.Heading>
+                  <p className="admin-form-modal__description">{revealCopy.description}</p>
                 </div>
               </Modal.Header>
               <Modal.Body>
                 <div className="settings-form">
-                  {isResendDomainReveal ? null : (
-                    <InputOTP
-                      className="secret-reveal-otp"
-                      maxLength={6}
-                      onChange={setEmailCode}
-                      pushPasswordManagerStrategy="none"
-                      value={emailCode}
-                      variant="secondary"
-                    >
-                      <InputOTP.Group>
-                        {Array.from({ length: 6 }).map((_, index) => (
-                          <InputOTP.Slot index={index} key={index} />
-                        ))}
-                      </InputOTP.Group>
-                    </InputOTP>
-                  )}
+                  {!isResendDomainReveal && !isSecretRevealed ? (
+                    <>
+                      <InputOTP
+                        className="secret-reveal-otp"
+                        maxLength={6}
+                        onChange={setEmailCode}
+                        pushPasswordManagerStrategy="none"
+                        value={emailCode}
+                        variant="secondary"
+                      >
+                        <InputOTP.Group>
+                          {Array.from({ length: 6 }).map((_, index) => (
+                            <InputOTP.Slot index={index} key={index} />
+                          ))}
+                        </InputOTP.Group>
+                      </InputOTP>
+                      {revealCodeExpiresAt ? (
+                        <div
+                          className="secret-reveal-countdown"
+                          data-expired={revealCountdownSeconds <= 0}
+                        >
+                          <AppIcon name="calendar" />
+                          <span>有效期 {revealCodeValidMinutes ?? 10} 分钟</span>
+                          <strong>
+                            {revealCountdownSeconds > 0
+                              ? formatCountdown(revealCountdownSeconds)
+                              : "已过期"}
+                          </strong>
+                        </div>
+                      ) : (
+                        <p className="secret-reveal-help">
+                          验证码有效期为 10 分钟，发送后会显示倒计时。
+                        </p>
+                      )}
+                    </>
+                  ) : null}
                   {revealedValue ? (
                     <div className="secret-reveal-panel">
-                      <SecretValue label="当前值" value={revealedValue} />
+                      <SecretValue label={revealCopy.valueLabel} value={revealedValue} />
                       <Button
                         onPress={() => void navigator.clipboard.writeText(revealedValue)}
                         size="sm"
@@ -878,22 +1145,22 @@ export function SiteSettingsPage() {
                   ) : null}
                 </div>
               </Modal.Body>
-              {isResendDomainReveal ? null : (
+              {!isResendDomainReveal && !isSecretRevealed ? (
                 <Modal.Footer>
                   <Button
-                    isDisabled={isReadOnly}
+                    isDisabled={isReadOnly || revealResendCountdownSeconds > 0}
                     onPress={() => void sendRevealCode()}
                     variant="tertiary"
                   >
                     <AppIcon name="mail" />
-                    发送验证码
+                    {revealSendLabel}
                   </Button>
                   <Button isDisabled={isReadOnly} onPress={() => void revealSecretValue()}>
                     <AppIcon name="eye" />
                     验证并显示
                   </Button>
                 </Modal.Footer>
-              )}
+              ) : null}
             </div>
           </Modal.Dialog>
         </Modal.Container>
@@ -906,7 +1173,7 @@ export function SiteSettingsPage() {
         }}
         variant="blur"
       >
-        <Modal.Container placement="center" size="sm">
+        <Modal.Container placement="auto" size="sm">
           <Modal.Dialog>
             <div className="admin-form-modal">
               <Modal.CloseTrigger />
@@ -915,45 +1182,58 @@ export function SiteSettingsPage() {
                   <AppIcon name="sparkles" />
                 </Modal.Icon>
                 <div>
-                  <Modal.Heading>测试配置</Modal.Heading>
-                  <p className="admin-form-modal__description">测试结果会在当前弹窗中反馈。</p>
+                  <Modal.Heading>{testModalCopy.title}</Modal.Heading>
+                  <p className="admin-form-modal__description">{testModalCopy.description}</p>
                 </div>
               </Modal.Header>
               <Modal.Body>
                 <div className="settings-form">
-                  {testModalState?.kind === "deepl" ? (
-                    <SettingsTextField
-                      label="翻译文本"
-                      onChange={(event) => setTestText(event.target.value)}
-                      value={testText}
-                    />
-                  ) : null}
-                  {testModalState?.kind === "ipgeolocation" ? (
-                    <p className="site-settings-card__hint">
-                      将读取当前管理员最近一次登录 IP、地点和设备。
-                    </p>
-                  ) : null}
-                  <Button
-                    isDisabled={isTesting}
-                    onPress={() => {
-                      if (testModalState?.kind === "deepl") {
-                        void runDeepLTest();
-                        return;
-                      }
-                      if (testModalState?.kind === "ipgeolocation") {
-                        void runIpGeolocationTest();
-                        return;
-                      }
-                      if (testModalState?.kind === "resend") {
-                        void runResendTest(testModalState.target);
-                      }
-                    }}
-                  >
-                    <AppIcon name="send" />
-                    {testModalState?.kind === "deepl" ? "翻译" : "开始测试"}
-                  </Button>
-                  {testResult ? <p className="site-settings-card__hint">{testResult}</p> : null}
-                  {testLogin ? (
+                  {testResult ? (
+                    <div className="integration-test-result" data-status={testResult.status}>
+                      <AppIcon
+                        name={testResult.status === "success" ? "checkmarkCircle" : "warning"}
+                      />
+                      <div>
+                        <strong>{testModalCopy.resultTitle}</strong>
+                        <p>{testResult.message}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {testModalState?.kind === "deepl" ? (
+                        <SettingsTextField
+                          label="翻译文本"
+                          onChange={(event) => setTestText(event.target.value)}
+                          value={testText}
+                        />
+                      ) : null}
+                      {testModalState?.kind === "ipgeolocation" ? (
+                        <p className="site-settings-card__hint">
+                          将读取当前管理员最近一次登录 IP、地点和设备。
+                        </p>
+                      ) : null}
+                      <Button
+                        isDisabled={isTesting}
+                        onPress={() => {
+                          if (testModalState?.kind === "deepl") {
+                            void runDeepLTest();
+                            return;
+                          }
+                          if (testModalState?.kind === "ipgeolocation") {
+                            void runIpGeolocationTest();
+                            return;
+                          }
+                          if (testModalState?.kind === "resend") {
+                            void runResendTest(testModalState.target);
+                          }
+                        }}
+                      >
+                        <AppIcon name="send" />
+                        {testModalCopy.actionLabel}
+                      </Button>
+                    </>
+                  )}
+                  {testResult && testLogin ? (
                     <div className="secret-reveal-panel">
                       <SecretValue label="登录 IP" value={testLogin.ip} />
                       <SecretValue label="登录地点" value={testLogin.location} />
@@ -1046,16 +1326,18 @@ function SettingsTextArea({
 }
 
 type SecretSettingFieldProps = {
-  canReveal: boolean;
+  canReveal?: boolean;
   configured: boolean;
   description?: string;
   fieldError?: string;
   inputType?: "password" | "text";
   label: string;
   onChange: (value: string) => void;
-  onReveal: () => void;
+  onReveal?: () => void;
   onTest: () => void;
   placeholder?: string;
+  prefixIcon?: AppIconName;
+  suffixAction?: "copy" | "reveal";
   testLabel: string;
   value: string;
 };
@@ -1071,35 +1353,100 @@ function SecretSettingField({
   onReveal,
   onTest,
   placeholder,
+  prefixIcon = "key",
+  suffixAction = "reveal",
   testLabel,
   value,
 }: SecretSettingFieldProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const isPasswordField = inputType === "password";
+  const isCopyAction = suffixAction === "copy";
+  const hasTypedSecret = isPasswordField && Boolean(value.trim());
+  const inputTypeValue = isPasswordField && isVisible ? "text" : inputType;
+  const placeholderValue = value ? undefined : configured ? "••••••••" : placeholder;
+  const revealButtonLabel = isPasswordField
+    ? isVisible
+      ? `隐藏${label}`
+      : hasTypedSecret
+        ? `显示${label}`
+        : `查看${label}`
+    : `查看${label}`;
+
+  function handleRevealPress() {
+    if (!onReveal) {
+      return;
+    }
+
+    if (!isPasswordField) {
+      onReveal();
+      return;
+    }
+
+    const nextIsVisible = !isVisible;
+
+    setIsVisible(nextIsVisible);
+
+    if (nextIsVisible && !value.trim() && configured && canReveal) {
+      onReveal();
+    }
+  }
+
+  async function handleCopyPress() {
+    const valueToCopy = value.trim();
+
+    if (!valueToCopy) {
+      showOperationToast(`${label}为空，无法复制`, "danger");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(valueToCopy);
+      showOperationToast(`${label}已复制`, "success");
+    } catch {
+      showOperationToast(`${label}复制失败`, "danger");
+    }
+  }
+
   return (
     <TextField className="secret-setting-field" fullWidth>
       <Label>{label}</Label>
       <div className="secret-setting-row">
         <InputGroup fullWidth variant="secondary">
           <InputGroup.Prefix>
-            <AppIcon name="key" size={16} />
+            <AppIcon name={prefixIcon} size={16} />
           </InputGroup.Prefix>
           <InputGroup.Input
             onChange={(event) => onChange(event.target.value)}
-            placeholder={value ? undefined : configured ? "••••••••" : placeholder}
-            type={inputType}
+            placeholder={placeholderValue}
+            type={inputTypeValue}
             value={value}
           />
           <InputGroup.Suffix className="secret-input-actions">
-            <Button
-              isDisabled={!canReveal}
-              isIconOnly
-              aria-label={`查看${label}`}
-              onPress={onReveal}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <AppIcon name="eye" size={16} />
-            </Button>
+            {isCopyAction ? (
+              <Button
+                isDisabled={!value.trim()}
+                isIconOnly
+                aria-label={`复制${label}`}
+                onPress={() => void handleCopyPress()}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <AppIcon name="copy" size={16} />
+              </Button>
+            ) : (
+              <Button
+                isDisabled={!canReveal && !hasTypedSecret}
+                isIconOnly
+                aria-label={revealButtonLabel}
+                onPress={handleRevealPress}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <AppIcon name={isPasswordField && !isVisible ? "eyeOff" : "eye"} size={16} />
+              </Button>
+            )}
           </InputGroup.Suffix>
         </InputGroup>
         <Button onPress={onTest} type="button" variant="tertiary">

@@ -1,17 +1,17 @@
+import type { AuthUser } from "../../shared/auth";
+
 import {
-  assertWritableAdmin,
-  requireAdmin,
-  requireAdminOrDemo,
-  type AuthUser,
-} from "../../shared/auth";
-import { consumeEmailCode, createEmailCode } from "../../auth/service";
+  consumeEmailCode,
+  createEmailCode,
+  renderNoticeEmailHtml,
+  renderVerificationCodeEmailHtml,
+} from "../../auth/service";
+import { assertWritableAdmin, requireAdmin, requireAdminOrDemo } from "../../shared/auth";
 import { clearSiteCache } from "../../shared/cache/content";
-import {
-  decryptSecret,
-  encryptSecret,
-  type StoredEncryptedSecret,
-} from "../../shared/crypto";
-import { db, type DbClient } from "../../shared/db";
+import type { StoredEncryptedSecret } from "../../shared/crypto";
+import { decryptSecret, encryptSecret } from "../../shared/crypto";
+import type { DbClient } from "../../shared/db";
+import { db } from "../../shared/db";
 import { validationError } from "../../shared/errors";
 
 export interface SystemSiteInfoInput {
@@ -20,6 +20,8 @@ export interface SystemSiteInfoInput {
   logoDarkUrl?: string | null;
   logoLightUrl?: string | null;
   faviconUrl?: string | null;
+  homeCoverUrl?: string | null;
+  homeSlogan?: string;
   establishedAt: string;
 }
 
@@ -48,6 +50,8 @@ interface SiteInfoRow {
   logo_dark_url: string | null;
   logo_light_url: string | null;
   favicon_url: string | null;
+  home_cover_url: string | null;
+  home_slogan: string;
   established_at: Date | string;
 }
 
@@ -127,6 +131,8 @@ function toSiteInfo(row: SiteInfoRow) {
     logoDarkUrl: row.logo_dark_url,
     logoLightUrl: row.logo_light_url,
     faviconUrl: row.favicon_url,
+    homeCoverUrl: row.home_cover_url,
+    homeSlogan: row.home_slogan,
     establishedAt: toIso(row.established_at),
   };
 }
@@ -201,9 +207,11 @@ async function sendResendTestEmail({
   to,
   subject,
   text,
+  html,
 }: {
   apiKey: string;
   domain: string;
+  html: string;
   subject: string;
   text: string;
   to: string;
@@ -211,6 +219,7 @@ async function sendResendTestEmail({
   const response = await fetch("https://api.resend.com/emails", {
     body: JSON.stringify({
       from: `LeiBlog <no-reply@${domain}>`,
+      html,
       subject,
       text,
       to: [to],
@@ -260,7 +269,8 @@ export async function getSystemSiteInfo(currentUser: AuthUser, client: DbClient 
   requireAdminOrDemo(currentUser);
 
   const [row] = await client<SiteInfoRow[]>`
-    SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url, established_at
+    SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url,
+           home_cover_url, home_slogan, established_at
     FROM site_info
     WHERE id = 1
   `;
@@ -277,7 +287,8 @@ export async function updateSystemSiteInfo(
 
   await client`
     INSERT INTO site_info (
-      id, site_name, description, logo_dark_url, logo_light_url, favicon_url, established_at
+      id, site_name, description, logo_dark_url, logo_light_url, favicon_url,
+      home_cover_url, home_slogan, established_at
     )
     VALUES (
       1,
@@ -286,6 +297,8 @@ export async function updateSystemSiteInfo(
       ${cleanOptional(input.logoDarkUrl)},
       ${cleanOptional(input.logoLightUrl)},
       ${cleanOptional(input.faviconUrl)},
+      ${cleanOptional(input.homeCoverUrl)},
+      ${input.homeSlogan?.trim() ?? ""},
       ${parseDate(input.establishedAt)}
     )
     ON CONFLICT (id) DO UPDATE
@@ -294,6 +307,8 @@ export async function updateSystemSiteInfo(
         logo_dark_url = EXCLUDED.logo_dark_url,
         logo_light_url = EXCLUDED.logo_light_url,
         favicon_url = EXCLUDED.favicon_url,
+        home_cover_url = EXCLUDED.home_cover_url,
+        home_slogan = EXCLUDED.home_slogan,
         established_at = EXCLUDED.established_at
   `;
 
@@ -421,18 +436,48 @@ export async function createApiKeyRevealCode(
     throw validationError("管理员账号未配置邮箱，无法发送验证码");
   }
 
-  return createEmailCode(
+  const stored = readStoredApiKeys(await getSiteConfigRow(client));
+
+  if (!stored.resendApiKey) {
+    throw validationError("Resend API Key 未配置，无法发送管理员邮箱验证码");
+  }
+
+  if (!stored.resendDomain) {
+    throw validationError(
+      "Resend 域名未配置，无法发送管理员邮箱验证码。Resend 未配置已验证域名时，只能向注册 Resend 的邮箱发送邮件，请先配置并验证 Resend 域名。"
+    );
+  }
+
+  const result = await createEmailCode(
     {
       email: currentUser.email,
       purpose: "email_change",
     },
     {
       client,
+      emailHtml: (code, validMinutes) =>
+        renderVerificationCodeEmailHtml({
+          code,
+          description: "你正在查看 LeiBlog 后台 API Key。请使用下面的验证码完成管理员邮箱校验。",
+          title: "LeiBlog API Key 查看验证码",
+          validMinutes,
+        }),
       emailSubject: "LeiBlog API Key 查看验证码",
       emailText: (code, validMinutes) =>
         `你正在查看 LeiBlog 后台 API Key，验证码：${code}，${validMinutes} 分钟内有效。`,
     }
   );
+
+  if (!result.sent) {
+    throw validationError("验证码邮件未发送，请检查 Resend 域名和 API Key 配置");
+  }
+
+  return {
+    expiresAt: result.expiresAt,
+    ok: true,
+    sent: true,
+    validMinutes: result.validMinutes,
+  };
 }
 
 export async function revealSystemApiKeys(
@@ -483,6 +528,10 @@ export async function testResendIntegration(
   await sendResendTestEmail({
     apiKey,
     domain,
+    html: renderNoticeEmailHtml({
+      description: `${label}配置成功。系统已经使用当前配置向管理员邮箱发送了这封测试邮件。`,
+      title: `LeiBlog ${label}配置成功`,
+    }),
     subject: `LeiBlog ${label}配置成功`,
     text: `${label}配置成功。`,
     to: currentUser.email,

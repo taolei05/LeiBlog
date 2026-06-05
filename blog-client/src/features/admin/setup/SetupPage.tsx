@@ -18,6 +18,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { InteractiveCursor } from "../../../app/blog/InteractiveCursor";
 import { AppIcon } from "../../../shared/icons";
+import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
+import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
 import { signInAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
 import { showErrorToast, showSuccessToast } from "../../../shared/toast/operation-toast";
@@ -358,15 +360,18 @@ export function SetupPage() {
                 {currentStepMeta.label}
               </h2>
             </div>
-            <Button
-              className="setup-drawer-trigger"
-              onPress={() => setIsSetupDrawerOpen(true)}
-              type="button"
-              variant="secondary"
-            >
-              <AppIcon name="menu" />
-              配置步骤
-            </Button>
+            <div className="setup-wizard__topbar-actions">
+              <ThemeSwitcher />
+              <Button
+                className="setup-drawer-trigger"
+                onPress={() => setIsSetupDrawerOpen(true)}
+                type="button"
+                variant="secondary"
+              >
+                <AppIcon name="menu" />
+                步骤
+              </Button>
+            </div>
           </div>
 
           <Form
@@ -427,6 +432,7 @@ export function SetupPage() {
                 <SetupTextField
                   description="可填写图片链接，也可以从本地上传。"
                   label="头像链接"
+                  localImageEditorKind="avatar"
                   localFile={pendingUploads.adminAvatar}
                   onChange={updateField("adminAvatar")}
                   onFileChange={(file) => updatePendingUpload("adminAvatar", file)}
@@ -697,6 +703,7 @@ export function SetupPage() {
               <SetupSidebarContent
                 currentStep={currentStep}
                 isSubmitting={isSubmitting}
+                showThemeSwitcher={false}
                 onEnterReadonlyDemo={() => {
                   setIsSetupDrawerOpen(false);
                   void enterReadonlyDemo();
@@ -725,18 +732,20 @@ type SetupSidebarContentProps = {
   currentStep: number;
   isSubmitting: boolean;
   onEnterReadonlyDemo: () => void;
+  showThemeSwitcher?: boolean;
 };
 
 function SetupSidebarContent({
   currentStep,
   isSubmitting,
   onEnterReadonlyDemo,
+  showThemeSwitcher = true,
 }: SetupSidebarContentProps) {
   return (
     <>
       <div className="setup-shell__brand-row">
         <NavBrand />
-        <ThemeSwitcher />
+        {showThemeSwitcher ? <ThemeSwitcher /> : null}
       </div>
       <div className="setup-shell__intro">
         <p className="eyebrow">首次配置</p>
@@ -797,6 +806,7 @@ type SetupTextFieldProps = {
   fieldError?: string;
   isRequired?: boolean;
   label: string;
+  localImageEditorKind?: LocalImageEditorKind;
   localFile?: File | null;
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onFileChange?: (file: File | null) => void;
@@ -812,6 +822,7 @@ function SetupTextField({
   fieldError,
   isRequired,
   label,
+  localImageEditorKind,
   localFile,
   onFileChange,
   trailingControl,
@@ -819,53 +830,87 @@ function SetupTextField({
   ...props
 }: SetupTextFieldProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [editingFile, setEditingFile] = useState<File | null>(null);
   const descriptionText = description ?? (isRequired ? "必填" : undefined);
   const input = <Input {...props} type={type} />;
+  const uploadControl = onFileChange ? (
+    <>
+      <input
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+        className="visually-hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          if (file && localImageEditorKind) {
+            setEditingFile(file);
+          } else {
+            onFileChange(file);
+          }
+          event.target.value = "";
+        }}
+        ref={fileInputRef}
+        type="file"
+      />
+      <Button
+        className="setup-asset-upload-button"
+        onPress={() => fileInputRef.current?.click()}
+        size="sm"
+        type="button"
+        variant="tertiary"
+      >
+        <AppIcon name="cloudUpload" />
+        本地上传
+      </Button>
+    </>
+  ) : null;
+  const hasTrailingControl = trailingControl || uploadControl;
 
   return (
     <TextField className={className} fullWidth isRequired={isRequired}>
       <Label>{label}</Label>
-      {trailingControl ? (
+      {hasTrailingControl ? (
         <div className="setup-field-control-row">
           {input}
-          <div className="setup-field-control-row__action">{trailingControl}</div>
+          <div className="setup-field-control-row__action">
+            {trailingControl}
+            {uploadControl}
+          </div>
         </div>
       ) : (
         input
       )}
-      {onFileChange ? (
+      {onFileChange && localFile ? (
         <div className="setup-asset-field">
-          <input
-            accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-            className="visually-hidden"
-            onChange={(event) => {
-              onFileChange(event.target.files?.[0] ?? null);
-              event.target.value = "";
-            }}
-            ref={fileInputRef}
-            type="file"
-          />
-          <Button
-            onPress={() => fileInputRef.current?.click()}
-            size="sm"
-            type="button"
-            variant="tertiary"
-          >
-            <AppIcon name="cloudUpload" />
-            本地上传
+          <span>{localFile.name}</span>
+          <Button onPress={() => onFileChange(null)} size="sm" type="button" variant="ghost">
+            清除
           </Button>
-          {localFile ? (
-            <>
-              <span>{localFile.name}</span>
-              <Button onPress={() => onFileChange(null)} size="sm" type="button" variant="ghost">
-                清除
-              </Button>
-            </>
+          {localImageEditorKind ? (
+            <Button
+              onPress={() => setEditingFile(localFile)}
+              size="sm"
+              type="button"
+              variant="tertiary"
+            >
+              <AppIcon name="create" />
+              重新编辑
+            </Button>
           ) : null}
         </div>
       ) : null}
       {descriptionText ? <Description>{descriptionText}</Description> : null}
       <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
+      {localImageEditorKind ? (
+        <LocalImageEditorDialog
+          file={editingFile}
+          isOpen={editingFile !== null}
+          kind={localImageEditorKind}
+          onApply={(file) => {
+            onFileChange?.(file);
+            setEditingFile(null);
+          }}
+          onCancel={() => setEditingFile(null)}
+        />
+      ) : null}
     </TextField>
   );
 }

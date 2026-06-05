@@ -51,7 +51,8 @@ describe("MDX rendering safety", () => {
 
     expect(html).toContain("mdx-callout");
     expect(html).toContain("article-code-window");
-    expect(html).toContain('href="https://example.com/image.png"');
+    expect(html).toContain("mdx-image-link__preview");
+    expect(html).toContain('src="https://example.com/image.png"');
     expect(html).toContain('href="/articles/next"');
   });
 });

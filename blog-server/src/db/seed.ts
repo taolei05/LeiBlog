@@ -496,7 +496,8 @@ async function seedSite(client: DbClient) {
 
   await client`
     INSERT INTO site_info (
-      id, site_name, description, logo_dark_url, logo_light_url, favicon_url, established_at
+      id, site_name, description, logo_dark_url, logo_light_url, favicon_url,
+      home_cover_url, home_slogan, established_at
     )
     VALUES (
       1,
@@ -505,6 +506,8 @@ async function seedSite(client: DbClient) {
       'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=320&q=80',
       'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=320&q=80',
       '/favicon.svg',
+      NULL,
+      '',
       '2026-05-01 09:00:00+08'::timestamptz
     )
     ON CONFLICT (id) DO UPDATE
@@ -513,6 +516,8 @@ async function seedSite(client: DbClient) {
         logo_dark_url = EXCLUDED.logo_dark_url,
         logo_light_url = EXCLUDED.logo_light_url,
         favicon_url = EXCLUDED.favicon_url,
+        home_cover_url = EXCLUDED.home_cover_url,
+        home_slogan = EXCLUDED.home_slogan,
         established_at = EXCLUDED.established_at
   `;
 
@@ -673,6 +678,12 @@ async function ensureSeedCompatibleSchema(client: DbClient) {
   await client.unsafe(`
     ALTER TABLE comments
     ADD COLUMN IF NOT EXISTS target_type comment_target_type
+  `);
+  await client.unsafe(`
+    ALTER TABLE comments
+    ADD COLUMN IF NOT EXISTS comment_ip inet,
+    ADD COLUMN IF NOT EXISTS comment_location jsonb,
+    ADD COLUMN IF NOT EXISTS comment_device jsonb
   `);
   await client.unsafe(`
     UPDATE comments

@@ -51,7 +51,9 @@ export function AppRouter() {
           <Route path="articles" element={<BlogArticlesPage />} />
           <Route path="articles/:slug" element={<BlogArticleDetailPage />} />
           <Route path="categories" element={<BlogCategoriesPage />} />
+          <Route path="categories/:slug" element={<BlogCategoriesPage />} />
           <Route path="tags" element={<BlogTagsPage />} />
+          <Route path="tags/:slug" element={<BlogTagsPage />} />
           <Route path="archives" element={<ArchivesPage />} />
           <Route path="list" element={<ArticleListPage />} />
           <Route path="about-site" element={<AboutSitePage />} />

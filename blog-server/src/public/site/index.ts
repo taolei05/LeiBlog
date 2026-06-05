@@ -1,11 +1,13 @@
 import { Elysia } from "elysia";
 
 import {
+  SiteAuthorResponse,
   SiteConfigResponse,
   SiteFilingResponse,
   SiteInfoResponse,
 } from "./model";
 import {
+  getPublicSiteAuthor,
   getPublicSiteConfig,
   getPublicSiteFiling,
   getPublicSiteInfo,
@@ -29,4 +31,10 @@ export const publicSiteModule = new Elysia({ prefix: "/site" })
     item: await getPublicSiteFiling(),
   }), {
     response: { 200: SiteFilingResponse },
+  })
+  .get("/author", async () => ({
+    ok: true,
+    item: await getPublicSiteAuthor(),
+  }), {
+    response: { 200: SiteAuthorResponse },
   });

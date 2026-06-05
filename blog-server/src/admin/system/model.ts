@@ -6,6 +6,8 @@ const SystemSiteInfoItem = t.Object({
   logoDarkUrl: t.Nullable(t.String()),
   logoLightUrl: t.Nullable(t.String()),
   faviconUrl: t.Nullable(t.String()),
+  homeCoverUrl: t.Nullable(t.String()),
+  homeSlogan: t.String(),
   establishedAt: t.String(),
 });
 
@@ -34,6 +36,8 @@ export const SystemSiteInfoBody = t.Object({
   logoDarkUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
   logoLightUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
   faviconUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+  homeCoverUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+  homeSlogan: t.Optional(t.String({ maxLength: 500 })),
   establishedAt: t.String(),
 });
 
@@ -87,8 +91,10 @@ export const SystemFilingResponse = t.Object({
 });
 
 export const ApiKeyEmailCodeResponse = t.Object({
+  expiresAt: t.String(),
   ok: t.Boolean(),
   sent: t.Boolean(),
+  validMinutes: t.Number(),
   devCode: t.Optional(t.String()),
 });
 

@@ -9,6 +9,8 @@ import {
   MeResponse,
   OkResponse,
   UpdateMeBody,
+  UploadAvatarBody,
+  UploadAvatarResponse,
 } from "./model";
 import {
   changeMyPassword,
@@ -16,6 +18,7 @@ import {
   getUserProfile,
   requestEmailChangeCode,
   updateMe,
+  uploadMyAvatar,
 } from "./service";
 import { authContext } from "../shared/auth/plugin";
 
@@ -37,6 +40,12 @@ export const meModule = new Elysia({ prefix: "/api/me" })
     body: UpdateMeBody,
     response: {
       200: MeResponse,
+    },
+  })
+  .post("/avatar", ({ currentUser, body }) => uploadMyAvatar(currentUser.id, body), {
+    body: UploadAvatarBody,
+    response: {
+      200: UploadAvatarResponse,
     },
   })
   .post("/email-change-code", ({ currentUser, body }) => (

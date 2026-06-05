@@ -6,6 +6,8 @@ export const SiteInfoItem = t.Object({
   logoDarkUrl: t.Nullable(t.String()),
   logoLightUrl: t.Nullable(t.String()),
   faviconUrl: t.Nullable(t.String()),
+  homeCoverUrl: t.Nullable(t.String()),
+  homeSlogan: t.String(),
   establishedAt: t.String(),
 });
 
@@ -25,6 +27,16 @@ export const SiteFilingItem = t.Object({
   policeUrl: t.Nullable(t.String()),
 });
 
+export const SiteAuthorItem = t.Object({
+  avatarUrl: t.Nullable(t.String()),
+  blogUrl: t.Nullable(t.String()),
+  description: t.String(),
+  name: t.Nullable(t.String()),
+  socialLinks: t.Record(t.String(), t.String()),
+  tags: t.Array(t.String()),
+  username: t.String(),
+});
+
 export const SiteInfoResponse = t.Object({
   ok: t.Boolean(),
   item: SiteInfoItem,
@@ -38,4 +50,9 @@ export const SiteConfigResponse = t.Object({
 export const SiteFilingResponse = t.Object({
   ok: t.Boolean(),
   item: SiteFilingItem,
+});
+
+export const SiteAuthorResponse = t.Object({
+  ok: t.Boolean(),
+  item: SiteAuthorItem,
 });

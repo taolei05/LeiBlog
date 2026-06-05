@@ -16,6 +16,7 @@ import {
   TextArea,
   TextField,
 } from "@heroui/react";
+import type { Key } from "@react-types/shared";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -160,11 +161,11 @@ export function ArticleEditPage() {
   const isNewArticle = !id;
   const [formState, setFormState] = useState<ArticleFormState>(emptyFormState);
   const [contributors, setContributors] = useState<AdminContributorItem[]>([]);
-  const [contributorPickerId, setContributorPickerId] = useState("");
   const [contributorForm, setContributorForm] =
     useState<ContributorFormState>(emptyContributorForm);
   const [isContributorModalOpen, setIsContributorModalOpen] = useState(false);
   const [isCreatingContributor, setIsCreatingContributor] = useState(false);
+  const [contributorAvatarLocalFile, setContributorAvatarLocalFile] = useState<File | null>(null);
   const [coverLocalFile, setCoverLocalFile] = useState<File | null>(null);
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(!isNewArticle);
@@ -306,12 +307,15 @@ export function ArticleEditPage() {
   );
 
   function addContributor(contributorId: string) {
-    setContributorPickerId("");
     setFormState((state) =>
       state.contributorIds.includes(contributorId)
         ? state
         : { ...state, contributorIds: [...state.contributorIds, contributorId] },
     );
+  }
+
+  function updateContributorSelection(contributorIds: Key[]) {
+    setFormState((state) => ({ ...state, contributorIds: contributorIds.map(String) }));
   }
 
   function updateContributorForm(key: keyof ContributorFormState, value: string) {
@@ -328,11 +332,19 @@ export function ArticleEditPage() {
 
     try {
       setIsCreatingContributor(true);
+      const avatarUrl = contributorAvatarLocalFile
+        ? (
+            await uploadAdminMediaFile({
+              file: contributorAvatarLocalFile,
+              folderSlug: "avatars",
+            })
+          ).item.accessUrl
+        : contributorForm.avatarUrl;
       const response = await adminFetch<{ item: AdminContributorItem }>(
         "/admin/content/contributors",
         {
           body: {
-            avatarUrl: contributorOptionalValue(contributorForm.avatarUrl),
+            avatarUrl: contributorOptionalValue(avatarUrl),
             linkUrl: contributorOptionalValue(contributorForm.linkUrl),
             name,
           },
@@ -343,6 +355,7 @@ export function ArticleEditPage() {
       setContributors((items) => [...items, response.item]);
       addContributor(response.item.id);
       setContributorForm(emptyContributorForm);
+      setContributorAvatarLocalFile(null);
       setIsContributorModalOpen(false);
       updateNotice("贡献者已创建并关联");
     } catch (error) {
@@ -362,7 +375,10 @@ export function ArticleEditPage() {
         isSubmitting={isCreatingContributor}
         onOpenChange={(isOpen) => {
           setIsContributorModalOpen(isOpen);
-          if (!isOpen) setContributorForm(emptyContributorForm);
+          if (!isOpen) {
+            setContributorForm(emptyContributorForm);
+            setContributorAvatarLocalFile(null);
+          }
         }}
         onSubmit={createContributor}
         submitLabel="创建并关联"
@@ -376,12 +392,12 @@ export function ArticleEditPage() {
           placeholder="输入贡献者名字"
           value={contributorForm.name}
         />
-        <AdminInputGroupField
-          icon="image"
-          label="头像链接"
+        <MediaAssetField
+          folderSlug="avatars"
+          label="头像"
+          localFile={contributorAvatarLocalFile}
           onChange={(value) => updateContributorForm("avatarUrl", value)}
-          placeholder="https://..."
-          type="url"
+          onLocalFileChange={setContributorAvatarLocalFile}
           value={contributorForm.avatarUrl}
         />
         <AdminInputGroupField
@@ -552,46 +568,51 @@ export function ArticleEditPage() {
               value={formState.coverImageUrl}
             />
             <div className="article-contributor-field">
-              <Select
-                fullWidth
-                onChange={(nextValue) => {
-                  if (nextValue === null) return;
-                  addContributor(String(nextValue));
-                }}
-                value={contributorPickerId}
-                variant="secondary"
-              >
-                <Label>选择已存在的贡献者</Label>
-                <Select.Trigger>
-                  <AppIcon name="people" size={16} />
-                  <Select.Value />
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox aria-label="选择贡献者">
-                    {contributors.map((contributor) => (
-                      <ListBox.Item
-                        id={contributor.id}
-                        key={contributor.id}
-                        textValue={contributor.name}
-                      >
-                        {contributor.name}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
-              <Button
-                isDisabled={session.isReadOnly}
-                onPress={() => setIsContributorModalOpen(true)}
-                size="sm"
-                type="button"
-                variant="tertiary"
-              >
-                <AppIcon name="personAdd" />
-                新建贡献者
-              </Button>
+              <div className="article-contributor-picker-row">
+                <Select
+                  fullWidth
+                  onChange={updateContributorSelection}
+                  placeholder="选择贡献者"
+                  selectionMode="multiple"
+                  value={formState.contributorIds}
+                  variant="secondary"
+                >
+                  <Label>选择已存在的贡献者</Label>
+                  <Select.Trigger>
+                    <AppIcon name="people" size={16} />
+                    <Select.Value>
+                      {({ isPlaceholder, selectedText }) =>
+                        isPlaceholder ? "选择贡献者" : selectedText
+                      }
+                    </Select.Value>
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox aria-label="选择贡献者">
+                      {contributors.map((contributor) => (
+                        <ListBox.Item
+                          id={contributor.id}
+                          key={contributor.id}
+                          textValue={contributor.name}
+                        >
+                          {contributor.name}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+                <Button
+                  isDisabled={session.isReadOnly}
+                  onPress={() => setIsContributorModalOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="personAdd" />
+                  新建贡献者
+                </Button>
+              </div>
               <TagGroup
                 aria-label="已关联贡献者"
                 onRemove={(keys) =>

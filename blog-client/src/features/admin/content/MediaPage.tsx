@@ -1,8 +1,10 @@
-import { AlertDialog, Button, Card, Modal } from "@heroui/react";
+import { AlertDialog, Button, Card, Modal, ScrollShadow } from "@heroui/react";
 import { useEffect, useRef, useState } from "react";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
+import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
+import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
@@ -73,6 +75,12 @@ type FolderModalState =
       setNotice: (message: string) => void;
     };
 
+type MediaUploadEditState = {
+  file: File;
+  folderSlug: string;
+  kind: LocalImageEditorKind;
+};
+
 function formatFileSize(bytes: number) {
   const units = ["B", "KB", "MB", "GB"] as const;
   let value = bytes;
@@ -121,7 +129,7 @@ type MediaPreviewModalProps = {
 function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalProps) {
   return (
     <Modal.Backdrop isOpen={item !== null} onOpenChange={onOpenChange} variant="blur">
-      <Modal.Container placement="center" scroll="inside" size="lg">
+      <Modal.Container placement="center" size="lg">
         <Modal.Dialog className="media-preview-modal">
           <Modal.CloseTrigger />
           <Modal.Header>
@@ -134,43 +142,52 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
             </div>
           </Modal.Header>
           <Modal.Body className="media-preview-modal__body">
-            <div className="media-preview-card__visual">
-              {item?.kind === "image" ? (
-                <img alt={item.alt} src={item.url} />
-              ) : item ? (
-                <MediaThumb item={item} />
-              ) : (
-                <span className="media-thumb media-thumb--document">
-                  <AppIcon name="images" />
-                </span>
-              )}
-            </div>
-            <dl className="media-detail-list">
-              <div>
-                <dt>文件名</dt>
-                <dd>{item?.fileName ?? "暂无"}</dd>
+            <ScrollShadow
+              hideScrollBar
+              className="media-preview-modal__scroll"
+              orientation="vertical"
+              size={36}
+            >
+              <div className="media-preview-modal__content">
+                <div className="media-preview-card__visual">
+                  {item?.kind === "image" ? (
+                    <img alt={item.alt} src={item.url} />
+                  ) : item ? (
+                    <MediaThumb item={item} />
+                  ) : (
+                    <span className="media-thumb media-thumb--document">
+                      <AppIcon name="images" />
+                    </span>
+                  )}
+                </div>
+                <dl className="media-detail-list">
+                  <div>
+                    <dt>文件名</dt>
+                    <dd>{item?.fileName ?? "暂无"}</dd>
+                  </div>
+                  <div>
+                    <dt>链接</dt>
+                    <dd>{item?.url ?? "暂无"}</dd>
+                  </div>
+                  <div>
+                    <dt>文件夹</dt>
+                    <dd>{item?.folderName ?? "暂无"}</dd>
+                  </div>
+                  <div>
+                    <dt>类型</dt>
+                    <dd>{item?.usage ?? "暂无"}</dd>
+                  </div>
+                  <div>
+                    <dt>大小</dt>
+                    <dd>{item?.size ?? "暂无"}</dd>
+                  </div>
+                  <div>
+                    <dt>上传时间</dt>
+                    <dd>{item?.uploadedAt ?? "暂无"}</dd>
+                  </div>
+                </dl>
               </div>
-              <div>
-                <dt>链接</dt>
-                <dd>{item?.url ?? "暂无"}</dd>
-              </div>
-              <div>
-                <dt>文件夹</dt>
-                <dd>{item?.folderName ?? "暂无"}</dd>
-              </div>
-              <div>
-                <dt>类型</dt>
-                <dd>{item?.usage ?? "暂无"}</dd>
-              </div>
-              <div>
-                <dt>大小</dt>
-                <dd>{item?.size ?? "暂无"}</dd>
-              </div>
-              <div>
-                <dt>上传时间</dt>
-                <dd>{item?.uploadedAt ?? "暂无"}</dd>
-              </div>
-            </dl>
+            </ScrollShadow>
           </Modal.Body>
           <Modal.Footer>
             <Button slot="close" variant="tertiary">
@@ -296,6 +313,7 @@ export function MediaPage() {
   const [renameFileName, setRenameFileName] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaRow | null>(null);
+  const [uploadEditState, setUploadEditState] = useState<MediaUploadEditState | null>(null);
   const [pageNotice, setPageNoticeState] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -333,16 +351,29 @@ export function MediaPage() {
     void loadMedia();
   }, [reloadKey]);
 
-  async function uploadFile(file: File) {
+  function getUploadEditorKind(file: File, folderSlug: string): LocalImageEditorKind | null {
+    if (!file.type.startsWith("image/")) return null;
+    if (folderSlug === "article-covers") return "article-cover";
+    if (folderSlug === "avatars") return "avatar";
+
+    return null;
+  }
+
+  async function uploadFile(file: File, folderSlug = activeFolder?.slug ?? "article-covers") {
     const formData = new FormData();
     formData.set("file", file);
-    formData.set("folderSlug", activeFolder?.slug ?? "article-covers");
+    formData.set("folderSlug", folderSlug);
 
-    await adminFetch("/admin/media/", {
-      body: formData,
-      method: "POST",
-    });
-    setReloadKey((key) => key + 1);
+    try {
+      await adminFetch("/admin/media/", {
+        body: formData,
+        method: "POST",
+      });
+      setPageNotice(`已上传 ${file.name}`);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setPageNotice(error instanceof Error ? error.message : "媒体上传失败");
+    }
   }
 
   async function submitRenameMedia() {
@@ -515,14 +546,6 @@ export function MediaPage() {
       },
     },
     {
-      access: "read",
-      icon: "informationCircle",
-      label: "详细",
-      onPress: (row) => {
-        setPreviewItem(row);
-      },
-    },
-    {
       access: "danger",
       confirmationDescription: (row) =>
         `删除「${row.fileName}」后，已写入文章、头像或站点配置的链接不会自动替换，相关资源可能失效。`,
@@ -633,6 +656,14 @@ export function MediaPage() {
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (!file) return;
+
+            const folderSlug = activeFolder?.slug ?? "article-covers";
+            const kind = getUploadEditorKind(file, folderSlug);
+            if (kind) {
+              setUploadEditState({ file, folderSlug, kind });
+              event.target.value = "";
+              return;
+            }
 
             void uploadFile(file);
             event.target.value = "";
@@ -816,6 +847,18 @@ export function MediaPage() {
           )}
         </div>
       </div>
+      <LocalImageEditorDialog
+        file={uploadEditState?.file ?? null}
+        isOpen={uploadEditState !== null}
+        kind={uploadEditState?.kind ?? "article-cover"}
+        onApply={(file) => {
+          if (!uploadEditState) return;
+
+          void uploadFile(file, uploadEditState.folderSlug);
+          setUploadEditState(null);
+        }}
+        onCancel={() => setUploadEditState(null)}
+      />
     </AdminDataPage>
   );
 }

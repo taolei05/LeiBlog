@@ -6,6 +6,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import { PhotoProvider, PhotoView } from "react-photo-view";
 import { Link } from "react-router-dom";
 
 import { resolveApiAssetUrl } from "../api/api-base-url";
@@ -68,9 +69,15 @@ function MdxImageLink({ alt, caption, src }: MdxImageLinkProps) {
 
   return (
     <figure className="mdx-image-link">
-      <a href={imageSrc} rel="noreferrer" target="_blank">
-        <img alt={alt} loading="lazy" src={imageSrc} />
-      </a>
+      <PhotoView src={imageSrc}>
+        <button
+          aria-label={`预览图片：${alt || "文章图片"}`}
+          className="mdx-image-link__preview"
+          type="button"
+        >
+          <img alt={alt} loading="lazy" src={imageSrc} />
+        </button>
+      </PhotoView>
       {caption ? <figcaption>{caption}</figcaption> : null}
     </figure>
   );
@@ -186,8 +193,10 @@ function MdxRendererContent({ children, className }: MdxRendererProps) {
 
 export function MdxRenderer({ children, className }: MdxRendererProps) {
   return (
-    <MDXProvider components={mdxComponents} disableParentContext>
-      <MdxRendererContent className={className}>{children}</MdxRendererContent>
-    </MDXProvider>
+    <PhotoProvider>
+      <MDXProvider components={mdxComponents} disableParentContext>
+        <MdxRendererContent className={className}>{children}</MdxRendererContent>
+      </MDXProvider>
+    </PhotoProvider>
   );
 }

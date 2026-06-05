@@ -34,6 +34,7 @@ export const CommentItemSchema = t.Object({
   createdAt: t.String(),
   updatedAt: t.String(),
   deletedAt: t.Nullable(t.String()),
+  location: t.Nullable(t.String()),
   author: CommentAuthorSchema,
 });
 
@@ -57,12 +58,29 @@ export interface CommentRow {
   avatar_url: string | null;
   tags: string[];
   blog_url: string | null;
+  comment_location?: unknown;
 }
 
 function toIso(value: Date | string | null) {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
   return new Date(value).toISOString();
+}
+
+function readJsonText(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field.trim() ? field.trim() : null;
+}
+
+function describeLocation(value: unknown) {
+  const location = readJsonText(value, "location");
+  if (location) return location;
+
+  const city = readJsonText(value, "city");
+  const country = readJsonText(value, "country_name") ?? readJsonText(value, "country");
+  const parts = [country, city].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 export function toCommentItem(row: CommentRow) {
@@ -77,6 +95,7 @@ export function toCommentItem(row: CommentRow) {
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
     deletedAt: toIso(row.deleted_at),
+    location: describeLocation(row.comment_location),
     author: {
       id: row.user_id,
       username: row.username,

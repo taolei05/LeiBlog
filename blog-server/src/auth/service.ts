@@ -67,6 +67,7 @@ interface IpGeolocationConfigRow {
 
 interface AuthServiceOptions {
   client?: DbClient;
+  emailHtml?: (code: string, validMinutes: number) => string;
   emailSubject?: string;
   emailText?: (code: string, validMinutes: number) => string;
 }
@@ -78,6 +79,164 @@ const RESET_TOKEN_MINUTES = 30;
 function cleanOptional(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderTextLines(text: string) {
+  return text
+    .split("\n")
+    .map((line) => `<p style="margin:0 0 10px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(line)}</p>`)
+    .join("");
+}
+
+export function renderLeiBlogEmailHtml({
+  bodyHtml,
+  preheader,
+  title,
+}: {
+  bodyHtml: string;
+  preheader: string;
+  title: string;
+}) {
+  return `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>${escapeHtml(title)}</title>
+  </head>
+  <body style="margin:0;background:#f6f7fb;color:#111827;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;text-size-adjust:100%;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#f6f7fb;padding:18px 10px;border-collapse:separate;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:520px;background:#ffffff;border:1px solid #e4e4e7;border-radius:20px;overflow:hidden;box-shadow:0 18px 46px rgba(15,23,42,0.10);border-collapse:separate;">
+            <tr>
+              <td style="padding:22px 22px 16px;background:linear-gradient(135deg,#fff 0%,#fdf2f8 46%,#eff6ff 100%);border-bottom:1px solid #ececf0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:separate;">
+                  <tr>
+                    <td style="width:34px;height:34px;border:1px solid #111827;border-radius:10px;background:#fff;color:#111827;font-size:16px;font-weight:800;line-height:34px;text-align:center;">L</td>
+                    <td style="padding-left:9px;color:#111827;font-size:16px;font-weight:800;line-height:1.2;">LeiBlog</td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 8px;color:#ec4899;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:1.4;">Security Mail</p>
+                <h1 style="margin:0;color:#09090b;font-size:24px;line-height:1.22;font-weight:900;">${escapeHtml(title)}</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 22px 24px;">
+                ${bodyHtml}
+                <div style="margin-top:22px;padding-top:16px;border-top:1px solid #ececf0;">
+                  <p style="margin:0;color:#71717a;font-size:12px;line-height:1.7;">这封邮件由 LeiBlog 自动发送。如果不是你本人操作，可以忽略此邮件。</p>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+export function renderPlainEmailHtml({
+  subject,
+  text,
+}: {
+  subject: string;
+  text: string;
+}) {
+  return renderLeiBlogEmailHtml({
+    bodyHtml: renderTextLines(text),
+    preheader: text,
+    title: subject,
+  });
+}
+
+export function renderVerificationCodeEmailHtml({
+  code,
+  description,
+  title,
+  validMinutes,
+}: {
+  code: string;
+  description: string;
+  title: string;
+  validMinutes: number;
+}) {
+  const codeDigits = code
+    .split("")
+    .map(
+      (digit) =>
+        `<td style="padding:0 3px 0 0;"><div style="display:block;padding:9px 0;border:1px solid #d4d4d8;border-radius:10px;background:#f4f4f5;color:#09090b;font-size:21px;font-weight:900;text-align:center;line-height:1.1;">${escapeHtml(digit)}</div></td>`
+    )
+    .join("");
+
+  return renderLeiBlogEmailHtml({
+    bodyHtml: `
+      <p style="margin:0 0 16px;color:#52525b;font-size:14px;line-height:1.65;">${escapeHtml(description)}</p>
+      <div style="margin:18px 0 16px;padding:14px;border:1px solid #f0abfc;border-radius:16px;background:#fdf4ff;">
+        <p style="margin:0 0 10px;color:#86198f;font-size:13px;font-weight:800;line-height:1.4;">验证码</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;max-width:330px;table-layout:fixed;border-collapse:separate;">
+          <tr>${codeDigits}</tr>
+        </table>
+      </div>
+      <p style="margin:0;color:#71717a;font-size:13px;line-height:1.65;">验证码 ${validMinutes} 分钟内有效，请不要转发或泄露给他人。</p>
+    `,
+    preheader: `${description} 验证码 ${validMinutes} 分钟内有效。`,
+    title,
+  });
+}
+
+function renderTokenEmailHtml({
+  description,
+  title,
+  token,
+  validMinutes,
+}: {
+  description: string;
+  title: string;
+  token: string;
+  validMinutes: number;
+}) {
+  return renderLeiBlogEmailHtml({
+    bodyHtml: `
+      <p style="margin:0 0 18px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
+      <div style="margin:20px 0 18px;padding:18px;border:1px solid #d4d4d8;border-radius:18px;background:#f4f4f5;">
+        <p style="margin:0 0 10px;color:#3f3f46;font-size:13px;font-weight:800;">重置 Token</p>
+        <p style="margin:0;color:#09090b;font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace;font-size:14px;line-height:1.7;word-break:break-all;">${escapeHtml(token)}</p>
+      </div>
+      <p style="margin:0;color:#71717a;font-size:14px;line-height:1.7;">Token ${validMinutes} 分钟内有效，请在有效期内完成密码重置。</p>
+    `,
+    preheader: `${description} Token ${validMinutes} 分钟内有效。`,
+    title,
+  });
+}
+
+export function renderNoticeEmailHtml({
+  description,
+  title,
+}: {
+  description: string;
+  title: string;
+}) {
+  return renderLeiBlogEmailHtml({
+    bodyHtml: `
+      <p style="margin:0 0 18px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
+      <div style="margin:20px 0 0;padding:16px 18px;border:1px solid #bbf7d0;border-radius:18px;background:#f0fdf4;color:#166534;font-size:14px;font-weight:800;">配置检测已完成</div>
+    `,
+    preheader: description,
+    title,
+  });
 }
 
 async function getResendConfig(client: DbClient) {
@@ -100,7 +259,7 @@ async function getResendConfig(client: DbClient) {
 
 export async function sendResendEmail(
   client: DbClient,
-  input: { to: string; subject: string; text: string }
+  input: { html?: string; subject: string; text: string; to: string }
 ) {
   const config = await getResendConfig(client);
   if (!config) return false;
@@ -113,6 +272,7 @@ export async function sendResendEmail(
     },
     body: JSON.stringify({
       from: `LeiBlog <no-reply@${config.domain}>`,
+      html: input.html ?? renderPlainEmailHtml({ subject: input.subject, text: input.text }),
       to: [input.to],
       subject: input.subject,
       text: input.text,
@@ -180,7 +340,7 @@ async function getIpGeolocationApiKey(client: DbClient) {
   return decryptSecret(config?.ipgeolocation_api_key_encrypted);
 }
 
-async function resolveLoginLocation(meta: RequestMeta, client: DbClient) {
+export async function resolveLoginLocation(meta: RequestMeta, client: DbClient) {
   if (!meta.ip || isPrivateIp(meta.ip)) return null;
 
   const apiKey = await getIpGeolocationApiKey(client);
@@ -270,6 +430,7 @@ export async function createEmailCode(
   const client = options.client ?? db;
   const email = normalizeEmail(input.email);
   const code = createNumericCode();
+  const expiresAt = addMinutes(new Date(), EMAIL_CODE_MINUTES);
 
   await client`
     INSERT INTO email_verification_codes (email, code_hash, purpose, expires_at)
@@ -277,27 +438,47 @@ export async function createEmailCode(
       ${email},
       ${hashToken(code)},
       ${input.purpose},
-      ${addMinutes(new Date(), EMAIL_CODE_MINUTES)}
+      ${expiresAt}
     )
   `;
 
+  const fallbackSubject =
+    input.purpose === "register"
+      ? "LeiBlog 注册验证码"
+      : input.purpose === "email_change"
+        ? "LeiBlog 邮箱变更验证码"
+        : "LeiBlog 找回密码验证码";
+  const fallbackDescription =
+    input.purpose === "register"
+      ? "请使用下面的验证码完成 LeiBlog 账号注册。"
+      : input.purpose === "email_change"
+        ? "请使用下面的验证码完成邮箱验证。"
+        : "请使用下面的验证码继续找回密码流程。";
+  const subject = options.emailSubject ?? fallbackSubject;
+  const text =
+    options.emailText?.(code, EMAIL_CODE_MINUTES) ??
+    `验证码：${code}，${EMAIL_CODE_MINUTES} 分钟内有效。`;
+  const html =
+    options.emailHtml?.(code, EMAIL_CODE_MINUTES) ??
+    renderVerificationCodeEmailHtml({
+      code,
+      description: fallbackDescription,
+      title: subject,
+      validMinutes: EMAIL_CODE_MINUTES,
+    });
+
   const sent = await sendResendEmail(client, {
     to: email,
-    subject:
-      options.emailSubject ??
-      (input.purpose === "register"
-        ? "LeiBlog 注册验证码"
-        : input.purpose === "email_change"
-          ? "LeiBlog 邮箱变更验证码"
-          : "LeiBlog 找回密码验证码"),
-    text:
-      options.emailText?.(code, EMAIL_CODE_MINUTES) ??
-      `验证码：${code}，${EMAIL_CODE_MINUTES} 分钟内有效。`,
+    html,
+    subject,
+    text,
   });
 
   return {
+    expiresAt: expiresAt.toISOString(),
     ok: true,
     sent,
+    validMinutes: EMAIL_CODE_MINUTES,
     ...(appConfig.isProduction || sent ? {} : { devCode: code }),
   };
 }
@@ -470,6 +651,12 @@ export async function createPasswordResetToken(
 
     const sent = await sendResendEmail(client, {
       to: normalizedEmail,
+      html: renderTokenEmailHtml({
+        description: "你正在请求重置 LeiBlog 账号密码。复制下面的重置 Token 继续完成操作。",
+        title: "LeiBlog 密码重置",
+        token,
+        validMinutes: RESET_TOKEN_MINUTES,
+      }),
       subject: "LeiBlog 密码重置",
       text: `密码重置 token：${token}，${RESET_TOKEN_MINUTES} 分钟内有效。`,
     });

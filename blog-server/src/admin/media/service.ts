@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { basename, extname, resolve, sep } from "node:path";
 
+import type { AuthUser } from "../../shared/auth";
+import type { AppConfig } from "../../shared/config";
+import type { DbClient } from "../../shared/db";
 import {
   assertWritableAdmin,
   requireAdminOrDemo,
-  type AuthUser,
 } from "../../shared/auth";
-import { appConfig, type AppConfig } from "../../shared/config";
-import { db, withTransaction, type DbClient } from "../../shared/db";
+import { appConfig } from "../../shared/config";
+import { db, withTransaction } from "../../shared/db";
 import { notFound, validationError } from "../../shared/errors";
 import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
 
@@ -628,6 +630,38 @@ export async function uploadSetupMedia(
       ...input,
       allowedFileTypes: ["image"],
       uploadedBy: null,
+    },
+    options
+  );
+}
+
+export async function uploadUserAvatar(
+  userId: string,
+  input: Pick<UploadMediaInput, "file" | "fileName">,
+  options: MediaServiceOptions = {}
+) {
+  return storeMediaAsset(
+    {
+      ...input,
+      allowedFileTypes: ["image"],
+      folderSlug: "avatars",
+      uploadedBy: userId,
+    },
+    options
+  );
+}
+
+export async function uploadCommentImage(
+  userId: string,
+  input: Pick<UploadMediaInput, "file" | "fileName">,
+  options: MediaServiceOptions = {}
+) {
+  return storeMediaAsset(
+    {
+      ...input,
+      allowedFileTypes: ["image"],
+      folderSlug: "comments",
+      uploadedBy: userId,
     },
     options
   );

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
+import { uploadAdminMediaFile, adminFetch } from "../shared/admin-api";
 import type {
   DataTableBulkAction,
   DataTableColumn,
@@ -13,7 +14,7 @@ import type {
   DataTableToolbarAction,
 } from "../shared/DataTable";
 import { DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
-import { adminFetch } from "../shared/admin-api";
+import { MediaAssetField } from "../shared/media-asset-field";
 
 type ContributorRow = DataTableRow & {
   articleCount: number;
@@ -128,6 +129,7 @@ export function ContributorsPage() {
   const [rows, setRows] = useState<ContributorRow[]>([]);
   const [formState, setFormState] = useState(emptyContributorForm);
   const [modalState, setModalState] = useState<ContributorModalState | null>(null);
+  const [avatarLocalFile, setAvatarLocalFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -157,8 +159,16 @@ export function ContributorsPage() {
 
     try {
       setIsSaving(true);
+      const avatarUrl = avatarLocalFile
+        ? (
+            await uploadAdminMediaFile({
+              file: avatarLocalFile,
+              folderSlug: "avatars",
+            })
+          ).item.accessUrl
+        : formState.avatarUrl;
       const body = {
-        avatarUrl: optionalValue(formState.avatarUrl),
+        avatarUrl: optionalValue(avatarUrl),
         linkUrl: optionalValue(formState.linkUrl),
         name,
       };
@@ -179,6 +189,7 @@ export function ContributorsPage() {
 
       setModalState(null);
       setFormState(emptyContributorForm);
+      setAvatarLocalFile(null);
       setReloadKey((key) => key + 1);
     } catch (error) {
       modalState.setNotice(error instanceof Error ? error.message : "贡献者保存失败");
@@ -194,6 +205,7 @@ export function ContributorsPage() {
       label: "新建贡献者",
       onPress: ({ setNotice }) => {
         setFormState(emptyContributorForm);
+        setAvatarLocalFile(null);
         setModalState({ mode: "create", setNotice });
       },
     },
@@ -264,6 +276,7 @@ export function ContributorsPage() {
           linkUrl: row.linkUrl ?? "",
           name: row.name,
         });
+        setAvatarLocalFile(null);
         setModalState({ mode: "edit", row, setNotice });
       },
     },
@@ -311,6 +324,7 @@ export function ContributorsPage() {
           if (isOpen) return;
           setModalState(null);
           setFormState(emptyContributorForm);
+          setAvatarLocalFile(null);
         }}
         onSubmit={saveContributor}
         submitLabel={modalState?.mode === "edit" ? "保存贡献者" : "创建贡献者"}
@@ -324,12 +338,12 @@ export function ContributorsPage() {
           placeholder="输入贡献者名字"
           value={formState.name}
         />
-        <AdminInputGroupField
-          icon="image"
-          label="头像链接"
+        <MediaAssetField
+          folderSlug="avatars"
+          label="头像"
+          localFile={avatarLocalFile}
           onChange={(value) => updateForm("avatarUrl", value)}
-          placeholder="https://..."
-          type="url"
+          onLocalFileChange={setAvatarLocalFile}
           value={formState.avatarUrl}
         />
         <AdminInputGroupField

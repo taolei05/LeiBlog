@@ -72,7 +72,21 @@ export type BlogComment = {
   content: string;
   createdAt: string;
   id: string;
+  location: string | null;
   parentId: string | null;
+};
+
+export type CreateBlogCommentInput = {
+  articleId?: string;
+  content: string;
+  parentId?: string | null;
+  target: "article" | "guestbook";
+  token: string;
+};
+
+export type UploadBlogCommentImageInput = {
+  file: File;
+  token: string;
 };
 
 export type PublicArticleListParams = {
@@ -127,6 +141,7 @@ type ApiCommentItem = {
   content: string;
   createdAt: string;
   id: string;
+  location: string | null;
   parentId: string | null;
 };
 
@@ -234,6 +249,7 @@ function toCommentItem(value: unknown): ApiCommentItem {
     content: readString(value, "content"),
     createdAt: readString(value, "createdAt"),
     id: readString(value, "id"),
+    location: readNullableString(value, "location"),
     parentId: readNullableString(value, "parentId"),
   };
 }
@@ -242,6 +258,73 @@ async function fetchJson(url: URL) {
   const response = await fetch(url.toString());
   if (!response.ok) throw new Error(`接口请求失败：${response.status}`);
   return response.json() as Promise<unknown>;
+}
+
+async function readResponsePayload(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function getApiErrorMessage(payload: unknown, fallback: string) {
+  if (!isRecord(payload)) return fallback;
+
+  const message = payload.message ?? payload.error;
+  return typeof message === "string" && message.trim() ? message : fallback;
+}
+
+async function publicJsonRequest(
+  path: string,
+  options: {
+    body: unknown;
+    method: "POST";
+    token: string;
+  },
+) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    body: JSON.stringify(options.body),
+    headers: {
+      Authorization: `Bearer ${options.token}`,
+      "Content-Type": "application/json",
+    },
+    method: options.method,
+  });
+  const payload = await readResponsePayload(response);
+
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(payload, `接口请求失败：${response.status}`));
+  }
+
+  return payload;
+}
+
+async function publicFormRequest(
+  path: string,
+  options: {
+    body: FormData;
+    method: "POST";
+    token: string;
+  },
+) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    body: options.body,
+    headers: {
+      Authorization: `Bearer ${options.token}`,
+    },
+    method: options.method,
+  });
+  const payload = await readResponsePayload(response);
+
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(payload, `接口请求失败：${response.status}`));
+  }
+
+  return payload;
 }
 
 function appendOptionalParam(
@@ -345,26 +428,8 @@ function toBlogArticle(article: ApiArticleDetail | ApiArticleSummary): BlogArtic
   };
 }
 
-function categoryDescription(name: string) {
-  const descriptions: Record<string, string> = {
-    工程实践: "发布、部署和日常工程维护。",
-    摄影手记: "照片、器材和城市观察。",
-    生活观察: "慢一点的生活片段与写作。",
-    阅读笔记: "阅读方法、摘录和书桌流程。",
-  };
-
-  return descriptions[name] ?? "按这个主题继续阅读。";
-}
-
-function categoryIcon(name: string): AppIconName {
-  const icons: Record<string, AppIconName> = {
-    工程实践: "terminal",
-    摄影手记: "image",
-    生活观察: "heart",
-    阅读笔记: "library",
-  };
-
-  return icons[name] ?? "albums";
+function categoryIcon(): AppIconName {
+  return "albums";
 }
 
 export function deriveBlogCategories(articles: BlogArticle[]): BlogCategory[] {
@@ -375,8 +440,8 @@ export function deriveBlogCategories(articles: BlogArticle[]): BlogCategory[] {
       const existing = categories.get(category.slug);
       categories.set(category.slug, {
         count: (existing?.count ?? 0) + 1,
-        description: categoryDescription(category.name),
-        icon: categoryIcon(category.name),
+        description: "",
+        icon: categoryIcon(),
         name: category.name,
         slug: category.slug,
       });
@@ -470,4 +535,49 @@ export async function fetchPublicComments({
   if (!isRecord(payload)) throw new Error("评论列表响应格式无效");
 
   return readArray(payload, "items").map((item) => toCommentItem(item));
+}
+
+export async function createPublicComment({
+  articleId,
+  content,
+  parentId,
+  target,
+  token,
+}: CreateBlogCommentInput) {
+  const path =
+    target === "article"
+      ? `/articles/${encodeURIComponent(articleId ?? "")}/comments`
+      : "/guestbook/comments";
+  const payload = await publicJsonRequest(path, {
+    body: {
+      content,
+      parentId: parentId ?? null,
+    },
+    method: "POST",
+    token,
+  });
+
+  if (!isRecord(payload) || !isRecord(payload.item)) {
+    throw new Error("评论提交响应格式无效");
+  }
+
+  return toCommentItem(payload.item);
+}
+
+export async function uploadPublicCommentImage({ file, token }: UploadBlogCommentImageInput) {
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("fileName", file.name);
+
+  const payload = await publicFormRequest("/comments/images", {
+    body: formData,
+    method: "POST",
+    token,
+  });
+
+  if (!isRecord(payload)) {
+    throw new Error("评论图片上传响应格式无效");
+  }
+
+  return readString(payload, "accessUrl");
 }

@@ -1,7 +1,10 @@
 import { cacheRememberJson } from "../../shared/cache";
-import { db, type DbClient } from "../../shared/db";
+import type { DbClient } from "../../shared/db";
+import type { UserProfileRow } from "../../shared/types/user";
+import { db } from "../../shared/db";
 import { notFound } from "../../shared/errors";
 import { redisKeys } from "../../shared/redis";
+import { toUserProfile } from "../../shared/types/user";
 
 interface SiteInfoRow {
   site_name: string;
@@ -9,6 +12,8 @@ interface SiteInfoRow {
   logo_dark_url: string | null;
   logo_light_url: string | null;
   favicon_url: string | null;
+  home_cover_url: string | null;
+  home_slogan: string;
   established_at: Date | string;
 }
 
@@ -45,7 +50,8 @@ function parseTextArray(value: string[] | string) {
 export async function getPublicSiteInfo(client: DbClient = db) {
   return cacheRememberJson(redisKeys.siteInfo, async () => {
     const [row] = await client<SiteInfoRow[]>`
-      SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url, established_at
+      SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url,
+             home_cover_url, home_slogan, established_at
       FROM site_info
       WHERE id = 1
     `;
@@ -58,6 +64,8 @@ export async function getPublicSiteInfo(client: DbClient = db) {
       logoDarkUrl: row.logo_dark_url,
       logoLightUrl: row.logo_light_url,
       faviconUrl: row.favicon_url,
+      homeCoverUrl: row.home_cover_url,
+      homeSlogan: row.home_slogan,
       establishedAt: toIso(row.established_at),
     };
   });
@@ -101,4 +109,30 @@ export async function getPublicSiteFiling(client: DbClient = db) {
       policeUrl: row.police_url,
     };
   });
+}
+
+export async function getPublicSiteAuthor(client: DbClient = db) {
+  const [row] = await client<UserProfileRow[]>`
+    SELECT id, username, email, name, description, tags, role, avatar_url,
+           social_links, blog_url, created_at, updated_at, last_login_at,
+           last_login_ip, last_login_location, last_login_device
+    FROM users
+    WHERE role = 'admin'
+    ORDER BY created_at ASC
+    LIMIT 1
+  `;
+
+  if (!row) throw notFound("作者信息尚未配置");
+
+  const profile = toUserProfile(row);
+
+  return {
+    avatarUrl: profile.avatarUrl,
+    blogUrl: profile.blogUrl,
+    description: profile.description,
+    name: profile.name,
+    socialLinks: profile.socialLinks,
+    tags: profile.tags,
+    username: profile.username,
+  };
 }

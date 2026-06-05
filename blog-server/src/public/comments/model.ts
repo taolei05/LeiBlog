@@ -17,6 +17,11 @@ export const CreateCommentBody = t.Object({
   parentId: t.Optional(t.Nullable(t.String())),
 });
 
+export const CommentImageUploadBody = t.Object({
+  file: t.File(),
+  fileName: t.Optional(t.String({ maxLength: 255 })),
+});
+
 export const CommentListResponse = t.Object({
   ok: t.Boolean(),
   items: t.Array(CommentItemSchema),
@@ -28,4 +33,9 @@ export const CommentListResponse = t.Object({
 export const CommentResponse = t.Object({
   ok: t.Boolean(),
   item: CommentItemSchema,
+});
+
+export const CommentImageUploadResponse = t.Object({
+  ok: t.Boolean(),
+  accessUrl: t.String(),
 });

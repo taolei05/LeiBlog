@@ -1,4 +1,9 @@
-import { sendResendEmail } from "../auth/service";
+import type { AuthUser } from "../shared/auth";
+import type { DbClient } from "../shared/db";
+import type { UserProfileRow } from "../shared/types/user";
+
+import { uploadUserAvatar } from "../admin/media/service";
+import { renderVerificationCodeEmailHtml, sendResendEmail } from "../auth/service";
 import {
   createNumericCode,
   hashPassword,
@@ -7,11 +12,10 @@ import {
   verifyPassword,
 } from "../shared/auth";
 import { appConfig } from "../shared/config";
-import { db, withTransaction, type DbClient } from "../shared/db";
+import { db, withTransaction } from "../shared/db";
 import { conflict, forbidden, unauthorized, validationError } from "../shared/errors";
 import { addMinutes } from "../shared/time";
-import { toUserProfile, type UserProfileRow } from "../shared/types/user";
-import type { AuthUser } from "../shared/auth";
+import { toUserProfile } from "../shared/types/user";
 
 export interface UpdateMeInput {
   name?: string | null;
@@ -85,19 +89,40 @@ export async function updateMe(
 
   const tags = input.tags === undefined ? undefined : cleanTags(input.tags);
   const socialLinks = cleanSocialLinks(input.socialLinks);
+  const name = cleanOptional(input.name);
+  const description = input.description?.trim() ?? "";
+  const avatarUrl = cleanOptional(input.avatarUrl);
+  const blogUrl = cleanOptional(input.blogUrl);
 
   await client`
     UPDATE users
-    SET name = COALESCE(${cleanOptional(input.name)}, name),
-        description = COALESCE(${input.description?.trim()}, description),
-        tags = COALESCE(${tags ? client.array(tags, "TEXT") : null}, tags),
-        avatar_url = COALESCE(${cleanOptional(input.avatarUrl)}, avatar_url),
-        social_links = COALESCE(${socialLinks ? JSON.stringify(socialLinks) : null}::jsonb, social_links),
-        blog_url = COALESCE(${cleanOptional(input.blogUrl)}, blog_url)
+    SET name = CASE WHEN ${input.name !== undefined} THEN ${name} ELSE name END,
+        description = CASE WHEN ${input.description !== undefined} THEN ${description} ELSE description END,
+        tags = CASE WHEN ${tags !== undefined} THEN ${client.array(tags ?? [], "TEXT")} ELSE tags END,
+        avatar_url = CASE WHEN ${input.avatarUrl !== undefined} THEN ${avatarUrl} ELSE avatar_url END,
+        social_links = CASE
+          WHEN ${input.socialLinks !== undefined} THEN ${JSON.stringify(socialLinks ?? {})}::jsonb
+          ELSE social_links
+        END,
+        blog_url = CASE WHEN ${input.blogUrl !== undefined} THEN ${blogUrl} ELSE blog_url END,
+        updated_at = now()
     WHERE id = ${userId}
   `;
 
   return getUserProfile(userId, client);
+}
+
+export async function uploadMyAvatar(
+  userId: string,
+  input: { file: File },
+  client: DbClient = db
+) {
+  const item = await uploadUserAvatar(userId, { file: input.file }, { client });
+
+  return {
+    accessUrl: item.accessUrl,
+    ok: true,
+  };
 }
 
 async function ensureEmailAvailable(email: string, userId: string, client: DbClient) {
@@ -121,6 +146,7 @@ export async function requestEmailChangeCode(
   await ensureEmailAvailable(email, userId, client);
 
   const code = createNumericCode();
+  const expiresAt = addMinutes(new Date(), EMAIL_CHANGE_CODE_MINUTES);
 
   await client`
     INSERT INTO email_change_requests (user_id, new_email, code_hash, expires_at)
@@ -128,19 +154,27 @@ export async function requestEmailChangeCode(
       ${userId},
       ${email},
       ${hashToken(code)},
-      ${addMinutes(new Date(), EMAIL_CHANGE_CODE_MINUTES)}
+      ${expiresAt}
     )
   `;
 
   const sent = await sendResendEmail(client, {
     to: email,
+    html: renderVerificationCodeEmailHtml({
+      code,
+      description: "请使用下面的验证码确认新的邮箱地址。",
+      title: "LeiBlog 邮箱变更验证码",
+      validMinutes: EMAIL_CHANGE_CODE_MINUTES,
+    }),
     subject: "LeiBlog 邮箱变更验证码",
     text: `验证码：${code}，${EMAIL_CHANGE_CODE_MINUTES} 分钟内有效。`,
   });
 
   return {
+    expiresAt: expiresAt.toISOString(),
     ok: true,
     sent,
+    validMinutes: EMAIL_CHANGE_CODE_MINUTES,
     ...(appConfig.isProduction || sent ? {} : { devCode: code }),
   };
 }

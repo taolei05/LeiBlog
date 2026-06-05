@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
@@ -19,32 +16,17 @@ import {
   clearSiteCache,
 } from "../src/shared/cache/content";
 import { closeRedis, getRedis, redisKeys } from "../src/shared/redis";
+import { createMigratedTestDatabase, type TestDatabase } from "./helpers/database";
 
-const POSTGRES_ADMIN_URL =
-  process.env.TEST_POSTGRES_ADMIN_URL ??
-  "postgres://taolei:12345678@localhost:5432/postgres";
-
-const dbName = `lei_blog_cache_test_${Date.now()}`;
-const adminDb = new Bun.SQL(POSTGRES_ADMIN_URL, { max: 1 });
+let testDatabase: TestDatabase;
 let testDb: Bun.SQL;
 let redisAvailable = false;
 let currentAdmin: AuthUser;
 let currentUser: AuthUser;
 
 beforeAll(async () => {
-  await adminDb.unsafe(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
-  await adminDb.unsafe(`CREATE DATABASE ${dbName}`);
-
-  testDb = new Bun.SQL(
-    `postgres://taolei:12345678@localhost:5432/${dbName}`,
-    { max: 1 }
-  );
-
-  const migration = readFileSync(
-    join(import.meta.dir, "../src/db/migrations/001_initial_schema.sql"),
-    "utf8"
-  );
-  await testDb.unsafe(migration);
+  testDatabase = await createMigratedTestDatabase("lei_blog_cache_test");
+  testDb = new Bun.SQL(testDatabase.databaseUrl, { max: 1 });
 
   const [admin] = await testDb<{ id: string }[]>`
     INSERT INTO users (username, password_hash, email, role)
@@ -109,8 +91,7 @@ afterAll(async () => {
   await clearAllArticleCache();
   await closeRedis();
   await testDb?.close({ timeout: 1 });
-  await adminDb.unsafe(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
-  await adminDb.close({ timeout: 1 });
+  await testDatabase?.drop();
 });
 
 describe("cache layer", () => {

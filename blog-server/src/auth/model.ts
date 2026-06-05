@@ -40,8 +40,10 @@ export const AuthResponse = t.Object({
 });
 
 export const EmailCodeResponse = t.Object({
+  expiresAt: t.String(),
   ok: t.Boolean(),
   sent: t.Boolean(),
+  validMinutes: t.Number(),
   devCode: t.Optional(t.String()),
 });
 

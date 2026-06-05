@@ -6,6 +6,7 @@ import {
   toCommentItem,
   type CommentRow,
 } from "../../shared/types/comment";
+import { resolveLoginLocation, type RequestMeta } from "../../auth/service";
 
 export interface PublicCommentQuery {
   page?: string;
@@ -96,7 +97,8 @@ async function getCommentById(id: string, client: DbClient = db) {
   const [row] = await client<CommentRow[]>`
     SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
            c.created_at, c.updated_at, c.deleted_at,
-           u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
+           u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url,
+           c.comment_location AS comment_location
     FROM comments c
     JOIN users u ON u.id = c.user_id
     WHERE c.id = ${id}
@@ -122,7 +124,8 @@ async function listCommentsForTarget(
     `
       SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
              c.created_at, c.updated_at, c.deleted_at,
-             u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
+             u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url,
+             c.comment_location AS comment_location
       FROM comments c
       JOIN users u ON u.id = c.user_id
       WHERE c.target_type = $1::comment_target_type
@@ -164,7 +167,8 @@ async function createCommentForTarget(
   currentUser: AuthUser,
   target: CommentTarget,
   input: CreateCommentInput,
-  client: DbClient = db
+  client: DbClient = db,
+  meta: RequestMeta | null = null
 ) {
   const content = input.content.trim();
   if (!content) throw validationError("评论内容不能为空");
@@ -177,10 +181,18 @@ async function createCommentForTarget(
       await ensurePublishedArticle(target.articleId, tx);
     }
     const parentId = await ensureParentComment(target, input.parentId, tx);
+    const location = meta ? await resolveLoginLocation(meta, tx) : null;
+    const device = meta?.userAgent ? { userAgent: meta.userAgent } : null;
 
     const [created] = await tx<{ id: string }[]>`
-      INSERT INTO comments (target_type, article_id, user_id, parent_id, content)
-      VALUES (${target.targetType}, ${target.articleId}, ${currentUser.id}, ${parentId}, ${content})
+      INSERT INTO comments (
+        target_type, article_id, user_id, parent_id, content,
+        comment_ip, comment_location, comment_device
+      )
+      VALUES (
+        ${target.targetType}, ${target.articleId}, ${currentUser.id}, ${parentId}, ${content},
+        ${meta?.ip ?? null}, ${location}::jsonb, ${device}::jsonb
+      )
       RETURNING id
     `;
 
@@ -213,26 +225,30 @@ export function createPublicComment(
   currentUser: AuthUser,
   articleId: string,
   input: CreateCommentInput,
-  client: DbClient = db
+  client: DbClient = db,
+  meta: RequestMeta | null = null
 ) {
   return createCommentForTarget(
     currentUser,
     { targetType: "article", articleId },
     input,
-    client
+    client,
+    meta
   );
 }
 
 export function createGuestbookComment(
   currentUser: AuthUser,
   input: CreateCommentInput,
-  client: DbClient = db
+  client: DbClient = db,
+  meta: RequestMeta | null = null
 ) {
   return createCommentForTarget(
     currentUser,
     { targetType: "guestbook", articleId: null },
     input,
-    client
+    client,
+    meta
   );
 }
 

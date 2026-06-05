@@ -1,4 +1,4 @@
-import { Avatar, Chip, Link as HeroLink } from "@heroui/react";
+import { Avatar, Button, Chip, Link as HeroLink, Popover } from "@heroui/react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -6,7 +6,102 @@ import { AppIcon } from "../../../shared/icons";
 import { ArticleMdxContent } from "../shared/ArticleMdxContent";
 import { EmptyPlaceholder } from "../shared/BlogComponents";
 import { CommentThread } from "../shared/CommentThread";
-import { fetchPublicArticleBySlug, type BlogArticle } from "../shared/blogApi";
+import type { BlogArticle } from "../shared/blogApi";
+import { fetchPublicArticleBySlug } from "../shared/blogApi";
+
+type ArticleTocNavProps = {
+  items: BlogArticle["toc"];
+  onNavigate?: () => void;
+};
+
+function ArticleTocNav({ items, onNavigate }: ArticleTocNavProps) {
+  if (items.length === 0) {
+    return <p className="article-toc__empty">暂无目录</p>;
+  }
+
+  return (
+    <nav className="article-toc__nav">
+      {items.map((item) => (
+        <a
+          className="article-toc__link"
+          href={`#${item.id}`}
+          key={item.id}
+          onClick={() => onNavigate?.()}
+        >
+          {item.title}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+type ArticleMobileTocProps = {
+  items: BlogArticle["toc"];
+};
+
+function ArticleMobileToc({ items }: ArticleMobileTocProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
+      <Popover.Trigger>
+        <Button
+          aria-label="打开本篇目录"
+          className="article-mobile-toc__button"
+          isIconOnly
+          size="sm"
+          variant="secondary"
+        >
+          <AppIcon name="list" />
+        </Button>
+      </Popover.Trigger>
+      <Popover.Content className="article-mobile-toc__popover" offset={8} placement="bottom end">
+        <Popover.Dialog>
+          <div className="article-mobile-toc__panel">
+            <p>本篇目录</p>
+            <ArticleTocNav items={items} onNavigate={() => setIsOpen(false)} />
+          </div>
+        </Popover.Dialog>
+      </Popover.Content>
+    </Popover>
+  );
+}
+
+type ArticleBreadcrumbsProps = {
+  title?: string;
+  tocItems?: BlogArticle["toc"];
+};
+
+function ArticleBreadcrumbs({ title, tocItems = [] }: ArticleBreadcrumbsProps) {
+  return (
+    <nav aria-label="文章面包屑" className="front-breadcrumbs">
+      <Link to="/">
+        <AppIcon name="home" />
+        首页
+      </Link>
+      <span aria-hidden="true" className="front-breadcrumbs__separator">
+        <AppIcon name="chevronForward" />
+      </span>
+      <Link to="/articles">
+        <AppIcon name="reader" />
+        文章
+      </Link>
+      {title ? (
+        <>
+          <span aria-hidden="true" className="front-breadcrumbs__separator">
+            <AppIcon name="chevronForward" />
+          </span>
+          <span aria-current="page" className="front-breadcrumbs__current">
+            {title}
+          </span>
+          <span className="article-mobile-toc">
+            <ArticleMobileToc items={tocItems} />
+          </span>
+        </>
+      ) : null}
+    </nav>
+  );
+}
 
 export function BlogArticleDetailPage() {
   const { slug } = useParams();
@@ -46,16 +141,7 @@ export function BlogArticleDetailPage() {
     return (
       <section className="article-reading-layout">
         <article className="article-detail">
-          <nav aria-label="文章面包屑" className="front-breadcrumbs">
-            <Link to="/">
-              <AppIcon name="home" />
-              首页
-            </Link>
-            <Link to="/articles">
-              <AppIcon name="reader" />
-              文章
-            </Link>
-          </nav>
+          <ArticleBreadcrumbs />
           <EmptyPlaceholder
             text={status === "error" ? "文章不存在或接口暂时不可用。" : "正在读取文章。"}
           />
@@ -67,17 +153,7 @@ export function BlogArticleDetailPage() {
   return (
     <section className="article-reading-layout">
       <article className="article-detail">
-        <nav aria-label="文章面包屑" className="front-breadcrumbs">
-          <Link to="/">
-            <AppIcon name="home" />
-            首页
-          </Link>
-          <Link to="/articles">
-            <AppIcon name="reader" />
-            文章
-          </Link>
-          <span>{article.title}</span>
-        </nav>
+        <ArticleBreadcrumbs title={article.title} tocItems={article.toc} />
 
         <header className="article-detail__header">
           <p className="eyebrow">{article.category}</p>
@@ -141,13 +217,7 @@ export function BlogArticleDetailPage() {
 
       <aside aria-label="文章目录" className="article-toc">
         <p>本篇目录</p>
-        <nav>
-          {article.toc.map((item) => (
-            <a href={`#${item.id}`} key={item.id}>
-              {item.title}
-            </a>
-          ))}
-        </nav>
+        <ArticleTocNav items={article.toc} />
       </aside>
     </section>
   );

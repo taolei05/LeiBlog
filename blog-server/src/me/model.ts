@@ -16,6 +16,15 @@ export const UpdateMeBody = t.Object({
   blogUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
 });
 
+export const UploadAvatarBody = t.Object({
+  file: t.File(),
+});
+
+export const UploadAvatarResponse = t.Object({
+  accessUrl: t.String(),
+  ok: t.Boolean(),
+});
+
 export const ChangePasswordBody = t.Object({
   currentPassword: t.String({ minLength: 1, maxLength: 128 }),
   newPassword: t.String({ minLength: 8, maxLength: 128 }),
@@ -31,8 +40,10 @@ export const ConfirmEmailChangeBody = t.Object({
 });
 
 export const EmailChangeCodeResponse = t.Object({
+  expiresAt: t.String(),
   ok: t.Boolean(),
   sent: t.Boolean(),
+  validMinutes: t.Number(),
   devCode: t.Optional(t.String()),
 });
 

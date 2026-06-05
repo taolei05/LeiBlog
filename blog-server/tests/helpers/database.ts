@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const TEST_POSTGRES_ADMIN_URL =
@@ -31,11 +31,14 @@ export async function createMigratedTestDatabase(prefix: string): Promise<TestDa
 
   try {
     testDb = new Bun.SQL(databaseUrl, { max: 1 });
-    const migration = readFileSync(
-      join(import.meta.dir, "../../src/db/migrations/001_initial_schema.sql"),
-      "utf8"
-    );
-    await testDb.unsafe(migration);
+    const migrationsDir = join(import.meta.dir, "../../src/db/migrations");
+    const migrationFiles = readdirSync(migrationsDir)
+      .filter((file) => file.endsWith(".sql"))
+      .sort();
+
+    for (const file of migrationFiles) {
+      await testDb.unsafe(readFileSync(join(migrationsDir, file), "utf8"));
+    }
   } finally {
     await testDb?.close({ timeout: 1 });
   }

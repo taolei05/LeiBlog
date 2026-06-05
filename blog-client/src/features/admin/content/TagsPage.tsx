@@ -1,3 +1,12 @@
+import {
+  ColorArea,
+  ColorField,
+  ColorPicker,
+  ColorSlider,
+  ColorSwatch,
+  Label,
+  parseColor,
+} from "@heroui/react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -16,6 +25,7 @@ import { adminFetch } from "../shared/admin-api";
 
 type TagRow = DataTableRow & {
   articles: number;
+  color: string;
   group: "内容" | "技术" | "站点";
   name: string;
   status: "active" | "cleanup" | "featured";
@@ -33,7 +43,7 @@ type AdminTagItem = {
   updatedAt: string;
 };
 
-type TagNameModalState =
+type TagEditorModalState =
   | {
       mode: "create";
       setNotice: (message: string) => void;
@@ -44,11 +54,28 @@ type TagNameModalState =
       setNotice: (message: string) => void;
     };
 
+type TagFormState = {
+  color: string;
+  name: string;
+};
+
+const defaultTagColor = "#ec4899";
+
 const tagStatusMeta = {
   active: { label: "常规", tone: "default" },
   cleanup: { label: "待清理", tone: "warning" },
   featured: { label: "高频", tone: "accent" },
 } as const;
+
+function normalizeTagColor(color: string | null | undefined) {
+  const value = color?.trim();
+
+  if (value && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) {
+    return value;
+  }
+
+  return defaultTagColor;
+}
 
 const tagColumns: DataTableColumn<TagRow>[] = [
   {
@@ -64,6 +91,18 @@ const tagColumns: DataTableColumn<TagRow>[] = [
     searchValue: (row) => `${row.name} ${row.group}`,
     sortable: true,
     value: (row) => row.name,
+  },
+  {
+    header: "颜色",
+    id: "color",
+    render: (row) => (
+      <span className="tag-color-cell">
+        <span className="tag-color-cell__swatch" style={{ backgroundColor: row.color }} />
+        <span>{row.color}</span>
+      </span>
+    ),
+    sortable: true,
+    value: (row) => row.color,
   },
   {
     header: "引用",
@@ -130,6 +169,7 @@ function toTagRow(item: AdminTagItem): TagRow {
 
   return {
     articles: item.articleCount,
+    color: normalizeTagColor(item.color),
     group: "内容",
     id: item.id,
     name: item.name,
@@ -142,8 +182,12 @@ function toTagRow(item: AdminTagItem): TagRow {
 export function TagsPage() {
   const navigate = useNavigate();
   const [tagRows, setTagRows] = useState<TagRow[]>([]);
-  const [nameModalState, setNameModalState] = useState<TagNameModalState | null>(null);
-  const [tagName, setTagName] = useState("");
+  const [tagModalState, setTagModalState] = useState<TagEditorModalState | null>(null);
+  const [tagForm, setTagForm] = useState<TagFormState>({
+    color: defaultTagColor,
+    name: "",
+  });
+  const [tagColor, setTagColor] = useState(parseColor(defaultTagColor));
   const [isSavingName, setIsSavingName] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -157,36 +201,38 @@ export function TagsPage() {
   }, [reloadKey]);
 
   async function submitTagName() {
-    if (!nameModalState) return;
+    if (!tagModalState) return;
 
-    const name = tagName.trim();
+    const name = tagForm.name.trim();
+    const color = tagColor.toString("hex");
     if (!name) {
-      nameModalState.setNotice("标签名称不能为空");
+      tagModalState.setNotice("标签名称不能为空");
       return;
     }
 
     try {
       setIsSavingName(true);
 
-      if (nameModalState.mode === "create") {
+      if (tagModalState.mode === "create") {
         await adminFetch("/admin/content/tags", {
-          body: { name },
+          body: { color, name },
           method: "POST",
         });
-        nameModalState.setNotice("标签已创建");
+        tagModalState.setNotice("标签已创建");
       } else {
-        await adminFetch(`/admin/content/tags/${nameModalState.row.id}`, {
-          body: { name },
+        await adminFetch(`/admin/content/tags/${tagModalState.row.id}`, {
+          body: { color, name },
           method: "PATCH",
         });
-        nameModalState.setNotice("标签已更新");
+        tagModalState.setNotice("标签已更新");
       }
 
-      setNameModalState(null);
-      setTagName("");
+      setTagModalState(null);
+      setTagForm({ color: defaultTagColor, name: "" });
+      setTagColor(parseColor(defaultTagColor));
       setReloadKey((key) => key + 1);
     } catch (error) {
-      nameModalState.setNotice(error instanceof Error ? error.message : "标签保存失败");
+      tagModalState.setNotice(error instanceof Error ? error.message : "标签保存失败");
     } finally {
       setIsSavingName(false);
     }
@@ -198,8 +244,9 @@ export function TagsPage() {
       icon: "pricetags",
       label: "新建标签",
       onPress: ({ setNotice }) => {
-        setTagName("");
-        setNameModalState({ mode: "create", setNotice });
+        setTagForm({ color: defaultTagColor, name: "" });
+        setTagColor(parseColor(defaultTagColor));
+        setTagModalState({ mode: "create", setNotice });
       },
     },
     {
@@ -250,10 +297,11 @@ export function TagsPage() {
     {
       confirmation: "none",
       icon: "pencil",
-      label: "重命名",
+      label: "编辑",
       onPress: (row, { setNotice }) => {
-        setTagName(row.name);
-        setNameModalState({ mode: "rename", row, setNotice });
+        setTagForm({ color: row.color, name: row.name });
+        setTagColor(parseColor(row.color));
+        setTagModalState({ mode: "rename", row, setNotice });
       },
     },
     {
@@ -290,27 +338,54 @@ export function TagsPage() {
       wide
     >
       <AdminFormModal
-        confirmDescription="将保存标签名称，并同步更新后台标签列表。"
-        description="标签名称会用于文章聚合和前台筛选。"
+        confirmDescription="将保存标签名称和颜色，并同步更新后台标签列表。"
+        description="标签名称会用于文章聚合和前台筛选，颜色会展示在前台标签页。"
         icon="pricetags"
-        isOpen={nameModalState !== null}
+        isOpen={tagModalState !== null}
         isSubmitting={isSavingName}
         onOpenChange={(isOpen) => {
           if (isOpen) return;
-          setNameModalState(null);
+          setTagModalState(null);
         }}
         onSubmit={submitTagName}
-        submitLabel={nameModalState?.mode === "rename" ? "保存标签" : "创建标签"}
-        title={nameModalState?.mode === "rename" ? "重命名标签" : "新建标签"}
+        submitLabel={tagModalState?.mode === "rename" ? "保存标签" : "创建标签"}
+        title={tagModalState?.mode === "rename" ? "编辑标签" : "新建标签"}
       >
         <AdminInputGroupField
           icon="pricetags"
           isRequired
           label="标签名称"
-          onChange={setTagName}
+          onChange={(name) => setTagForm((form) => ({ ...form, name }))}
           placeholder="输入标签名称"
-          value={tagName}
+          value={tagForm.name}
         />
+        <div className="admin-tag-color-field">
+          <Label>标签颜色</Label>
+          <ColorPicker value={tagColor} onChange={setTagColor}>
+            <ColorPicker.Trigger className="admin-tag-color-trigger">
+              <ColorSwatch className="admin-tag-color-trigger__swatch" />
+              <span>{tagColor.toString("hex")}</span>
+            </ColorPicker.Trigger>
+            <ColorPicker.Popover className="admin-tag-color-popover">
+              <ColorArea colorSpace="hsb" xChannel="saturation" yChannel="brightness">
+                <ColorArea.Thumb />
+              </ColorArea>
+              <ColorSlider aria-label="色相" channel="hue" colorSpace="hsb">
+                <ColorSlider.Track>
+                  <ColorSlider.Thumb />
+                </ColorSlider.Track>
+              </ColorSlider>
+              <ColorField aria-label="标签颜色值">
+                <ColorField.Group variant="secondary">
+                  <ColorField.Prefix>
+                    <ColorSwatch size="xs" />
+                  </ColorField.Prefix>
+                  <ColorField.Input />
+                </ColorField.Group>
+              </ColorField>
+            </ColorPicker.Popover>
+          </ColorPicker>
+        </div>
       </AdminFormModal>
       <DataTable
         ariaLabel="标签管理表格"

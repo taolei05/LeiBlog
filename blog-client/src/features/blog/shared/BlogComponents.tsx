@@ -63,7 +63,7 @@ export function ArticleCard({
         <p>{article.excerpt}</p>
         <div className="article-card__tags">
           {article.tags.map((tag) => (
-            <Link key={tag.slug} to={`/tags?tag=${encodeURIComponent(tag.slug)}`}>
+            <Link key={tag.slug} to={`/tags/${encodeURIComponent(tag.slug)}`}>
               #{tag.name}
             </Link>
           ))}

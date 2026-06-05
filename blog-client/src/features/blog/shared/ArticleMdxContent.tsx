@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { PhotoView } from "react-photo-view";
+
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { MdxCodeBlock, MdxRenderer } from "../../../shared/mdx/MdxRenderer";
 import { createHeadingId } from "./blogApi";
@@ -201,9 +203,15 @@ function renderBlock(block: MdxBlock, index: number): ReactNode {
       const imageSrc = resolveApiAssetUrl(block.src) ?? block.src;
       return (
         <figure className="mdx-image-link" key={`image-${index}`}>
-          <a href={imageSrc} rel="noreferrer" target="_blank">
-            <img alt={block.alt} loading="lazy" src={imageSrc} />
-          </a>
+          <PhotoView src={imageSrc}>
+            <button
+              aria-label={`预览图片：${block.alt || "文章图片"}`}
+              className="mdx-image-link__preview"
+              type="button"
+            >
+              <img alt={block.alt} loading="lazy" src={imageSrc} />
+            </button>
+          </PhotoView>
         </figure>
       );
     }

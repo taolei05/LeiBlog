@@ -2,6 +2,7 @@
 @import "@heroui/styles";
 @import "react-day-picker/style.css";
 @import "@mdxeditor/editor/style.css";
+@import "react-photo-view/dist/react-photo-view.css";
 @import "./tokens.css";
 @import "./base.css";
 @import "./layouts.css";

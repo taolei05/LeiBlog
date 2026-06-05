@@ -13,6 +13,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
+import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
+import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { adminFetch } from "./admin-api";
 
@@ -48,6 +50,7 @@ export function MediaAssetField({
 }: MediaAssetFieldProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [editingFile, setEditingFile] = useState<File | null>(null);
   const [items, setItems] = useState<MediaAssetItem[]>([]);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string>();
   const [notice, setNotice] = useState("");
@@ -57,6 +60,12 @@ export function MediaAssetField({
     if (folderSlug === "comments") return "评论";
     if (folderSlug === "site") return "站点";
     return "媒体库";
+  }, [folderSlug]);
+  const localImageEditorKind = useMemo<LocalImageEditorKind | null>(() => {
+    if (folderSlug === "article-covers") return "article-cover";
+    if (folderSlug === "avatars") return "avatar";
+
+    return null;
   }, [folderSlug]);
   const previewUrl = localPreviewUrl ?? resolveApiAssetUrl(value);
 
@@ -126,6 +135,12 @@ export function MediaAssetField({
         className="visually-hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null;
+          if (file && localImageEditorKind) {
+            setEditingFile(file);
+            event.target.value = "";
+            return;
+          }
+
           onLocalFileChange(file);
           if (file) {
             onChange("");
@@ -161,6 +176,17 @@ export function MediaAssetField({
           >
             <AppIcon name="close" />
             移除本地文件
+          </Button>
+        ) : null}
+        {localFile && localImageEditorKind ? (
+          <Button
+            onPress={() => setEditingFile(localFile)}
+            size="sm"
+            type="button"
+            variant="tertiary"
+          >
+            <AppIcon name="create" />
+            重新编辑
           </Button>
         ) : null}
       </div>
@@ -219,6 +245,18 @@ export function MediaAssetField({
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
+      <LocalImageEditorDialog
+        file={editingFile}
+        isOpen={editingFile !== null}
+        kind={localImageEditorKind ?? "article-cover"}
+        onApply={(file) => {
+          onLocalFileChange(file);
+          onChange("");
+          setEditingFile(null);
+          showOperationToast(`已编辑本地图片：${file.name}`, "success");
+        }}
+        onCancel={() => setEditingFile(null)}
+      />
     </div>
   );
 }

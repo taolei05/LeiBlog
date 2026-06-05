@@ -43,6 +43,11 @@ beforeAll(async () => {
     "utf8"
   );
   await testDb.unsafe(migration);
+  const commentMetadataMigration = readFileSync(
+    join(import.meta.dir, "../src/db/migrations/004_comment_metadata.sql"),
+    "utf8"
+  );
+  await testDb.unsafe(commentMetadataMigration);
 
   const [admin] = await testDb<{ id: string }[]>`
     INSERT INTO users (username, password_hash, email, role)
