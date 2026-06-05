@@ -2,7 +2,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
-import { HomeHero } from "../src/features/blog/home/HomePage";
+import {
+  HOME_LATEST_ARTICLE_LIMIT,
+  getHomeArticleList,
+  HomeHero,
+} from "../src/features/blog/home/HomePage";
+
+function createHomeArticle(slug: string, isPinned: boolean) {
+  return {
+    isPinned,
+    slug,
+  };
+}
 
 describe("HomeHero", () => {
   it("renders multiple homepage covers as carousel slides", () => {
@@ -31,5 +42,18 @@ describe("HomeHero", () => {
     expect(html).toContain("https://cdn.example.com/cover-b.jpg");
     expect(html).toContain("封面 1 / 2");
     expect(html).toContain("封面 2 / 2");
+  });
+});
+
+describe("home article sections", () => {
+  it("limits latest homepage articles to 6", () => {
+    const articles = Array.from({ length: 8 }, (_, index) =>
+      createHomeArticle(`article-${index + 1}`, false),
+    );
+
+    expect(HOME_LATEST_ARTICLE_LIMIT).toBe(6);
+    expect(
+      getHomeArticleList({ articles, isPinned: false }).map((article) => article.slug),
+    ).toEqual(["article-1", "article-2", "article-3", "article-4", "article-5", "article-6"]);
   });
 });

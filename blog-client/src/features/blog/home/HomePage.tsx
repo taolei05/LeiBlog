@@ -28,6 +28,9 @@ const SOCIAL_LABELS: Record<string, string> = {
   zhihu: "知乎",
 };
 
+export const HOME_LATEST_ARTICLE_LIMIT = 6;
+const HOME_PINNED_ARTICLE_LIMIT = 4;
+
 function getAuthorName(author: PublicSiteAuthor | null, siteInfo: PublicSiteInfo | null) {
   return author?.name ?? author?.username ?? siteInfo?.siteName ?? "LeiBlog";
 }
@@ -40,8 +43,16 @@ function getSocialLabel(key: string) {
   return SOCIAL_LABELS[key.toLowerCase()] ?? key;
 }
 
-function getArticleList(articles: BlogArticle[], isPinned: boolean) {
-  return articles.filter((article) => article.isPinned === isPinned).slice(0, isPinned ? 4 : 8);
+export function getHomeArticleList<TArticle extends { isPinned: boolean }>({
+  articles,
+  isPinned,
+}: {
+  articles: TArticle[];
+  isPinned: boolean;
+}) {
+  return articles
+    .filter((article) => article.isPinned === isPinned)
+    .slice(0, isPinned ? HOME_PINNED_ARTICLE_LIMIT : HOME_LATEST_ARTICLE_LIMIT);
 }
 
 function getArticleExcerpt(article: BlogArticle) {
@@ -73,8 +84,14 @@ export function BlogHomePage() {
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
   const categories = useMemo(() => deriveBlogCategories(articles), [articles]);
-  const latestArticles = useMemo(() => getArticleList(articles, false), [articles]);
-  const pinnedArticles = useMemo(() => getArticleList(articles, true), [articles]);
+  const latestArticles = useMemo(
+    () => getHomeArticleList({ articles, isPinned: false }),
+    [articles],
+  );
+  const pinnedArticles = useMemo(
+    () => getHomeArticleList({ articles, isPinned: true }),
+    [articles],
+  );
   const tags = useMemo(() => deriveBlogTags(articles), [articles]);
   const homeCoverUrls = useMemo(() => getHeroCoverUrls(siteInfo), [siteInfo]);
 
@@ -141,7 +158,11 @@ export function BlogHomePage() {
               title="置顶文章"
             />
             <HomeArticleSection
-              articles={latestArticles.length > 0 ? latestArticles : articles.slice(0, 8)}
+              articles={
+                latestArticles.length > 0
+                  ? latestArticles
+                  : articles.slice(0, HOME_LATEST_ARTICLE_LIMIT)
+              }
               emptyText={status === "error" ? "文章接口暂时不可用。" : "正在读取最新文章。"}
               fallbackCoverUrls={homeCoverUrls}
               icon="reader"

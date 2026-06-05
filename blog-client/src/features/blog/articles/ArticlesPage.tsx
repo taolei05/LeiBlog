@@ -1,6 +1,6 @@
 import type { Key } from "@heroui/react";
 
-import { Label, ListBox, Select } from "@heroui/react";
+import { Label, ListBox, Pagination, Select } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -17,6 +17,10 @@ import {
 } from "../shared/HeroCoverCarousel";
 
 type ArticleSortMode = "earliest" | "latest" | "views";
+
+export const ARTICLES_PER_PAGE = 9;
+
+export type ArticlePaginationItem = "ellipsis-end" | "ellipsis-start" | number;
 
 const sortOptions: {
   icon: "calendar" | "eye" | "swapVertical";
@@ -57,6 +61,70 @@ function sortArticles(articles: BlogArticle[], sortMode: ArticleSortMode) {
     const rightTime = getArticleTime(right);
     return sortMode === "latest" ? rightTime - leftTime : leftTime - rightTime;
   });
+}
+
+function getClampedArticlePage({
+  currentPage,
+  pageCount,
+}: {
+  currentPage: number;
+  pageCount: number;
+}) {
+  const page = Number.isFinite(currentPage) ? Math.trunc(currentPage) : 1;
+  return Math.min(Math.max(page, 1), pageCount);
+}
+
+export function createArticlePaginationItems({
+  currentPage,
+  pageCount,
+}: {
+  currentPage: number;
+  pageCount: number;
+}): ArticlePaginationItem[] {
+  const items: ArticlePaginationItem[] = [];
+  let lastVisiblePage = 0;
+
+  for (let page = 1; page <= pageCount; page += 1) {
+    const isBoundary = page === 1 || page === pageCount;
+    const isNearCurrent = Math.abs(page - currentPage) <= 1;
+    const isNearStart = currentPage <= 4 && page <= 5;
+    const isNearEnd = currentPage >= pageCount - 3 && page >= pageCount - 4;
+
+    if (!isBoundary && !isNearCurrent && !isNearStart && !isNearEnd) {
+      continue;
+    }
+
+    if (lastVisiblePage > 0 && page - lastVisiblePage > 1) {
+      items.push(page < currentPage ? "ellipsis-start" : "ellipsis-end");
+    }
+
+    items.push(page);
+    lastVisiblePage = page;
+  }
+
+  return items;
+}
+
+export function createArticlePaginationViewModel<TArticle>({
+  articles,
+  currentPage,
+}: {
+  articles: TArticle[];
+  currentPage: number;
+}) {
+  const pageCount = Math.max(1, Math.ceil(articles.length / ARTICLES_PER_PAGE));
+  const page = getClampedArticlePage({ currentPage, pageCount });
+  const fromArticle = articles.length > 0 ? (page - 1) * ARTICLES_PER_PAGE + 1 : 0;
+  const toArticle = Math.min(page * ARTICLES_PER_PAGE, articles.length);
+  const pageArticles = articles.slice(fromArticle > 0 ? fromArticle - 1 : 0, toArticle);
+
+  return {
+    currentPage: page,
+    fromArticle,
+    pageArticles,
+    pageCount,
+    toArticle,
+  };
 }
 
 type ArticleIndexCardProps = {
@@ -165,10 +233,23 @@ function ArticlesIndexHeroWaves() {
 
 export function BlogArticlesPage() {
   const [articles, setArticles] = useState<BlogArticle[]>([]);
+  const [articlePage, setArticlePage] = useState(1);
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [sortMode, setSortMode] = useState<ArticleSortMode>("latest");
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
   const sortedArticles = useMemo(() => sortArticles(articles, sortMode), [articles, sortMode]);
+  const { currentPage, fromArticle, pageArticles, pageCount, toArticle } = useMemo(
+    () =>
+      createArticlePaginationViewModel({
+        articles: sortedArticles,
+        currentPage: articlePage,
+      }),
+    [articlePage, sortedArticles],
+  );
+  const paginationItems = useMemo(
+    () => createArticlePaginationItems({ currentPage, pageCount }),
+    [currentPage, pageCount],
+  );
   const homeCoverUrls = useMemo(() => getHeroCoverUrls(siteInfo), [siteInfo]);
   const fallbackCoverAssignments = useMemo(
     () =>
@@ -179,6 +260,16 @@ export function BlogArticlesPage() {
       }),
     [homeCoverUrls, sortedArticles],
   );
+
+  useEffect(() => {
+    if (articlePage === currentPage) return;
+    setArticlePage(currentPage);
+  }, [articlePage, currentPage]);
+
+  function updateSortMode(value: Key | null) {
+    setSortMode(getNextSortMode(value));
+    setArticlePage(1);
+  }
 
   useEffect(() => {
     let isActive = true;
@@ -245,7 +336,7 @@ export function BlogArticlesPage() {
         <div className="articles-index-tools">
           <Select
             className="articles-index-sort"
-            onChange={(value) => setSortMode(getNextSortMode(value))}
+            onChange={updateSortMode}
             placeholder="最新发布"
             value={sortMode}
             variant="secondary"
@@ -279,16 +370,62 @@ export function BlogArticlesPage() {
           </Select>
         </div>
         {sortedArticles.length > 0 ? (
-          <div className="articles-index-grid">
-            {sortedArticles.map((article, index) => (
-              <ArticleIndexCard
-                article={article}
-                fallbackCoverUrl={fallbackCoverAssignments[article.slug]}
-                index={index}
-                key={article.slug}
-              />
-            ))}
-          </div>
+          <>
+            <div className="articles-index-grid">
+              {pageArticles.map((article, index) => (
+                <ArticleIndexCard
+                  article={article}
+                  fallbackCoverUrl={fallbackCoverAssignments[article.slug]}
+                  index={fromArticle + index - 1}
+                  key={article.slug}
+                />
+              ))}
+            </div>
+            {pageCount > 1 ? (
+              <Pagination className="articles-index-pagination" size="sm">
+                <Pagination.Summary>
+                  显示 {fromArticle}-{toArticle} / {sortedArticles.length} 篇，第 {currentPage} /{" "}
+                  {pageCount} 页
+                </Pagination.Summary>
+                <Pagination.Content>
+                  <Pagination.Item>
+                    <Pagination.Previous
+                      isDisabled={currentPage <= 1}
+                      onPress={() => setArticlePage(currentPage - 1)}
+                    >
+                      <Pagination.PreviousIcon />
+                      <span>上一页</span>
+                    </Pagination.Previous>
+                  </Pagination.Item>
+                  {paginationItems.map((item) =>
+                    typeof item === "number" ? (
+                      <Pagination.Item key={item}>
+                        <Pagination.Link
+                          isActive={item === currentPage}
+                          onPress={() => setArticlePage(item)}
+                        >
+                          {item}
+                        </Pagination.Link>
+                      </Pagination.Item>
+                    ) : (
+                      <Pagination.Item key={item}>
+                        <Pagination.Ellipsis />
+                      </Pagination.Item>
+                    ),
+                  )}
+                  <Pagination.Item>
+                    <Pagination.Next
+                      isDisabled={currentPage >= pageCount}
+                      onPress={() => setArticlePage(currentPage + 1)}
+                    >
+                      <span>下一页</span>
+                      <Pagination.NextIcon />
+                    </Pagination.Next>
+                  </Pagination.Item>
+                </Pagination.Content>
+              </Pagination>
+            ) : null}
+          </>
         ) : (
           <EmptyPlaceholder
             text={status === "error" ? "文章接口暂时不可用。" : "没有匹配的文章。"}

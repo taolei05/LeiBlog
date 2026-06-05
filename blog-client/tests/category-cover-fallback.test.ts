@@ -15,4 +15,9 @@ describe("category cover fallback", () => {
     expect(layoutsCss).not.toMatch(/\.home-article-row__media--fallback img\s*{[^}]*opacity:/s);
     expect(layoutsCss).not.toMatch(/\.home-article-row__media--fallback img\s*{[^}]*filter:/s);
   });
+
+  it("does not draw borders around article index card tags", () => {
+    expect(layoutsCss).not.toMatch(/\.articles-index-card__tags a\s*{[^}]*border:/s);
+    expect(layoutsCss).not.toMatch(/\.articles-index-card__tags a:hover\s*{[^}]*border-color:/s);
+  });
 });
