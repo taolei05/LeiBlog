@@ -363,12 +363,6 @@ export function UsersPage() {
 
   const userRowActions: DataTableRowAction<UserRow>[] = [
     {
-      access: "read",
-      icon: "eye",
-      label: "查看",
-      onPress: (row, { setNotice }) => setNotice(`${row.name}：${roleLabel[row.role]}`),
-    },
-    {
       confirmation: "none",
       icon: "pencil",
       label: "编辑",

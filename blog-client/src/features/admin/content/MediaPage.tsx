@@ -1,31 +1,25 @@
-import { AlertDialog, Button, Card, Modal, ScrollShadow } from "@heroui/react";
+import { AlertDialog, Button, Card, Checkbox, Modal, ScrollShadow } from "@heroui/react";
 import { useEffect, useRef, useState } from "react";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
 import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
 import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
+import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
-import type {
-  DataTableBulkAction,
-  DataTableColumn,
-  DataTableFilter,
-  DataTableRow,
-  DataTableRowAction,
-  DataTableToolbarAction,
-} from "../shared/DataTable";
-import { DataStatusChip, DataTable, truncateDataTablePrimaryText } from "../shared/DataTable";
+import { DataStatusChip } from "../shared/DataTable";
 import { adminFetch, downloadAdminFile } from "../shared/admin-api";
 
-type MediaRow = DataTableRow & {
+type MediaRow = {
   alt: string;
   fileName: string;
   folderId: string | null;
   folderName: string;
   folderSlug: string | null;
   folderSystemKey: string | null;
+  id: string;
   kind: "document" | "image" | "video";
   size: string;
   status: "linked" | "unused";
@@ -211,101 +205,12 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
   );
 }
 
-const mediaColumns: DataTableColumn<MediaRow>[] = [
-  {
-    header: "文件",
-    id: "fileName",
-    isRowHeader: true,
-    render: (row) => (
-      <span className="media-file-cell">
-        <MediaThumb item={row} />
-        <span className="data-table-primary-cell">
-          <strong title={row.fileName}>{truncateDataTablePrimaryText(row.fileName)}</strong>
-          <small>{row.url}</small>
-        </span>
-      </span>
-    ),
-    searchValue: (row) => `${row.fileName} ${row.url} ${row.usage} ${row.folderName}`,
-    sortable: true,
-    value: (row) => row.fileName,
-  },
-  {
-    header: "文件夹",
-    id: "folderName",
-    sortable: true,
-    value: (row) => row.folderName,
-  },
-  {
-    header: "类型",
-    id: "kind",
-    render: (row) => (
-      <DataStatusChip
-        tone={row.kind === "image" ? "accent" : row.kind === "video" ? "warning" : "default"}
-      >
-        {row.kind === "image" ? "图片" : row.kind === "video" ? "视频" : "文档"}
-      </DataStatusChip>
-    ),
-    sortable: true,
-    value: (row) => (row.kind === "image" ? "图片" : row.kind === "video" ? "视频" : "文档"),
-  },
-  {
-    header: "大小",
-    id: "size",
-    sortable: true,
-    value: (row) => row.size,
-  },
-  {
-    header: "引用",
-    id: "usage",
-    sortable: true,
-    value: (row) => row.usage,
-  },
-  {
-    header: "状态",
-    id: "status",
-    render: (row) => (
-      <DataStatusChip tone={row.status === "linked" ? "success" : "warning"}>
-        {row.status === "linked" ? "已引用" : "未引用"}
-      </DataStatusChip>
-    ),
-    sortable: true,
-    value: (row) => (row.status === "linked" ? "已引用" : "未引用"),
-  },
-  {
-    header: "上传时间",
-    id: "uploadedAt",
-    sortable: true,
-    value: (row) => row.uploadedAt,
-  },
-];
-
-const mediaFilters: DataTableFilter<MediaRow>[] = [
-  {
-    allLabel: "全部类型",
-    key: "kind",
-    label: "类型",
-    options: [
-      { label: "图片", predicate: (row) => row.kind === "image", value: "image" },
-      { label: "视频", predicate: (row) => row.kind === "video", value: "video" },
-      { label: "文档", predicate: (row) => row.kind === "document", value: "document" },
-    ],
-  },
-  {
-    allLabel: "全部状态",
-    key: "status",
-    label: "状态",
-    options: [
-      { label: "已引用", predicate: (row) => row.status === "linked", value: "linked" },
-      { label: "未引用", predicate: (row) => row.status === "unused", value: "unused" },
-    ],
-  },
-];
-
 export function MediaPage() {
+  const session = useAdminSession();
   const [mediaRows, setMediaRows] = useState<MediaRow[]>([]);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [activeFolderSlug, setActiveFolderSlug] = useState("all");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(() => new Set());
   const [folderModalState, setFolderModalState] = useState<FolderModalState | null>(null);
   const [folderForm, setFolderForm] = useState({ description: "", name: "", slug: "" });
   const [isSavingFolder, setIsSavingFolder] = useState(false);
@@ -337,8 +242,14 @@ export function MediaPage() {
       adminFetch<{ items: AdminMediaItem[] }>("/admin/media/"),
       adminFetch<{ items: MediaFolder[] }>("/admin/media/folders"),
     ]);
+    const nextRows = mediaResponse.items.map(toMediaRow);
+
     setFolders(folderResponse.items);
-    setMediaRows(mediaResponse.items.map(toMediaRow));
+    setMediaRows(nextRows);
+    setSelectedMediaIds(
+      (selectedIds) =>
+        new Set([...selectedIds].filter((id) => nextRows.some((row) => row.id === id))),
+    );
   }
 
   const activeFolder = folders.find((folder) => folder.slug === activeFolderSlug) ?? null;
@@ -346,6 +257,13 @@ export function MediaPage() {
     activeFolderSlug === "all"
       ? mediaRows
       : mediaRows.filter((row) => row.folderSlug === activeFolderSlug);
+  const selectedMediaRows = mediaRows.filter((row) => selectedMediaIds.has(row.id));
+  const selectedVisibleCount = visibleMediaRows.filter((row) =>
+    selectedMediaIds.has(row.id),
+  ).length;
+  const areAllVisibleSelected =
+    visibleMediaRows.length > 0 && selectedVisibleCount === visibleMediaRows.length;
+  const areSomeVisibleSelected = selectedVisibleCount > 0 && !areAllVisibleSelected;
 
   useEffect(() => {
     void loadMedia();
@@ -450,125 +368,85 @@ export function MediaPage() {
     }
   }
 
-  const mediaToolbarActions: DataTableToolbarAction<MediaRow>[] = [
-    {
-      confirmation: "none",
-      icon: "folderOpen",
-      label: "新建文件夹",
-      onPress: ({ setNotice }) => {
-        setFolderForm({ description: "", name: "", slug: "" });
-        setFolderModalState({ mode: "create", setNotice });
-      },
-    },
-    {
-      icon: "cloudUpload",
-      label: "上传",
-      onPress: ({ setNotice }) => {
-        uploadInputRef.current?.click();
-        setNotice("请选择文件上传到媒体库");
-      },
-    },
-    {
-      access: "read",
-      icon: "refresh",
-      label: "刷新",
-      onPress: ({ setNotice }) => {
-        setReloadKey((key) => key + 1);
-        setNotice("媒体列表已刷新");
-      },
-    },
-  ];
+  function selectFolder(slug: string) {
+    setActiveFolderSlug(slug);
+    setSelectedMediaIds(new Set());
+  }
 
-  const mediaBulkActions: DataTableBulkAction<MediaRow>[] = [
-    {
-      access: "danger",
-      confirmationDescription: (rows) =>
-        `这是批量删除，将移除所选 ${rows.length} 个媒体文件。已写入文章、头像或站点配置的链接不会自动替换，相关资源可能失效。`,
-      icon: "trash",
-      label: "删除",
-      onPress: async (rows, { clearSelection, setNotice }) => {
-        try {
-          await Promise.all(
-            rows.map((row) => adminFetch(`/admin/media/${row.id}`, { method: "DELETE" })),
-          );
-          clearSelection();
-          setNotice(`已删除 ${rows.length} 个文件`);
-          setReloadKey((key) => key + 1);
-        } catch (error) {
-          setNotice(error instanceof Error ? error.message : "媒体删除失败");
-        }
-      },
-    },
-  ];
+  function updateMediaSelection(rowId: string, isSelected: boolean) {
+    setSelectedMediaIds((selectedIds) => {
+      const nextSelectedIds = new Set(selectedIds);
 
-  const mediaRowActions: DataTableRowAction<MediaRow>[] = [
-    {
-      access: "read",
-      icon: "copy",
-      label: "复制链接",
-      onPress: async (row, { setNotice }) => {
-        try {
-          await navigator.clipboard.writeText(row.url);
-          setNotice(`已复制 ${row.fileName} 链接`);
-        } catch {
-          setNotice(`${row.fileName} 链接已准备复制`);
+      if (isSelected) {
+        nextSelectedIds.add(rowId);
+      } else {
+        nextSelectedIds.delete(rowId);
+      }
+
+      return nextSelectedIds;
+    });
+  }
+
+  function updateVisibleMediaSelection(isSelected: boolean) {
+    setSelectedMediaIds((selectedIds) => {
+      const nextSelectedIds = new Set(selectedIds);
+
+      visibleMediaRows.forEach((row) => {
+        if (isSelected) {
+          nextSelectedIds.add(row.id);
+        } else {
+          nextSelectedIds.delete(row.id);
         }
-      },
-    },
-    {
-      access: "read",
-      icon: "eye",
-      label: "预览",
-      onPress: (row) => {
-        setPreviewItem(row);
-      },
-    },
-    {
-      access: "read",
-      icon: "download",
-      label: "下载",
-      onPress: async (row, { setNotice }) => {
-        try {
-          await downloadAdminFile(`/admin/media/${row.id}/download`, row.fileName);
-          setNotice(`${row.fileName} 已开始下载`);
-        } catch (error) {
-          setNotice(error instanceof Error ? error.message : "媒体下载失败");
-        }
-      },
-    },
-    {
-      confirmation: "none",
-      icon: "pencil",
-      label: "重命名",
-      onPress: (row, { setNotice }) => {
-        setRenameFileName(row.fileName);
-        setRenameModalState({ row, setNotice });
-      },
-    },
-    {
-      access: "danger",
-      confirmationDescription: (row) =>
-        `删除「${row.fileName}」后，已写入文章、头像或站点配置的链接不会自动替换，相关资源可能失效。`,
-      icon: "trash",
-      label: "删除",
-      onPress: async (row, { setNotice }) => {
-        try {
-          await adminFetch(`/admin/media/${row.id}`, { method: "DELETE" });
-          setNotice("媒体已删除");
-          setReloadKey((key) => key + 1);
-        } catch (error) {
-          setNotice(error instanceof Error ? error.message : "媒体删除失败");
-        }
-      },
-    },
-  ];
+      });
+
+      return nextSelectedIds;
+    });
+  }
+
+  async function downloadMedia(row: MediaRow) {
+    try {
+      await downloadAdminFile(`/admin/media/${row.id}/download`, row.fileName);
+      setPageNotice(`${row.fileName} 已开始下载`);
+    } catch (error) {
+      setPageNotice(error instanceof Error ? error.message : "媒体下载失败");
+    }
+  }
+
+  async function deleteMedia(row: MediaRow) {
+    try {
+      await adminFetch(`/admin/media/${row.id}`, { method: "DELETE" });
+      setSelectedMediaIds((selectedIds) => {
+        const nextSelectedIds = new Set(selectedIds);
+        nextSelectedIds.delete(row.id);
+        return nextSelectedIds;
+      });
+      setPageNotice("媒体已删除");
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setPageNotice(error instanceof Error ? error.message : "媒体删除失败");
+    }
+  }
+
+  async function deleteSelectedMedia() {
+    try {
+      await Promise.all(
+        selectedMediaRows.map((row) => adminFetch(`/admin/media/${row.id}`, { method: "DELETE" })),
+      );
+      setSelectedMediaIds(new Set());
+      setPageNotice(`已删除 ${selectedMediaRows.length} 个文件`);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setPageNotice(error instanceof Error ? error.message : "媒体删除失败");
+    }
+  }
+
   const imageCount = mediaRows.filter((row) => row.kind === "image").length;
   const documentCount = mediaRows.filter((row) => row.kind === "document").length;
   const videoCount = mediaRows.filter((row) => row.kind === "video").length;
 
   return (
     <AdminDataPage
-      description="媒体库保留搜索、类型/引用筛选、排序、分页和复制、预览、下载、重命名、详细、删除操作。"
+      description="媒体库使用平铺视图管理文件，支持选择、批量删除、预览、复制、下载和重命名。"
       eyebrow="内容管理"
       icon="images"
       metrics={[
@@ -672,29 +550,103 @@ export function MediaPage() {
         />
         <div className="media-library-main">
           <div className="media-library-controls">
-            <div className="media-view-toggle" role="group" aria-label="媒体视图切换">
-              <Button
-                onPress={() => setViewMode("list")}
-                size="sm"
-                type="button"
-                variant={viewMode === "list" ? "primary" : "tertiary"}
-              >
-                <AppIcon name="list" />
-                列表
-              </Button>
-              <Button
-                onPress={() => setViewMode("grid")}
-                size="sm"
-                type="button"
-                variant={viewMode === "grid" ? "primary" : "tertiary"}
-              >
-                <AppIcon name="grid" />
-                平铺
-              </Button>
+            <div className="media-library-toolbar">
+              <div className="media-library-toolbar__actions">
+                <Button
+                  isDisabled={session.isReadOnly}
+                  onPress={() => {
+                    setFolderForm({ description: "", name: "", slug: "" });
+                    setFolderModalState({ mode: "create", setNotice: setPageNotice });
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="folderOpen" />
+                  新建文件夹
+                </Button>
+                <Button
+                  isDisabled={session.isReadOnly}
+                  onPress={() => {
+                    uploadInputRef.current?.click();
+                    setPageNotice("请选择文件上传到媒体库");
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="cloudUpload" />
+                  上传
+                </Button>
+                <Button
+                  onPress={() => {
+                    setReloadKey((key) => key + 1);
+                    setPageNotice("媒体列表已刷新");
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="refresh" />
+                  刷新
+                </Button>
+              </div>
+              <div className="media-library-selection">
+                <Checkbox
+                  aria-label="选择全部当前媒体"
+                  isDisabled={session.isReadOnly || visibleMediaRows.length === 0}
+                  isIndeterminate={areSomeVisibleSelected}
+                  isSelected={areAllVisibleSelected}
+                  onChange={updateVisibleMediaSelection}
+                  variant="secondary"
+                >
+                  <Checkbox.Control>
+                    <Checkbox.Indicator />
+                  </Checkbox.Control>
+                </Checkbox>
+                <span>已选择 {selectedMediaIds.size} 项</span>
+                <AlertDialog>
+                  <Button
+                    isDisabled={session.isReadOnly || selectedMediaRows.length === 0}
+                    size="sm"
+                    type="button"
+                    variant="danger-soft"
+                  >
+                    <AppIcon name="trash" />
+                    批量删除
+                  </Button>
+                  <AlertDialog.Backdrop>
+                    <AlertDialog.Container placement="center" size="sm">
+                      <AlertDialog.Dialog>
+                        <AlertDialog.CloseTrigger />
+                        <AlertDialog.Header>
+                          <AlertDialog.Icon status="danger" />
+                          <AlertDialog.Heading>确认批量删除？</AlertDialog.Heading>
+                        </AlertDialog.Header>
+                        <AlertDialog.Body>
+                          <p>{`将删除所选 ${selectedMediaRows.length} 个媒体文件，已写入内容的链接不会自动替换。`}</p>
+                        </AlertDialog.Body>
+                        <AlertDialog.Footer>
+                          <Button slot="close" variant="tertiary">
+                            取消
+                          </Button>
+                          <Button
+                            onPress={() => void deleteSelectedMedia()}
+                            slot="close"
+                            variant="danger"
+                          >
+                            确认批量删除
+                          </Button>
+                        </AlertDialog.Footer>
+                      </AlertDialog.Dialog>
+                    </AlertDialog.Container>
+                  </AlertDialog.Backdrop>
+                </AlertDialog>
+              </div>
             </div>
             <div className="media-folder-list" aria-label="媒体文件夹">
               <Button
-                onPress={() => setActiveFolderSlug("all")}
+                onPress={() => selectFolder("all")}
                 size="sm"
                 type="button"
                 variant={activeFolderSlug === "all" ? "primary" : "tertiary"}
@@ -705,7 +657,7 @@ export function MediaPage() {
               {folders.map((folder) => (
                 <Button
                   key={folder.id}
-                  onPress={() => setActiveFolderSlug(folder.slug)}
+                  onPress={() => selectFolder(folder.slug)}
                   size="sm"
                   type="button"
                   variant={activeFolderSlug === folder.slug ? "primary" : "tertiary"}
@@ -719,6 +671,7 @@ export function MediaPage() {
             {activeFolder ? (
               <div className="media-folder-actions">
                 <Button
+                  isDisabled={session.isReadOnly}
                   onPress={() => {
                     setFolderForm({
                       description: activeFolder.description,
@@ -740,7 +693,7 @@ export function MediaPage() {
                 </Button>
                 <AlertDialog>
                   <Button
-                    isDisabled={activeFolder.isProtected}
+                    isDisabled={session.isReadOnly || activeFolder.isProtected}
                     size="sm"
                     type="button"
                     variant="danger-soft"
@@ -778,31 +731,37 @@ export function MediaPage() {
               </div>
             ) : null}
           </div>
-          {viewMode === "list" ? (
-            <DataTable
-              ariaLabel="媒体库表格"
-              bulkActions={mediaBulkActions}
-              columns={mediaColumns}
-              defaultSort={{ column: "uploadedAt", direction: "desc" }}
-              filters={mediaFilters}
-              rowActions={mediaRowActions}
-              rows={visibleMediaRows}
-              searchPlaceholder="搜索文件、链接、引用文章"
-              toolbarActions={mediaToolbarActions}
-              emptyText="暂无媒体记录"
-            />
-          ) : (
-            <div className="media-grid-view">
-              {visibleMediaRows.map((row) => (
-                <Card className="media-grid-card" key={row.id}>
+          <div className="media-grid-view">
+            {visibleMediaRows.map((row) => {
+              const isSelected = selectedMediaIds.has(row.id);
+
+              return (
+                <Card
+                  className={
+                    isSelected ? "media-grid-card media-grid-card--selected" : "media-grid-card"
+                  }
+                  key={row.id}
+                >
                   <div className="media-grid-card__preview">
+                    <Checkbox
+                      aria-label={`选择${row.fileName}`}
+                      className="media-grid-card__selection"
+                      isDisabled={session.isReadOnly}
+                      isSelected={isSelected}
+                      onChange={(selected) => updateMediaSelection(row.id, selected)}
+                      variant="secondary"
+                    >
+                      <Checkbox.Control>
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                    </Checkbox>
                     {row.kind === "image" ? (
                       <img alt={row.alt} src={row.url} />
                     ) : (
                       <MediaThumb item={row} />
                     )}
                   </div>
-                  <strong>{row.fileName}</strong>
+                  <strong title={row.fileName}>{row.fileName}</strong>
                   <span>
                     {row.folderName} · {row.size}
                   </span>
@@ -829,6 +788,17 @@ export function MediaPage() {
                     </Button>
                     <Button
                       isIconOnly
+                      aria-label={`下载${row.fileName}`}
+                      onPress={() => void downloadMedia(row)}
+                      size="sm"
+                      type="button"
+                      variant="tertiary"
+                    >
+                      <AppIcon name="download" />
+                    </Button>
+                    <Button
+                      isDisabled={session.isReadOnly}
+                      isIconOnly
                       aria-label={`重命名${row.fileName}`}
                       onPress={() => {
                         setRenameFileName(row.fileName);
@@ -840,11 +810,49 @@ export function MediaPage() {
                     >
                       <AppIcon name="pencil" />
                     </Button>
+                    <AlertDialog>
+                      <Button
+                        isDisabled={session.isReadOnly}
+                        isIconOnly
+                        aria-label={`删除${row.fileName}`}
+                        size="sm"
+                        type="button"
+                        variant="danger-soft"
+                      >
+                        <AppIcon name="trash" />
+                      </Button>
+                      <AlertDialog.Backdrop>
+                        <AlertDialog.Container placement="center" size="sm">
+                          <AlertDialog.Dialog>
+                            <AlertDialog.CloseTrigger />
+                            <AlertDialog.Header>
+                              <AlertDialog.Icon status="danger" />
+                              <AlertDialog.Heading>确认删除媒体？</AlertDialog.Heading>
+                            </AlertDialog.Header>
+                            <AlertDialog.Body>
+                              <p>{`删除「${row.fileName}」后，已写入文章、头像或站点配置的链接不会自动替换。`}</p>
+                            </AlertDialog.Body>
+                            <AlertDialog.Footer>
+                              <Button slot="close" variant="tertiary">
+                                取消
+                              </Button>
+                              <Button
+                                onPress={() => void deleteMedia(row)}
+                                slot="close"
+                                variant="danger"
+                              >
+                                确认删除
+                              </Button>
+                            </AlertDialog.Footer>
+                          </AlertDialog.Dialog>
+                        </AlertDialog.Container>
+                      </AlertDialog.Backdrop>
+                    </AlertDialog>
                   </div>
                 </Card>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </div>
       </div>
       <LocalImageEditorDialog
