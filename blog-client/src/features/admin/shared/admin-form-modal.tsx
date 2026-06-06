@@ -14,6 +14,7 @@ import type { FormEvent, ReactNode } from "react";
 
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
+import { PasswordInputGroup } from "../../../shared/password-input-group";
 
 type AdminFormModalProps = {
   children: ReactNode;
@@ -158,19 +159,31 @@ export function AdminInputGroupField({
   return (
     <TextField className="admin-form-modal__field" fullWidth isRequired={isRequired}>
       <Label>{label}</Label>
-      <InputGroup fullWidth variant="secondary">
-        <InputGroup.Prefix>
-          <AppIcon name={icon} size={16} />
-        </InputGroup.Prefix>
-        <InputGroup.Input
+      {type === "password" ? (
+        <PasswordInputGroup
           autoComplete={autoComplete}
           className="admin-form-modal__input"
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          type={type}
+          prefix={<AppIcon name={icon} size={16} />}
           value={value}
+          variant="secondary"
         />
-      </InputGroup>
+      ) : (
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name={icon} size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            autoComplete={autoComplete}
+            className="admin-form-modal__input"
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={placeholder}
+            type={type}
+            value={value}
+          />
+        </InputGroup>
+      )}
       {descriptionText ? <Description>{descriptionText}</Description> : null}
       <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>

@@ -15,6 +15,7 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { InteractiveCursor } from "../../../app/blog/InteractiveCursor";
 import { AppIcon } from "../../../shared/icons";
+import { PasswordInputGroup } from "../../../shared/password-input-group";
 import { signInAdminSession, useAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
 import { showErrorToast, showSuccessToast } from "../../../shared/toast/operation-toast";
@@ -110,10 +111,9 @@ export function AdminLoginPage() {
           </TextField>
           <TextField fullWidth isRequired>
             <Label>密码</Label>
-            <Input
+            <PasswordInputGroup
               autoComplete="current-password"
               onChange={(event) => setPassword(event.target.value)}
-              type="password"
               value={password}
             />
             <Description>后台登录密码区分大小写。</Description>

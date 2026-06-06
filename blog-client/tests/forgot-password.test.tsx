@@ -17,5 +17,6 @@ describe("ForgotPasswordPage", () => {
     expect(html).toContain("新密码");
     expect(html).toContain("确认密码");
     expect(html).toContain("重置密码");
+    expect(html.match(/aria-label="显示密码"/g)).toHaveLength(2);
   });
 });

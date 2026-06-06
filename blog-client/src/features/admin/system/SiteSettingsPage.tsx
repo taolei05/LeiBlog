@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
+import { PasswordInputGroup } from "../../../shared/password-input-group";
 import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
@@ -1451,7 +1452,7 @@ function SettingsTextField({
   return (
     <TextField fullWidth isRequired={isRequired}>
       <Label>{label}</Label>
-      <Input {...props} type={type} />
+      {type === "password" ? <PasswordInputGroup {...props} /> : <Input {...props} type={type} />}
       {descriptionText ? <Description>{descriptionText}</Description> : null}
       <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>
     </TextField>

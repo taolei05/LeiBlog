@@ -21,6 +21,7 @@ import { InteractiveCursor } from "../../../app/blog/InteractiveCursor";
 import { AppIcon } from "../../../shared/icons";
 import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
 import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
+import { PasswordInputGroup } from "../../../shared/password-input-group";
 import { signInAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
 import { showErrorToast, showSuccessToast } from "../../../shared/toast/operation-toast";
@@ -1125,7 +1126,8 @@ function SetupTextField({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
   const descriptionText = description ?? (isRequired ? "必填" : undefined);
-  const input = <Input {...props} type={type} />;
+  const input =
+    type === "password" ? <PasswordInputGroup {...props} /> : <Input {...props} type={type} />;
   const uploadControl = onFileChange ? (
     <>
       <input

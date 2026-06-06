@@ -18,6 +18,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getAdminApiBaseUrl, resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
 import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
+import { PasswordInputGroup } from "../../../shared/password-input-group";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
 import { useTheme } from "../../../shared/theme/ThemeProviderLite";
@@ -661,10 +662,9 @@ function AuthDialog({
                   </TextField>
                   <TextField fullWidth isRequired>
                     <Label>密码</Label>
-                    <Input
+                    <PasswordInputGroup
                       autoComplete="current-password"
                       onChange={(event) => onLoginChange("password", event.target.value)}
-                      type="password"
                       value={loginForm.password}
                     />
                   </TextField>
@@ -752,11 +752,10 @@ function AuthDialog({
                   ) : null}
                   <TextField fullWidth isRequired>
                     <Label>密码</Label>
-                    <Input
+                    <PasswordInputGroup
                       autoComplete="new-password"
                       onChange={(event) => onRegisterChange("password", event.target.value)}
                       placeholder="至少 8 位"
-                      type="password"
                       value={registerForm.password}
                     />
                   </TextField>
@@ -1011,20 +1010,18 @@ export function ForgotPasswordPage() {
         ) : null}
         <TextField fullWidth isRequired>
           <Label>新密码</Label>
-          <Input
+          <PasswordInputGroup
             autoComplete="new-password"
             onChange={(event) => updateForm("password", event.target.value)}
             placeholder="至少 8 位"
-            type="password"
             value={formState.password}
           />
         </TextField>
         <TextField fullWidth isRequired>
           <Label>确认密码</Label>
-          <Input
+          <PasswordInputGroup
             autoComplete="new-password"
             onChange={(event) => updateForm("confirmPassword", event.target.value)}
-            type="password"
             value={formState.confirmPassword}
           />
         </TextField>
@@ -1963,22 +1960,20 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                     <p className="front-form-note">更新成功后会退出当前会话，需要重新登录。</p>
                     <TextField fullWidth isRequired>
                       <Label>当前密码</Label>
-                      <Input
+                      <PasswordInputGroup
                         autoComplete="current-password"
                         onChange={(event) =>
                           updatePasswordForm("currentPassword", event.target.value)
                         }
-                        type="password"
                         value={passwordForm.currentPassword}
                       />
                     </TextField>
                     <TextField fullWidth isRequired>
                       <Label>新密码</Label>
-                      <Input
+                      <PasswordInputGroup
                         autoComplete="new-password"
                         onChange={(event) => updatePasswordForm("newPassword", event.target.value)}
                         placeholder="至少 8 位"
-                        type="password"
                         value={passwordForm.newPassword}
                       />
                     </TextField>
