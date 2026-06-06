@@ -12,7 +12,7 @@ import {
   getSetupStatus,
 } from "../src/admin/setup/service";
 import type { EncryptedSecret } from "../src/shared/crypto";
-import { verifyPassword } from "../src/shared/auth";
+import { hashPassword, verifyPassword } from "../src/shared/auth";
 import { decryptSecret } from "../src/shared/crypto";
 
 const POSTGRES_ADMIN_URL =
@@ -50,6 +50,52 @@ afterAll(async () => {
 });
 
 describe("admin setup service", () => {
+  test("treats an existing admin user as completed setup for legacy databases", async () => {
+    const passwordHash = await hashPassword("12345678");
+
+    await setupDb`
+      INSERT INTO users (username, password_hash, role)
+      VALUES ('legacy-admin', ${passwordHash}, 'admin')
+    `;
+    await setupDb`
+      UPDATE setup_state
+      SET is_completed = false,
+          current_step = 'admin',
+          completed_at = null
+      WHERE id = 1
+    `;
+
+    try {
+      const status = await getSetupStatus({ client: setupDb });
+
+      expect(status.isCompleted).toBe(true);
+      expect(status.currentStep).toBe("completed");
+
+      const [setupState] = await setupDb<{
+        current_step: string;
+        is_completed: boolean;
+      }[]>`
+        SELECT is_completed, current_step
+        FROM setup_state
+        WHERE id = 1
+      `;
+      expect(setupState.is_completed).toBe(true);
+      expect(setupState.current_step).toBe("completed");
+    } finally {
+      await setupDb`
+        DELETE FROM users
+        WHERE username = 'legacy-admin'
+      `;
+      await setupDb`
+        UPDATE setup_state
+        SET is_completed = false,
+            current_step = 'admin',
+            completed_at = null
+        WHERE id = 1
+      `;
+    }
+  });
+
   test("runs the first setup flow and stores secrets encrypted", async () => {
     const initial = await getSetupStatus({ client: setupDb });
     expect(initial.isCompleted).toBe(false);

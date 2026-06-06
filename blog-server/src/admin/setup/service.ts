@@ -145,7 +145,7 @@ async function getSetupState(client: DbClient) {
     `;
   }
 
-  const [state] = await client<SetupStateRow[]>`
+  let [state] = await client<SetupStateRow[]>`
     SELECT is_completed, current_step, completed_at
     FROM setup_state
     WHERE id = 1
@@ -153,6 +153,17 @@ async function getSetupState(client: DbClient) {
 
   if (!state) {
     throw new Error("Setup state is missing");
+  }
+
+  if (hasAdmin && !state.is_completed && state.current_step === "admin") {
+    [state] = await client<SetupStateRow[]>`
+      UPDATE setup_state
+      SET is_completed = true,
+          current_step = 'completed',
+          completed_at = now()
+      WHERE id = 1
+      RETURNING is_completed, current_step, completed_at
+    `;
   }
 
   return state;
