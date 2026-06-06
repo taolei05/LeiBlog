@@ -7,7 +7,8 @@ import {
 import { getPublicSiteFiling } from "../src/public/site/service";
 import type { AuthUser } from "../src/shared/auth";
 import { clearSiteCache } from "../src/shared/cache/content";
-import { createMigratedTestDatabase, type TestDatabase } from "./helpers/database";
+import type { TestDatabase } from "./helpers/database";
+import { createMigratedTestDatabase } from "./helpers/database";
 
 let testDatabase: TestDatabase;
 let testDb: Bun.SQL;
@@ -33,6 +34,18 @@ afterAll(async () => {
 });
 
 describe("site filing service", () => {
+  test("does not keep legacy single ICP columns after all migrations", async () => {
+    const columns = await testDb<{ column_name: string }[]>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'site_filing'
+        AND column_name IN ('icp_number', 'icp_url')
+      ORDER BY column_name
+    `;
+
+    expect(columns).toEqual([]);
+  });
+
   test("stores multiple ICP filing records while keeping the first record compatible", async () => {
     await updateSystemFiling(
       currentAdmin,

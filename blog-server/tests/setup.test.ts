@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -11,8 +11,9 @@ import {
   configureSiteInfo,
   getSetupStatus,
 } from "../src/admin/setup/service";
-import { decryptSecret, type EncryptedSecret } from "../src/shared/crypto";
+import type { EncryptedSecret } from "../src/shared/crypto";
 import { verifyPassword } from "../src/shared/auth";
+import { decryptSecret } from "../src/shared/crypto";
 
 const POSTGRES_ADMIN_URL =
   process.env.TEST_POSTGRES_ADMIN_URL ??
@@ -32,11 +33,14 @@ beforeAll(async () => {
     { max: 1 }
   );
 
-  const migration = readFileSync(
-    join(import.meta.dir, "../src/db/migrations/001_initial_schema.sql"),
-    "utf8"
-  );
-  await setupDb.unsafe(migration);
+  const migrationsDir = join(import.meta.dir, "../src/db/migrations");
+  const migrationFiles = readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+
+  for (const file of migrationFiles) {
+    await setupDb.unsafe(readFileSync(join(migrationsDir, file), "utf8"));
+  }
 });
 
 afterAll(async () => {
@@ -135,6 +139,15 @@ describe("admin setup service", () => {
       { client: setupDb }
     );
     expect(afterFiling.currentStep).toBe("complete");
+
+    const [filing] = await setupDb<{ icp_records: string }[]>`
+      SELECT icp_records
+      FROM site_filing
+      WHERE id = 1
+    `;
+    expect(JSON.parse(filing.icp_records)).toEqual([
+      { number: "京ICP备00000000号", url: "https://beian.miit.gov.cn/" },
+    ]);
 
     const completed = await completeSetup({ client: setupDb });
     expect(completed.isCompleted).toBe(true);

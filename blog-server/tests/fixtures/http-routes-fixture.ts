@@ -79,8 +79,13 @@ async function seedRouteData() {
     )
   `;
   await db`
-    INSERT INTO site_filing (id, icp_number, icp_url, police_number, police_url)
-    VALUES (1, 'ICP-route', 'https://beian.example.com', 'Police-route', 'https://police.example.com')
+    INSERT INTO site_filing (id, icp_records, police_number, police_url)
+    VALUES (
+      1,
+      ${JSON.stringify([{ number: "ICP-route", url: "https://beian.example.com" }])}::jsonb,
+      'Police-route',
+      'https://police.example.com'
+    )
   `;
 
   const [admin] = await db<{ id: string }[]>`

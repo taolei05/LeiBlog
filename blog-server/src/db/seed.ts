@@ -552,12 +552,10 @@ async function seedSite(client: DbClient) {
   `;
 
   await client`
-    INSERT INTO site_filing (id, icp_number, icp_url, icp_records, police_number, police_url)
-    VALUES (1, null, null, '[]'::jsonb, null, null)
+    INSERT INTO site_filing (id, icp_records, police_number, police_url)
+    VALUES (1, '[]'::jsonb, null, null)
     ON CONFLICT (id) DO UPDATE
-    SET icp_number = EXCLUDED.icp_number,
-        icp_url = EXCLUDED.icp_url,
-        icp_records = EXCLUDED.icp_records,
+    SET icp_records = EXCLUDED.icp_records,
         police_number = EXCLUDED.police_number,
         police_url = EXCLUDED.police_url
   `;

@@ -71,9 +71,7 @@ interface SiteConfigRow {
 }
 
 interface SiteFilingRow {
-  icp_number: string | null;
   icp_records: unknown;
-  icp_url: string | null;
   police_number: string | null;
   police_url: string | null;
 }
@@ -163,16 +161,14 @@ function toSiteConfig(row: SiteConfigRow) {
 
 function toFiling(row: SiteFilingRow) {
   const icpRecords = readStoredIcpFilingRecords({
-    legacyNumber: row.icp_number,
-    legacyUrl: row.icp_url,
     storedRecords: row.icp_records,
   });
   const firstIcpRecord = icpRecords[0];
 
   return {
-    icpNumber: row.icp_number ?? firstIcpRecord?.number ?? null,
+    icpNumber: firstIcpRecord?.number ?? null,
     icpRecords,
-    icpUrl: row.icp_url ?? firstIcpRecord?.url ?? null,
+    icpUrl: firstIcpRecord?.url ?? null,
     policeNumber: row.police_number,
     policeUrl: row.police_url,
   };
@@ -411,7 +407,7 @@ export async function getSystemFiling(currentUser: AuthUser, client: DbClient = 
   requireAdminOrDemo(currentUser);
 
   const [row] = await client<SiteFilingRow[]>`
-    SELECT icp_number, icp_records, icp_url, police_number, police_url
+    SELECT icp_records, police_number, police_url
     FROM site_filing
     WHERE id = 1
   `;
@@ -431,22 +427,17 @@ export async function updateSystemFiling(
     legacyUrl: input.icpUrl,
     records: input.icpRecords,
   });
-  const firstIcpRecord = icpRecords[0];
 
   await client`
-    INSERT INTO site_filing (id, icp_number, icp_url, icp_records, police_number, police_url)
+    INSERT INTO site_filing (id, icp_records, police_number, police_url)
     VALUES (
       1,
-      ${firstIcpRecord?.number ?? null},
-      ${firstIcpRecord?.url ?? null},
       ${JSON.stringify(icpRecords)}::jsonb,
       ${cleanOptional(input.policeNumber)},
       ${cleanOptional(input.policeUrl)}
     )
     ON CONFLICT (id) DO UPDATE
-    SET icp_number = EXCLUDED.icp_number,
-        icp_url = EXCLUDED.icp_url,
-        icp_records = EXCLUDED.icp_records,
+    SET icp_records = EXCLUDED.icp_records,
         police_number = EXCLUDED.police_number,
         police_url = EXCLUDED.police_url
   `;

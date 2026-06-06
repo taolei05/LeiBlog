@@ -19,6 +19,10 @@ const siteFilingIcpRecordsMigration = readFileSync(
   join(import.meta.dir, "../src/db/migrations/009_site_filing_icp_records.sql"),
   "utf8"
 );
+const dropLegacyIcpColumnsMigration = readFileSync(
+  join(import.meta.dir, "../src/db/migrations/010_drop_site_filing_legacy_icp_columns.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("creates the required core tables", () => {
@@ -69,5 +73,7 @@ describe("initial database migration", () => {
     expect(siteFilingIcpRecordsMigration).toContain("ADD COLUMN IF NOT EXISTS icp_records");
     expect(siteFilingIcpRecordsMigration).toContain("icp_records jsonb");
     expect(siteFilingIcpRecordsMigration).toContain("jsonb_build_array");
+    expect(dropLegacyIcpColumnsMigration).toContain("DROP COLUMN IF EXISTS icp_number");
+    expect(dropLegacyIcpColumnsMigration).toContain("DROP COLUMN IF EXISTS icp_url");
   });
 });

@@ -71,18 +71,12 @@ export function cleanIcpFilingRecords({
 }
 
 export function readStoredIcpFilingRecords({
-  legacyNumber,
-  legacyUrl,
   storedRecords,
 }: {
-  legacyNumber?: string | null;
-  legacyUrl?: string | null;
   storedRecords: unknown;
 }) {
-  const records = parseStoredRecords(storedRecords)
+  return parseStoredRecords(storedRecords)
     .map(readStoredRecord)
     .filter((record): record is IcpFilingRecord => record !== null)
     .slice(0, MAX_ICP_RECORDS);
-
-  return records.length > 0 ? records : cleanIcpFilingRecords({ legacyNumber, legacyUrl });
 }

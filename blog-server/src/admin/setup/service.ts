@@ -1,11 +1,13 @@
 import type { UserRole } from "../../shared/auth";
 import type { DbClient } from "../../shared/db";
+import type { UserProfile, UserProfileRow } from "../../shared/types/user";
 import { hashPassword } from "../../shared/auth";
 import { clearSiteCache } from "../../shared/cache/content";
 import { encryptSecret } from "../../shared/crypto";
 import { db, withTransaction } from "../../shared/db";
 import { conflict, validationError } from "../../shared/errors";
-import { toUserProfile, type UserProfile, type UserProfileRow } from "../../shared/types/user";
+import { cleanIcpFilingRecords } from "../../shared/site-filing";
+import { toUserProfile } from "../../shared/types/user";
 import { uploadSetupMedia } from "../media/service";
 
 export type SetupStepKey =
@@ -447,24 +449,26 @@ export async function configureFiling(
   options: SetupServiceOptions = {}
 ) {
   const client = options.client ?? db;
+  const icpRecords = cleanIcpFilingRecords({
+    legacyNumber: input.icpNumber,
+    legacyUrl: input.icpUrl,
+  });
 
   await withTransaction(async (tx) => {
     await ensureSetupOpen(tx);
 
     await tx`
       INSERT INTO site_filing (
-        id, icp_number, icp_url, police_number, police_url
+        id, icp_records, police_number, police_url
       )
       VALUES (
         1,
-        ${cleanOptional(input.icpNumber)},
-        ${cleanOptional(input.icpUrl)},
+        ${JSON.stringify(icpRecords)}::jsonb,
         ${cleanOptional(input.policeNumber)},
         ${cleanOptional(input.policeUrl)}
       )
       ON CONFLICT (id) DO UPDATE
-      SET icp_number = EXCLUDED.icp_number,
-          icp_url = EXCLUDED.icp_url,
+      SET icp_records = EXCLUDED.icp_records,
           police_number = EXCLUDED.police_number,
           police_url = EXCLUDED.police_url
     `;
