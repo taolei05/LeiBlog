@@ -27,30 +27,26 @@ import { MdxEditorField } from "../../../shared/mdx/MdxEditorField";
 import { allowedMdxJsxComponentNames } from "../../../shared/mdx/mdxWhitelist";
 import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
+import type {
+  AdminArticleCategory,
+  AdminArticleContributor,
+  AdminArticleDetail,
+  AdminArticleTag,
+  ArticleFormState,
+  ArticleStatus,
+} from "./article-edit-helpers";
+import { buildArticleRequestBody, emptyFormState, toFormState } from "./article-edit-helpers";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
 import { MediaAssetField } from "../shared/media-asset-field";
 
-type ArticleStatus = "draft" | "offline" | "published";
-
-type AdminArticleDetail = {
-  contentMdx: string;
-  contributors: AdminArticleContributor[];
-  coverImageUrl: string | null;
+type AdminCategoryItem = {
+  articleCount: number;
+  createdAt: string;
   id: string;
-  isPinned: boolean;
-  slug: string;
-  status: ArticleStatus;
-  summary: string | null;
-  title: string;
-  updatedAt: string;
-};
-
-type AdminArticleContributor = {
-  avatarUrl?: string | null;
-  id: string;
-  linkUrl?: string | null;
   name: string;
+  slug: string;
+  updatedAt: string;
 };
 
 type AdminContributorItem = {
@@ -62,15 +58,14 @@ type AdminContributorItem = {
   updatedAt: string;
 };
 
-type ArticleFormState = {
-  contentMdx: string;
-  contributorIds: string[];
-  coverImageUrl: string;
-  isPinned: boolean;
+type AdminTagItem = {
+  articleCount: number;
+  color: string | null;
+  createdAt: string;
+  id: string;
+  name: string;
   slug: string;
-  status: ArticleStatus;
-  summary: string;
-  title: string;
+  updatedAt: string;
 };
 
 type ContributorFormState = {
@@ -79,41 +74,11 @@ type ContributorFormState = {
   name: string;
 };
 
-const emptyFormState: ArticleFormState = {
-  contentMdx: "",
-  contributorIds: [],
-  coverImageUrl: "",
-  isPinned: false,
-  slug: "",
-  status: "draft",
-  summary: "",
-  title: "",
-};
-
 const emptyContributorForm: ContributorFormState = {
   avatarUrl: "",
   linkUrl: "",
   name: "",
 };
-
-function toOptional(value: string) {
-  const trimmed = value.trim();
-
-  return trimmed ? trimmed : null;
-}
-
-function toFormState(article: AdminArticleDetail): ArticleFormState {
-  return {
-    contentMdx: article.contentMdx,
-    contributorIds: article.contributors.map((contributor) => contributor.id),
-    coverImageUrl: article.coverImageUrl ?? "",
-    isPinned: article.isPinned,
-    slug: article.slug,
-    status: article.status,
-    summary: article.summary ?? "",
-    title: article.title,
-  };
-}
 
 function contributorOptionalValue(value: string) {
   const trimmed = value.trim();
@@ -143,6 +108,45 @@ function mergeContributors(
   return [...items.values()];
 }
 
+function mergeCategories(currentItems: AdminCategoryItem[], relationItems: AdminArticleCategory[]) {
+  const items = new Map(currentItems.map((category) => [category.id, category]));
+
+  for (const category of relationItems) {
+    if (items.has(category.id)) continue;
+
+    items.set(category.id, {
+      articleCount: 0,
+      createdAt: "",
+      id: category.id,
+      name: category.name,
+      slug: category.slug ?? "",
+      updatedAt: "",
+    });
+  }
+
+  return [...items.values()];
+}
+
+function mergeTags(currentItems: AdminTagItem[], relationItems: AdminArticleTag[]) {
+  const items = new Map(currentItems.map((tag) => [tag.id, tag]));
+
+  for (const tag of relationItems) {
+    if (items.has(tag.id)) continue;
+
+    items.set(tag.id, {
+      articleCount: 0,
+      color: tag.color ?? null,
+      createdAt: "",
+      id: tag.id,
+      name: tag.name,
+      slug: tag.slug ?? "",
+      updatedAt: "",
+    });
+  }
+
+  return [...items.values()];
+}
+
 function createInputHandler(
   key: keyof Pick<ArticleFormState, "coverImageUrl" | "slug" | "summary" | "title">,
 ) {
@@ -160,7 +164,9 @@ export function ArticleEditPage() {
   const session = useAdminSession();
   const isNewArticle = !id;
   const [formState, setFormState] = useState<ArticleFormState>(emptyFormState);
+  const [categories, setCategories] = useState<AdminCategoryItem[]>([]);
   const [contributors, setContributors] = useState<AdminContributorItem[]>([]);
+  const [tags, setTags] = useState<AdminTagItem[]>([]);
   const [contributorForm, setContributorForm] =
     useState<ContributorFormState>(emptyContributorForm);
   const [isContributorModalOpen, setIsContributorModalOpen] = useState(false);
@@ -201,9 +207,11 @@ export function ArticleEditPage() {
         );
         if (!isActive) return;
         setFormState(toFormState(response.item));
+        setCategories((currentItems) => mergeCategories(currentItems, response.item.categories));
         setContributors((currentItems) =>
           mergeContributors(currentItems, response.item.contributors),
         );
+        setTags((currentItems) => mergeTags(currentItems, response.item.tags));
         setNotice("");
       } catch (error) {
         if (!isActive) return;
@@ -243,6 +251,43 @@ export function ArticleEditPage() {
     };
   }, [updateNotice]);
 
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadTaxonomies() {
+      const [categoryResult, tagResult] = await Promise.allSettled([
+        adminFetch<{ items: AdminCategoryItem[] }>("/admin/content/categories?pageSize=100"),
+        adminFetch<{ items: AdminTagItem[] }>("/admin/content/tags?pageSize=100"),
+      ]);
+
+      if (!isActive) return;
+
+      if (categoryResult.status === "fulfilled") {
+        setCategories((currentItems) => mergeCategories(categoryResult.value.items, currentItems));
+      }
+
+      if (tagResult.status === "fulfilled") {
+        setTags((currentItems) => mergeTags(tagResult.value.items, currentItems));
+      }
+
+      if (categoryResult.status === "rejected") {
+        updateNotice(
+          categoryResult.reason instanceof Error ? categoryResult.reason.message : "分类读取失败",
+        );
+      }
+
+      if (tagResult.status === "rejected") {
+        updateNotice(tagResult.reason instanceof Error ? tagResult.reason.message : "标签读取失败");
+      }
+    }
+
+    void loadTaxonomies();
+
+    return () => {
+      isActive = false;
+    };
+  }, [updateNotice]);
+
   async function saveArticle(statusOverride?: ArticleStatus) {
     if (session.isReadOnly) return;
     if (!formState.title.trim()) {
@@ -262,16 +307,7 @@ export function ArticleEditPage() {
         coverImageUrl = upload.item.accessUrl;
       }
 
-      const body = {
-        contentMdx: formState.contentMdx,
-        coverImageUrl: toOptional(coverImageUrl),
-        contributorIds: formState.contributorIds,
-        isPinned: formState.isPinned,
-        slug: formState.slug,
-        status: statusOverride ?? formState.status,
-        summary: toOptional(formState.summary),
-        title: formState.title.trim(),
-      };
+      const body = buildArticleRequestBody({ ...formState, coverImageUrl }, statusOverride);
       const response = await adminFetch<{ item: AdminArticleDetail }>(
         isNewArticle ? "/admin/content/articles" : `/admin/content/articles/${id}`,
         {
@@ -302,9 +338,13 @@ export function ArticleEditPage() {
   const titleInputHandler = createInputHandler("title");
   const slugInputHandler = createInputHandler("slug");
   const summaryInputHandler = createInputHandler("summary");
+  const selectedCategories = categories.filter((category) =>
+    formState.categoryIds.includes(category.id),
+  );
   const selectedContributors = contributors.filter((contributor) =>
     formState.contributorIds.includes(contributor.id),
   );
+  const selectedTags = tags.filter((tag) => formState.tagIds.includes(tag.id));
 
   function addContributor(contributorId: string) {
     setFormState((state) =>
@@ -316,6 +356,14 @@ export function ArticleEditPage() {
 
   function updateContributorSelection(contributorIds: Key[]) {
     setFormState((state) => ({ ...state, contributorIds: contributorIds.map(String) }));
+  }
+
+  function updateCategorySelection(categoryIds: Key[]) {
+    setFormState((state) => ({ ...state, categoryIds: categoryIds.map(String) }));
+  }
+
+  function updateTagSelection(tagIds: Key[]) {
+    setFormState((state) => ({ ...state, tagIds: tagIds.map(String) }));
   }
 
   function updateContributorForm(key: keyof ContributorFormState, value: string) {
@@ -567,6 +615,130 @@ export function ArticleEditPage() {
               onLocalFileChange={setCoverLocalFile}
               value={formState.coverImageUrl}
             />
+            <div className="article-taxonomy-field">
+              <Select
+                fullWidth
+                onChange={updateCategorySelection}
+                placeholder="选择分类"
+                selectionMode="multiple"
+                value={formState.categoryIds}
+                variant="secondary"
+              >
+                <Label>关联分类</Label>
+                <Select.Trigger>
+                  <AppIcon name="albums" size={16} />
+                  <Select.Value>
+                    {({ isPlaceholder, selectedText }) =>
+                      isPlaceholder ? "选择分类" : selectedText
+                    }
+                  </Select.Value>
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox aria-label="关联分类">
+                    {categories.map((category) => (
+                      <ListBox.Item id={category.id} key={category.id} textValue={category.name}>
+                        {category.name}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+              <TagGroup
+                aria-label="已关联分类"
+                onRemove={(keys) =>
+                  setFormState((state) => ({
+                    ...state,
+                    categoryIds: state.categoryIds.filter((item) => !keys.has(item)),
+                  }))
+                }
+                size="lg"
+                variant="surface"
+              >
+                <Label>已关联分类</Label>
+                <TagGroup.List items={selectedCategories}>
+                  {(category) => (
+                    <Tag id={category.id} key={category.id} textValue={category.name}>
+                      {(renderProps) => (
+                        <>
+                          <AppIcon name="albums" size={16} />
+                          <span>{category.name}</span>
+                          {renderProps.allowsRemoving ? (
+                            <Tag.RemoveButton aria-label={`移除${category.name}`}>
+                              <AppIcon name="close" size={18} />
+                            </Tag.RemoveButton>
+                          ) : null}
+                        </>
+                      )}
+                    </Tag>
+                  )}
+                </TagGroup.List>
+                <Description>会同步到前台分类页和文章筛选。</Description>
+              </TagGroup>
+            </div>
+            <div className="article-taxonomy-field">
+              <Select
+                fullWidth
+                onChange={updateTagSelection}
+                placeholder="选择标签"
+                selectionMode="multiple"
+                value={formState.tagIds}
+                variant="secondary"
+              >
+                <Label>关联标签</Label>
+                <Select.Trigger>
+                  <AppIcon name="pricetags" size={16} />
+                  <Select.Value>
+                    {({ isPlaceholder, selectedText }) =>
+                      isPlaceholder ? "选择标签" : selectedText
+                    }
+                  </Select.Value>
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox aria-label="关联标签">
+                    {tags.map((tag) => (
+                      <ListBox.Item id={tag.id} key={tag.id} textValue={tag.name}>
+                        {tag.name}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+              <TagGroup
+                aria-label="已关联标签"
+                onRemove={(keys) =>
+                  setFormState((state) => ({
+                    ...state,
+                    tagIds: state.tagIds.filter((item) => !keys.has(item)),
+                  }))
+                }
+                size="lg"
+                variant="surface"
+              >
+                <Label>已关联标签</Label>
+                <TagGroup.List items={selectedTags}>
+                  {(tag) => (
+                    <Tag id={tag.id} key={tag.id} textValue={tag.name}>
+                      {(renderProps) => (
+                        <>
+                          <AppIcon name="pricetags" size={16} />
+                          <span>{tag.name}</span>
+                          {renderProps.allowsRemoving ? (
+                            <Tag.RemoveButton aria-label={`移除${tag.name}`}>
+                              <AppIcon name="close" size={18} />
+                            </Tag.RemoveButton>
+                          ) : null}
+                        </>
+                      )}
+                    </Tag>
+                  )}
+                </TagGroup.List>
+                <Description>会同步到前台标签页和文章卡片。</Description>
+              </TagGroup>
+            </div>
             <div className="article-contributor-field">
               <div className="article-contributor-picker-row">
                 <Select

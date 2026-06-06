@@ -27,6 +27,7 @@ export const CommentItemSchema = t.Object({
   id: t.String(),
   targetType: CommentTargetTypeSchema,
   articleId: t.Nullable(t.String()),
+  articleTitle: t.Nullable(t.String()),
   userId: t.String(),
   parentId: t.Nullable(t.String()),
   content: t.String(),
@@ -45,6 +46,7 @@ export interface CommentRow {
   id: string;
   target_type: CommentTargetType;
   article_id: string | null;
+  article_title?: string | null;
   user_id: string;
   parent_id: string | null;
   content: string;
@@ -88,6 +90,7 @@ export function toCommentItem(row: CommentRow) {
     id: row.id,
     targetType: row.target_type,
     articleId: row.article_id,
+    articleTitle: row.article_title ?? null,
     userId: row.user_id,
     parentId: row.parent_id,
     content: row.content,

@@ -6700,7 +6700,8 @@
   gap: 0.5rem;
 }
 
-.article-contributor-field {
+.article-contributor-field,
+.article-taxonomy-field {
   display: grid;
   gap: 0.625rem;
 }
@@ -6724,11 +6725,13 @@
   min-width: 0;
 }
 
-.article-contributor-field [data-slot="tag-group-list"] {
+.article-contributor-field [data-slot="tag-group-list"],
+.article-taxonomy-field [data-slot="tag-group-list"] {
   gap: 0.5rem;
 }
 
-.article-contributor-field [data-slot="tag"] {
+.article-contributor-field [data-slot="tag"],
+.article-taxonomy-field [data-slot="tag"] {
   gap: 0.375rem;
 }
 

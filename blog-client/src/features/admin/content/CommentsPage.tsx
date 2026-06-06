@@ -24,6 +24,7 @@ type CommentRow = DataTableRow & {
 
 type AdminCommentItem = {
   articleId: string | null;
+  articleTitle: string | null;
   author: {
     name: string | null;
     username: string;
@@ -100,9 +101,12 @@ const commentFilters: DataTableFilter<CommentRow>[] = [
   },
 ];
 
-function toCommentRow(item: AdminCommentItem): CommentRow {
+export function toCommentRow(item: AdminCommentItem): CommentRow {
   return {
-    article: item.targetType === "article" ? (item.articleId ?? "未知文章") : "留言板",
+    article:
+      item.targetType === "article"
+        ? item.articleTitle?.trim() || item.articleId || "未知文章"
+        : "留言板",
     articleId: item.articleId,
     author: item.author.name ?? item.author.username,
     createdAt: new Date(item.createdAt).toLocaleString("zh-CN"),

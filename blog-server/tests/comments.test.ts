@@ -155,6 +155,7 @@ describe("comment services", () => {
       testDb
     );
     expect(adminList.total).toBe(1);
+    expect(adminList.items[0]?.articleTitle).toBe("评论文章");
 
     await deleteMyComment(currentUser, reply.id, testDb);
     const afterUserDelete = await listPublicComments(

@@ -56,9 +56,11 @@ async function getCommentById(commentId: string, client: DbClient = db) {
   const [row] = await client<CommentRow[]>`
     SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
            c.created_at, c.updated_at, c.deleted_at,
+           a.title AS article_title,
            u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
     FROM comments c
     JOIN users u ON u.id = c.user_id
+    LEFT JOIN articles a ON a.id = c.article_id
     WHERE c.id = ${commentId}
   `;
 
@@ -88,10 +90,12 @@ export async function listAdminComments(
     `
       SELECT c.id, c.target_type, c.article_id, c.user_id, c.parent_id, c.content, c.status,
              c.created_at, c.updated_at, c.deleted_at,
+             a.title AS article_title,
              u.username, u.name, u.role, u.avatar_url, u.tags, u.blog_url
       FROM comments c
       JOIN users u ON u.id = c.user_id
-      WHERE ($1::text IS NULL OR lower(c.content) LIKE $1 OR lower(u.username) LIKE $1 OR lower(coalesce(u.name, '')) LIKE $1)
+      LEFT JOIN articles a ON a.id = c.article_id
+      WHERE ($1::text IS NULL OR lower(c.content) LIKE $1 OR lower(u.username) LIKE $1 OR lower(coalesce(u.name, '')) LIKE $1 OR lower(coalesce(a.title, '')) LIKE $1)
         AND ($2::comment_target_type IS NULL OR c.target_type = $2)
         AND ($3::uuid IS NULL OR c.article_id = $3)
         AND ($4::uuid IS NULL OR c.user_id = $4)
@@ -108,7 +112,8 @@ export async function listAdminComments(
       SELECT count(*) AS total
       FROM comments c
       JOIN users u ON u.id = c.user_id
-      WHERE ($1::text IS NULL OR lower(c.content) LIKE $1 OR lower(u.username) LIKE $1 OR lower(coalesce(u.name, '')) LIKE $1)
+      LEFT JOIN articles a ON a.id = c.article_id
+      WHERE ($1::text IS NULL OR lower(c.content) LIKE $1 OR lower(u.username) LIKE $1 OR lower(coalesce(u.name, '')) LIKE $1 OR lower(coalesce(a.title, '')) LIKE $1)
         AND ($2::comment_target_type IS NULL OR c.target_type = $2)
         AND ($3::uuid IS NULL OR c.article_id = $3)
         AND ($4::uuid IS NULL OR c.user_id = $4)
