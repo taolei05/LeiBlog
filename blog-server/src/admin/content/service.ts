@@ -628,7 +628,7 @@ async function replaceArticleRelations(
   contributorIds?: string[]
 ) {
   if (categoryIds !== undefined) {
-    const ids = cleanIdList(categoryIds);
+    const ids = cleanIdList(categoryIds).slice(0, 1);
     await client`DELETE FROM article_category_links WHERE article_id = ${articleId}`;
     if (ids.length > 0) {
       await client`

@@ -7,9 +7,12 @@ import {
 import { toCommentRow } from "../src/features/admin/content/CommentsPage";
 
 describe("admin article form relations", () => {
-  it("hydrates category and tag relations into form state", () => {
+  it("hydrates a single category and tag relations into form state", () => {
     const formState = toFormState({
-      categories: [{ id: "category-1", name: "工程实践" }],
+      categories: [
+        { id: "category-1", name: "工程实践" },
+        { id: "category-2", name: "生活观察" },
+      ],
       contentMdx: "",
       contributors: [],
       coverImageUrl: null,
@@ -23,13 +26,13 @@ describe("admin article form relations", () => {
       updatedAt: "2026-06-06T00:00:00.000Z",
     });
 
-    expect(formState.categoryIds).toEqual(["category-1"]);
+    expect(formState.categoryId).toBe("category-1");
     expect(formState.tagIds).toEqual(["tag-1"]);
   });
 
-  it("submits selected category and tag ids", () => {
+  it("submits only one selected category id and multiple tag ids", () => {
     const body = buildArticleRequestBody({
-      categoryIds: ["category-1"],
+      categoryId: "category-1",
       contentMdx: "正文",
       contributorIds: [],
       coverImageUrl: "",

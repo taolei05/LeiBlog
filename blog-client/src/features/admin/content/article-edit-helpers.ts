@@ -36,7 +36,7 @@ export type AdminArticleDetail = {
 };
 
 export type ArticleFormState = {
-  categoryIds: string[];
+  categoryId: string;
   contentMdx: string;
   contributorIds: string[];
   coverImageUrl: string;
@@ -49,7 +49,7 @@ export type ArticleFormState = {
 };
 
 export const emptyFormState: ArticleFormState = {
-  categoryIds: [],
+  categoryId: "",
   contentMdx: "",
   contributorIds: [],
   coverImageUrl: "",
@@ -69,7 +69,7 @@ function toOptional(value: string) {
 
 export function toFormState(article: AdminArticleDetail): ArticleFormState {
   return {
-    categoryIds: article.categories.map((category) => category.id),
+    categoryId: article.categories[0]?.id ?? "",
     contentMdx: article.contentMdx,
     contributorIds: article.contributors.map((contributor) => contributor.id),
     coverImageUrl: article.coverImageUrl ?? "",
@@ -87,7 +87,7 @@ export function buildArticleRequestBody(
   statusOverride?: ArticleStatus,
 ) {
   return {
-    categoryIds: formState.categoryIds,
+    categoryIds: formState.categoryId ? [formState.categoryId] : [],
     contentMdx: formState.contentMdx,
     coverImageUrl: toOptional(formState.coverImageUrl),
     contributorIds: formState.contributorIds,

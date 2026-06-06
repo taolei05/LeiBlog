@@ -338,9 +338,7 @@ export function ArticleEditPage() {
   const titleInputHandler = createInputHandler("title");
   const slugInputHandler = createInputHandler("slug");
   const summaryInputHandler = createInputHandler("summary");
-  const selectedCategories = categories.filter((category) =>
-    formState.categoryIds.includes(category.id),
-  );
+  const selectedCategories = categories.filter((category) => category.id === formState.categoryId);
   const selectedContributors = contributors.filter((contributor) =>
     formState.contributorIds.includes(contributor.id),
   );
@@ -358,8 +356,8 @@ export function ArticleEditPage() {
     setFormState((state) => ({ ...state, contributorIds: contributorIds.map(String) }));
   }
 
-  function updateCategorySelection(categoryIds: Key[]) {
-    setFormState((state) => ({ ...state, categoryIds: categoryIds.map(String) }));
+  function updateCategorySelection(categoryId: Key | null) {
+    setFormState((state) => ({ ...state, categoryId: categoryId ? String(categoryId) : "" }));
   }
 
   function updateTagSelection(tagIds: Key[]) {
@@ -620,8 +618,7 @@ export function ArticleEditPage() {
                 fullWidth
                 onChange={updateCategorySelection}
                 placeholder="选择分类"
-                selectionMode="multiple"
-                value={formState.categoryIds}
+                value={formState.categoryId}
                 variant="secondary"
               >
                 <Label>关联分类</Label>
@@ -650,7 +647,7 @@ export function ArticleEditPage() {
                 onRemove={(keys) =>
                   setFormState((state) => ({
                     ...state,
-                    categoryIds: state.categoryIds.filter((item) => !keys.has(item)),
+                    categoryId: keys.has(state.categoryId) ? "" : state.categoryId,
                   }))
                 }
                 size="lg"

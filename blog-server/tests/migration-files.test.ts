@@ -11,6 +11,10 @@ const mediaFolderMigration = readFileSync(
   join(import.meta.dir, "../src/db/migrations/002_media_folders.sql"),
   "utf8"
 );
+const singleArticleCategoryMigration = readFileSync(
+  join(import.meta.dir, "../src/db/migrations/008_single_article_category.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("creates the required core tables", () => {
@@ -50,5 +54,11 @@ describe("initial database migration", () => {
     expect(mediaFolderMigration).toContain("avatars");
     expect(mediaFolderMigration).toContain("comments");
     expect(mediaFolderMigration).toContain("site");
+  });
+
+  test("limits articles to one linked category", () => {
+    expect(migration).toContain("PRIMARY KEY (article_id)");
+    expect(singleArticleCategoryMigration).toContain("ranked_article_categories");
+    expect(singleArticleCategoryMigration).toContain("PRIMARY KEY (article_id)");
   });
 });

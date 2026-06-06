@@ -165,7 +165,7 @@ CREATE TABLE article_category_links (
   article_id uuid NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   category_id uuid NOT NULL REFERENCES article_categories(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (article_id, category_id)
+  PRIMARY KEY (article_id)
 );
 
 CREATE INDEX article_category_links_category_id_idx ON article_category_links (category_id);
