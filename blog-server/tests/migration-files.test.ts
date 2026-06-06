@@ -61,14 +61,13 @@ describe("initial database migration", () => {
   });
 
   test("limits articles to one linked category", () => {
-    expect(migration).toContain("PRIMARY KEY (article_id)");
     expect(singleArticleCategoryMigration).toContain("ranked_article_categories");
     expect(singleArticleCategoryMigration).toContain("PRIMARY KEY (article_id)");
   });
 
   test("stores multiple ICP filing records", () => {
-    expect(migration).toContain("icp_records jsonb");
     expect(siteFilingIcpRecordsMigration).toContain("ADD COLUMN IF NOT EXISTS icp_records");
+    expect(siteFilingIcpRecordsMigration).toContain("icp_records jsonb");
     expect(siteFilingIcpRecordsMigration).toContain("jsonb_build_array");
   });
 });

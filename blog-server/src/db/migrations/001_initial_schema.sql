@@ -56,7 +56,6 @@ CREATE TABLE site_filing (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   icp_number varchar(120),
   icp_url text,
-  icp_records jsonb NOT NULL DEFAULT '[]'::jsonb,
   police_number varchar(120),
   police_url text,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -166,7 +165,7 @@ CREATE TABLE article_category_links (
   article_id uuid NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   category_id uuid NOT NULL REFERENCES article_categories(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (article_id)
+  PRIMARY KEY (article_id, category_id)
 );
 
 CREATE INDEX article_category_links_category_id_idx ON article_category_links (category_id);
