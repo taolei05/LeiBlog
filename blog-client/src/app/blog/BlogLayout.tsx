@@ -55,6 +55,46 @@ type BlogNavUser = {
   username: string;
 };
 
+type BlogAccountMenuItem = {
+  readonly icon: AppIconName;
+  readonly id:
+    | "admin"
+    | "center"
+    | "email"
+    | "login"
+    | "logout"
+    | "password"
+    | "profile"
+    | "register";
+  readonly label: string;
+  readonly variant?: "danger";
+};
+
+export function getBlogAccountMenuItems(
+  role: BlogNavUser["role"] | null | undefined,
+): BlogAccountMenuItem[] {
+  if (!role) {
+    return [
+      { icon: "logIn", id: "login", label: "登录" },
+      { icon: "personAdd", id: "register", label: "注册账号" },
+    ];
+  }
+
+  const items: BlogAccountMenuItem[] = [
+    { icon: "personCircle", id: "center", label: "个人中心" },
+    { icon: "create", id: "profile", label: "资料" },
+    { icon: "mail", id: "email", label: "修改邮箱" },
+    { icon: "lockClosed", id: "password", label: "修改密码" },
+    { icon: "logOut", id: "logout", label: "退出登录", variant: "danger" },
+  ];
+
+  if (role !== "admin") {
+    return items;
+  }
+
+  return [items[0], { icon: "desktop", id: "admin", label: "管理后台" }, ...items.slice(1)];
+}
+
 type BlogNavLinkProps = {
   icon: AppIconName;
   label: string;
@@ -345,6 +385,11 @@ function BlogAccountDropdown({ onSessionClear, session }: BlogAccountDropdownPro
       return;
     }
 
+    if (key === "admin") {
+      void navigate("/admin");
+      return;
+    }
+
     if (key === "profile" || key === "email" || key === "password") {
       void navigate(`/profile?panel=${key}`);
       return;
@@ -404,41 +449,17 @@ function BlogAccountDropdown({ onSessionClear, session }: BlogAccountDropdownPro
         </Button>
         <Dropdown.Popover className="admin-account-menu blog-account-menu">
           <Dropdown.Menu onAction={(key) => handleAccountAction(String(key))}>
-            {user ? (
-              <>
-                <Dropdown.Item id="center" textValue="个人中心">
-                  <AppIcon name="personCircle" />
-                  <Label>个人中心</Label>
-                </Dropdown.Item>
-                <Dropdown.Item id="profile" textValue="资料">
-                  <AppIcon name="create" />
-                  <Label>资料</Label>
-                </Dropdown.Item>
-                <Dropdown.Item id="email" textValue="修改邮箱">
-                  <AppIcon name="mail" />
-                  <Label>修改邮箱</Label>
-                </Dropdown.Item>
-                <Dropdown.Item id="password" textValue="修改密码">
-                  <AppIcon name="lockClosed" />
-                  <Label>修改密码</Label>
-                </Dropdown.Item>
-                <Dropdown.Item id="logout" textValue="退出登录" variant="danger">
-                  <AppIcon name="logOut" />
-                  <Label>退出登录</Label>
-                </Dropdown.Item>
-              </>
-            ) : (
-              <>
-                <Dropdown.Item id="login" textValue="登录">
-                  <AppIcon name="logIn" />
-                  <Label>登录</Label>
-                </Dropdown.Item>
-                <Dropdown.Item id="register" textValue="注册账号">
-                  <AppIcon name="personAdd" />
-                  <Label>注册账号</Label>
-                </Dropdown.Item>
-              </>
-            )}
+            {getBlogAccountMenuItems(user?.role).map((item) => (
+              <Dropdown.Item
+                id={item.id}
+                key={item.id}
+                textValue={item.label}
+                variant={item.variant}
+              >
+                <AppIcon name={item.icon} />
+                <Label>{item.label}</Label>
+              </Dropdown.Item>
+            ))}
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown>
