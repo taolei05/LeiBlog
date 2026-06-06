@@ -6717,11 +6717,13 @@
   white-space: nowrap;
 }
 
-.article-contributor-picker-row [data-slot="select-trigger"] {
+.article-contributor-picker-row [data-slot="select-trigger"],
+.article-taxonomy-field [data-slot="select-trigger"] {
   gap: 0.5rem;
 }
 
-.article-contributor-picker-row [data-slot="select-value"] {
+.article-contributor-picker-row [data-slot="select-value"],
+.article-taxonomy-field [data-slot="select-value"] {
   min-width: 0;
 }
 
