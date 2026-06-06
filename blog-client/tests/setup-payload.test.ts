@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { toSetupFilingPayload, toSetupHomeCoverUrls } from "../src/features/admin/setup/SetupPage";
+import {
+  getCompletedSetupRedirectPath,
+  toSetupFilingPayload,
+  toSetupHomeCoverUrls,
+} from "../src/features/admin/setup/SetupPage";
 
 describe("setup payload helpers", () => {
   it("cleans homepage covers and multiple ICP records for setup submission", () => {
@@ -21,5 +25,9 @@ describe("setup payload helpers", () => {
       { number: "京ICP备00000000号-1", url: "https://beian.miit.gov.cn/" },
       { number: "京ICP备00000000号-2", url: null },
     ]);
+  });
+
+  it("redirects completed setup visits to the admin login page", () => {
+    expect(getCompletedSetupRedirectPath()).toBe("/admin/login");
   });
 });

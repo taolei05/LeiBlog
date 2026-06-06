@@ -15,7 +15,7 @@ import {
 } from "@heroui/react";
 import type { ChangeEvent, Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { InteractiveCursor } from "../../../app/blog/InteractiveCursor";
 import { AppIcon } from "../../../shared/icons";
@@ -178,6 +178,10 @@ export function toSetupFilingPayload(records: SetupIcpRecordState[]): SetupIcpRe
       return { number, url: url || null };
     })
     .filter((record): record is SetupIcpRecordPayload => record !== null);
+}
+
+export function getCompletedSetupRedirectPath() {
+  return "/admin/login";
 }
 
 function createChangeHandler(
@@ -421,24 +425,7 @@ export function SetupPage() {
   }
 
   if (completed) {
-    return (
-      <main className="setup-page">
-        <InteractiveCursor />
-        <Card className="setup-card setup-card--done">
-          <AppIcon name="checkmarkCircle" size={28} />
-          <Card.Header>
-            <Card.Title>首次配置已完成</Card.Title>
-            <Card.Description>管理员已创建，可以返回后台登录页进入控制台。</Card.Description>
-          </Card.Header>
-          <Card.Footer className="setup-card__footer">
-            <Button onPress={() => navigate("/admin")}>
-              <AppIcon name="logIn" />
-              进入后台
-            </Button>
-          </Card.Footer>
-        </Card>
-      </main>
-    );
+    return <Navigate replace to={getCompletedSetupRedirectPath()} />;
   }
 
   return (
