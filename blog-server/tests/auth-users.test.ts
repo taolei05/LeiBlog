@@ -215,6 +215,29 @@ describe("auth and user services", () => {
       { client: testDb }
     );
 
+    const passwordResetCode = await createEmailCode(
+      {
+        email: "new-user@example.com",
+        purpose: "password_reset",
+      },
+      { client: testDb }
+    );
+
+    await resetPassword(
+      {
+        email: "new-user@example.com",
+        emailCode: passwordResetCode.devCode!,
+        password: "code-reset-password",
+      },
+      { client: testDb }
+    );
+
+    await verifyLogin(
+      { identifier: "reader", password: "code-reset-password" },
+      meta,
+      { client: testDb }
+    );
+
     await revokeAuthSession("access-token", { client: testDb });
     const [revoked] = await testDb<{ revoked_at: Date | null }[]>`
       SELECT revoked_at

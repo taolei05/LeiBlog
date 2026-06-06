@@ -42,6 +42,17 @@ export interface LoginInput {
   password: string;
 }
 
+export type PasswordResetInput =
+  | {
+      password: string;
+      token: string;
+    }
+  | {
+      email: string;
+      emailCode: string;
+      password: string;
+    };
+
 export interface SignableUser {
   id: string;
   username: string;
@@ -676,40 +687,58 @@ export async function createPasswordResetToken(
 }
 
 export async function resetPassword(
-  input: { token: string; password: string },
+  input: PasswordResetInput,
   options: AuthServiceOptions = {}
 ) {
   const client = options.client ?? db;
   const passwordHash = await hashPassword(input.password);
 
   await withTransaction(async (tx) => {
-    const [row] = await tx<{ id: string; user_id: string }[]>`
-      SELECT id, user_id
-      FROM password_reset_tokens
-      WHERE token_hash = ${hashToken(input.token)}
-        AND consumed_at IS NULL
-        AND expires_at > now()
-      LIMIT 1
-    `;
+    let userId = "";
 
-    if (!row) throw validationError("重置链接无效或已过期");
+    if ("token" in input) {
+      const [row] = await tx<{ id: string; user_id: string }[]>`
+        SELECT id, user_id
+        FROM password_reset_tokens
+        WHERE token_hash = ${hashToken(input.token)}
+          AND consumed_at IS NULL
+          AND expires_at > now()
+        LIMIT 1
+      `;
+
+      if (!row) throw validationError("重置链接无效或已过期");
+
+      await tx`
+        UPDATE password_reset_tokens
+        SET consumed_at = now()
+        WHERE id = ${row.id}
+      `;
+      userId = row.user_id;
+    } else {
+      const email = normalizeEmail(input.email);
+      const [user] = await tx<{ id: string }[]>`
+        SELECT id
+        FROM users
+        WHERE lower(email) = ${email}
+        LIMIT 1
+      `;
+
+      if (!user) throw validationError("邮箱验证码无效或已过期");
+
+      await consumeEmailCode(email, input.emailCode, "password_reset", tx);
+      userId = user.id;
+    }
 
     await tx`
       UPDATE users
       SET password_hash = ${passwordHash}
-      WHERE id = ${row.user_id}
-    `;
-
-    await tx`
-      UPDATE password_reset_tokens
-      SET consumed_at = now()
-      WHERE id = ${row.id}
+      WHERE id = ${userId}
     `;
 
     await tx`
       UPDATE auth_sessions
       SET revoked_at = now()
-      WHERE user_id = ${row.user_id}
+      WHERE user_id = ${userId}
         AND revoked_at IS NULL
     `;
   }, client);

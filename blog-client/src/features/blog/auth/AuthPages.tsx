@@ -13,7 +13,7 @@ import {
 import type { Key } from "@heroui/react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { getAdminApiBaseUrl, resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
@@ -76,6 +76,13 @@ type PasswordFormState = {
   newPassword: string;
 };
 
+type PasswordResetFormState = {
+  confirmPassword: string;
+  email: string;
+  emailCode: string;
+  password: string;
+};
+
 type AuthShellProps = {
   children: ReactNode;
   description: string;
@@ -126,6 +133,8 @@ const BLOG_SESSION_CHANGE_EVENT = "leiblog:blog-session-change";
 const REGISTER_CODE_RESEND_COOLDOWN_MS = 60_000;
 const REGISTER_CODE_RESEND_STORAGE_KEY = "leiblog:blog:register-code-resend-available-at";
 const EMAIL_CHANGE_CODE_RESEND_STORAGE_KEY = "leiblog:blog:email-change-code-resend-available-at";
+const PASSWORD_RESET_CODE_RESEND_STORAGE_KEY =
+  "leiblog:blog:password-reset-code-resend-available-at";
 const profileConfirmCopy: Record<
   ProfileConfirmAction,
   {
@@ -379,6 +388,24 @@ async function requestRegisterEmailCode(email: string) {
   });
 }
 
+async function requestPasswordResetEmailCode(email: string) {
+  return authJsonRequest<EmailCodeResponse>("/auth/email-code", {
+    body: { email, purpose: "password_reset" },
+    method: "POST",
+  });
+}
+
+async function resetBlogUserPassword(input: {
+  email: string;
+  emailCode: string;
+  password: string;
+}) {
+  return authJsonRequest<{ ok: boolean }>("/auth/password/reset", {
+    body: input,
+    method: "POST",
+  });
+}
+
 async function fetchCurrentBlogUser(token: string) {
   const payload = await authJsonRequest<unknown>("/me/", {
     method: "GET",
@@ -551,6 +578,10 @@ function readRegisterCodeResendAvailableAt() {
 
 function readEmailChangeCodeResendAvailableAt() {
   return readCodeResendAvailableAt(EMAIL_CHANGE_CODE_RESEND_STORAGE_KEY);
+}
+
+function readPasswordResetCodeResendAvailableAt() {
+  return readCodeResendAvailableAt(PASSWORD_RESET_CODE_RESEND_STORAGE_KEY);
 }
 
 function formatDateTime(value: string | null) {
@@ -773,16 +804,238 @@ export function RegisterPage() {
 }
 
 export function ForgotPasswordPage() {
+  const navigate = useNavigate();
+  const [formState, setFormState] = useState<PasswordResetFormState>({
+    confirmPassword: "",
+    email: "",
+    emailCode: "",
+    password: "",
+  });
+  const [isCodeSending, setIsCodeSending] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
+  const [codeValidMinutes, setCodeValidMinutes] = useState<number | null>(null);
+  const [codeCountdownSeconds, setCodeCountdownSeconds] = useState(0);
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [resendCountdownSeconds, setResendCountdownSeconds] = useState(0);
+  const [codeStatus, setCodeStatus] = useState("验证码会发送到注册邮箱，10 分钟内有效。");
+  const sendLabel =
+    resendCountdownSeconds > 0
+      ? `重新发送验证码 ${resendCountdownSeconds}s`
+      : codeExpiresAt
+        ? "重新发送验证码"
+        : "发送验证码";
+
+  useEffect(() => {
+    setResendAvailableAt(readPasswordResetCodeResendAvailableAt());
+  }, []);
+
+  useEffect(() => {
+    if (!codeExpiresAt) {
+      setCodeCountdownSeconds(0);
+      return;
+    }
+
+    const expiresAt = codeExpiresAt;
+
+    function updateCountdown() {
+      const remainingSeconds = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000);
+      setCodeCountdownSeconds(Math.max(0, remainingSeconds));
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [codeExpiresAt]);
+
+  useEffect(() => {
+    if (!resendAvailableAt) {
+      setResendCountdownSeconds(0);
+      return;
+    }
+
+    const availableAt = resendAvailableAt;
+
+    function updateCountdown() {
+      const remainingSeconds = Math.ceil((availableAt - Date.now()) / 1000);
+
+      if (remainingSeconds <= 0) {
+        getBrowserStorage()?.removeItem(PASSWORD_RESET_CODE_RESEND_STORAGE_KEY);
+        setResendAvailableAt(null);
+        setResendCountdownSeconds(0);
+        return;
+      }
+
+      setResendCountdownSeconds(remainingSeconds);
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [resendAvailableAt]);
+
+  function updateForm(field: keyof PasswordResetFormState, value: string) {
+    setFormState((current) => ({ ...current, [field]: value }));
+  }
+
+  async function requestCode() {
+    const email = formState.email.trim();
+    if (!email) {
+      showOperationToast("请输入注册邮箱后再发送验证码", "warning");
+      return;
+    }
+
+    setIsCodeSending(true);
+
+    try {
+      const result = await requestPasswordResetEmailCode(email);
+      const nextResendAvailableAt = Date.now() + REGISTER_CODE_RESEND_COOLDOWN_MS;
+      const status = result.sent
+        ? `验证码已发送到 ${email}，${result.validMinutes} 分钟内有效。`
+        : result.devCode
+          ? `开发环境验证码已生成：${result.devCode}`
+          : `验证码已生成，${result.validMinutes} 分钟内有效。`;
+
+      setCodeStatus(status);
+      setCodeExpiresAt(result.expiresAt);
+      setCodeValidMinutes(result.validMinutes);
+      setResendAvailableAt(nextResendAvailableAt);
+      setResendCountdownSeconds(Math.ceil(REGISTER_CODE_RESEND_COOLDOWN_MS / 1000));
+      getBrowserStorage()?.setItem(
+        PASSWORD_RESET_CODE_RESEND_STORAGE_KEY,
+        String(nextResendAvailableAt),
+      );
+
+      if (result.devCode) {
+        setFormState((current) => ({ ...current, emailCode: result.devCode ?? "" }));
+      }
+
+      showOperationToast(status, result.sent ? "success" : "info");
+    } catch (error) {
+      showOperationToast(
+        error instanceof Error ? `验证码发送失败：${error.message}` : "验证码发送失败",
+      );
+    } finally {
+      setIsCodeSending(false);
+    }
+  }
+
+  async function submitReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!formState.email.trim() || !formState.emailCode.trim()) {
+      showOperationToast("请填写注册邮箱和验证码", "warning");
+      return;
+    }
+
+    if (formState.password.length < 8) {
+      showOperationToast("新密码至少需要 8 位", "warning");
+      return;
+    }
+
+    if (formState.password !== formState.confirmPassword) {
+      showOperationToast("两次填写的密码不一致", "warning");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await resetBlogUserPassword({
+        email: formState.email.trim(),
+        emailCode: formState.emailCode.trim(),
+        password: formState.password,
+      });
+      getBrowserStorage()?.removeItem(PASSWORD_RESET_CODE_RESEND_STORAGE_KEY);
+      showOperationToast("密码重置成功，请使用新密码登录", "success");
+      void navigate("/login", { replace: true });
+    } catch (error) {
+      showOperationToast(
+        error instanceof Error ? `密码重置失败：${error.message}` : "密码重置失败",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <AuthShell description="通过邮箱验证码找回账号密码。" icon="lockClosed" title="找回密码">
-      <TextField fullWidth isRequired>
-        <Label>邮箱</Label>
-        <Input autoComplete="email" placeholder="name@example.com" type="email" />
-      </TextField>
-      <Button isDisabled>
-        <AppIcon name="mail" />
-        发送验证码
-      </Button>
+      <form className="front-card-form" onSubmit={submitReset}>
+        <div className="front-auth-code-row">
+          <TextField fullWidth isRequired>
+            <Label>邮箱</Label>
+            <Input
+              autoComplete="email"
+              onChange={(event) => updateForm("email", event.target.value)}
+              placeholder="name@example.com"
+              type="email"
+              value={formState.email}
+            />
+          </TextField>
+          <Button
+            isDisabled={isCodeSending || !formState.email.trim() || resendCountdownSeconds > 0}
+            onPress={requestCode}
+            type="button"
+            variant="tertiary"
+          >
+            <AppIcon name="mail" />
+            {sendLabel}
+          </Button>
+        </div>
+        <p className="front-form-note">{codeStatus}</p>
+        <TextField fullWidth isRequired>
+          <Label>验证码</Label>
+          <InputOTP
+            className="front-auth-otp"
+            maxLength={6}
+            onChange={(value) => updateForm("emailCode", value)}
+            pushPasswordManagerStrategy="none"
+            value={formState.emailCode}
+            variant="secondary"
+          >
+            <InputOTP.Group>
+              {Array.from({ length: 6 }).map((_, index) => (
+                <InputOTP.Slot index={index} key={index} />
+              ))}
+            </InputOTP.Group>
+          </InputOTP>
+        </TextField>
+        {codeCountdownSeconds > 0 ? (
+          <div className="secret-reveal-countdown">
+            <AppIcon name="calendar" />
+            <span>有效期 {codeValidMinutes ?? 10} 分钟</span>
+            <strong>{formatCountdown(codeCountdownSeconds)}</strong>
+          </div>
+        ) : null}
+        <TextField fullWidth isRequired>
+          <Label>新密码</Label>
+          <Input
+            autoComplete="new-password"
+            onChange={(event) => updateForm("password", event.target.value)}
+            placeholder="至少 8 位"
+            type="password"
+            value={formState.password}
+          />
+        </TextField>
+        <TextField fullWidth isRequired>
+          <Label>确认密码</Label>
+          <Input
+            autoComplete="new-password"
+            onChange={(event) => updateForm("confirmPassword", event.target.value)}
+            type="password"
+            value={formState.confirmPassword}
+          />
+        </TextField>
+        <div className="front-form-actions">
+          <Link to="/login">返回登录</Link>
+          <Button isDisabled={isSubmitting} type="submit">
+            <AppIcon name="lockClosed" />
+            {isSubmitting ? "重置中" : "重置密码"}
+          </Button>
+        </div>
+      </form>
     </AuthShell>
   );
 }

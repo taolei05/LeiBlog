@@ -28,10 +28,17 @@ export const ForgotPasswordBody = t.Object({
   email: t.String({ format: "email", maxLength: 254 }),
 });
 
-export const ResetPasswordBody = t.Object({
-  token: t.String({ minLength: 16, maxLength: 512 }),
-  password: t.String({ minLength: 8, maxLength: 128 }),
-});
+export const ResetPasswordBody = t.Union([
+  t.Object({
+    token: t.String({ minLength: 16, maxLength: 512 }),
+    password: t.String({ minLength: 8, maxLength: 128 }),
+  }),
+  t.Object({
+    email: t.String({ format: "email", maxLength: 254 }),
+    emailCode: t.String({ minLength: 4, maxLength: 12 }),
+    password: t.String({ minLength: 8, maxLength: 128 }),
+  }),
+]);
 
 export const AuthResponse = t.Object({
   ok: t.Boolean(),
