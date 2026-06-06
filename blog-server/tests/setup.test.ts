@@ -91,11 +91,30 @@ describe("admin setup service", () => {
         logoDarkUrl: "https://example.com/logo-dark.png",
         logoLightUrl: "https://example.com/logo-light.png",
         faviconUrl: "https://example.com/favicon.ico",
+        homeCoverUrls: [
+          "https://example.com/home-cover-a.jpg",
+          "https://example.com/home-cover-b.jpg",
+        ],
+        homeSlogan: "写给首页的第一句话。",
         establishedAt: "2026-05-15T18:00:00+08:00",
       },
       { client: setupDb }
     );
     expect(afterSiteInfo.currentStep).toBe("site-config");
+
+    const [siteInfo] = await setupDb<{
+      home_cover_urls: string[];
+      home_slogan: string;
+    }[]>`
+      SELECT home_cover_urls, home_slogan
+      FROM site_info
+      WHERE id = 1
+    `;
+    expect(siteInfo.home_cover_urls).toEqual([
+      "https://example.com/home-cover-a.jpg",
+      "https://example.com/home-cover-b.jpg",
+    ]);
+    expect(siteInfo.home_slogan).toBe("写给首页的第一句话。");
 
     const afterSiteConfig = await configureSiteConfig(
       {
@@ -131,8 +150,10 @@ describe("admin setup service", () => {
 
     const afterFiling = await configureFiling(
       {
-        icpNumber: "京ICP备00000000号",
-        icpUrl: "https://beian.miit.gov.cn/",
+        icpRecords: [
+          { number: "京ICP备00000000号-1", url: "https://beian.miit.gov.cn/" },
+          { number: "京ICP备00000000号-2", url: "https://beian.example.com/two" },
+        ],
         policeNumber: "京公网安备00000000000000号",
         policeUrl: "https://www.beian.gov.cn/",
       },
@@ -146,7 +167,8 @@ describe("admin setup service", () => {
       WHERE id = 1
     `;
     expect(JSON.parse(filing.icp_records)).toEqual([
-      { number: "京ICP备00000000号", url: "https://beian.miit.gov.cn/" },
+      { number: "京ICP备00000000号-1", url: "https://beian.miit.gov.cn/" },
+      { number: "京ICP备00000000号-2", url: "https://beian.example.com/two" },
     ]);
 
     const completed = await completeSetup({ client: setupDb });

@@ -47,6 +47,8 @@ export const SetupSiteInfoBody = t.Object({
   logoDarkUrl: t.Optional(t.String({ maxLength: 2048 })),
   logoLightUrl: t.Optional(t.String({ maxLength: 2048 })),
   faviconUrl: t.Optional(t.String({ maxLength: 2048 })),
+  homeCoverUrls: t.Optional(t.Array(t.String({ maxLength: 2048 }), { maxItems: 12 })),
+  homeSlogan: t.Optional(t.String({ maxLength: 500 })),
   establishedAt: t.String(),
 });
 
@@ -64,6 +66,15 @@ export const SetupSiteConfigBody = t.Object({
 
 export const SetupFilingBody = t.Object({
   icpNumber: t.Optional(t.String({ maxLength: 120 })),
+  icpRecords: t.Optional(
+    t.Array(
+      t.Object({
+        number: t.String({ maxLength: 120 }),
+        url: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+      }),
+      { maxItems: 20 }
+    )
+  ),
   icpUrl: t.Optional(t.String({ maxLength: 2048 })),
   policeNumber: t.Optional(t.String({ maxLength: 120 })),
   policeUrl: t.Optional(t.String({ maxLength: 2048 })),

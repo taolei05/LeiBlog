@@ -7,6 +7,7 @@ import {
   FieldError,
   Form,
   Input,
+  InputGroup,
   Label,
   Switch,
   TextArea,
@@ -69,8 +70,9 @@ type SetupFormState = {
   deeplApiKey: string;
   favicon: string;
   foundedAt: string;
-  icpNumber: string;
-  icpUrl: string;
+  homeCoverUrls: string[];
+  homeSlogan: string;
+  icpRecords: SetupIcpRecordState[];
   ipGeolocationApiKey: string;
   policeNumber: string;
   policeUrl: string;
@@ -83,6 +85,17 @@ type SetupFormState = {
   siteLogoDark: string;
   siteLogoLight: string;
   siteName: string;
+};
+
+type SetupIcpRecordState = {
+  id: string;
+  number: string;
+  url: string;
+};
+
+type SetupIcpRecordPayload = {
+  number: string;
+  url: string | null;
 };
 
 type SetupUploadField = "adminAvatar" | "favicon" | "siteLogoDark" | "siteLogoLight";
@@ -117,8 +130,9 @@ const initialFormState: SetupFormState = {
   deeplApiKey: "",
   favicon: "",
   foundedAt: getLocalDateTimeValue(),
-  icpNumber: "",
-  icpUrl: "",
+  homeCoverUrls: [],
+  homeSlogan: "",
+  icpRecords: [createSetupIcpRecord()],
   ipGeolocationApiKey: "",
   policeNumber: "",
   policeUrl: "",
@@ -146,6 +160,26 @@ function getLocalDateTimeValue(date = new Date()) {
   return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
 }
 
+function createSetupIcpRecord(id = "setup-icp-record-1"): SetupIcpRecordState {
+  return { id, number: "", url: "" };
+}
+
+export function toSetupHomeCoverUrls(values: string[], uploadedValues: string[] = []) {
+  return [...new Set([...values, ...uploadedValues].map((value) => value.trim()).filter(Boolean))];
+}
+
+export function toSetupFilingPayload(records: SetupIcpRecordState[]): SetupIcpRecordPayload[] {
+  return records
+    .map((record) => {
+      const number = record.number.trim();
+      if (!number) return null;
+
+      const url = record.url.trim();
+      return { number, url: url || null };
+    })
+    .filter((record): record is SetupIcpRecordPayload => record !== null);
+}
+
 function createChangeHandler(
   setFormState: Dispatch<SetStateAction<SetupFormState>>,
   key: keyof SetupFormState,
@@ -164,6 +198,8 @@ export function SetupPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [formState, setFormState] = useState(initialFormState);
   const [pendingUploads, setPendingUploads] = useState<SetupUploadState>(initialUploadState);
+  const [homeCoverDraftUrl, setHomeCoverDraftUrl] = useState("");
+  const [homeCoverFiles, setHomeCoverFiles] = useState<File[]>([]);
   const [completed, setCompleted] = useState(false);
   const [isCompleteConfirmOpen, setIsCompleteConfirmOpen] = useState(false);
   const [isSetupDrawerOpen, setIsSetupDrawerOpen] = useState(false);
@@ -207,16 +243,81 @@ export function SetupPage() {
     const siteLogoLight = await resolveUploadedAsset("siteLogoLight", formState);
     const siteLogoDark = await resolveUploadedAsset("siteLogoDark", formState);
     const favicon = await resolveUploadedAsset("favicon", formState);
+    const uploadedHomeCoverUrls = await Promise.all(
+      homeCoverFiles.map(async (file) => {
+        const response = await uploadSetupAsset({
+          file,
+          fileName: file.name,
+          folderSlug: "site",
+        });
+
+        return response.accessUrl;
+      }),
+    );
+    const homeCoverUrls = toSetupHomeCoverUrls(formState.homeCoverUrls, uploadedHomeCoverUrls);
     const nextState = {
       ...formState,
       adminAvatar,
       favicon,
+      homeCoverUrls,
       siteLogoDark,
       siteLogoLight,
     };
 
     setFormState(nextState);
     return nextState;
+  }
+
+  function addHomeCoverUrl() {
+    const nextValue = homeCoverDraftUrl.trim();
+    if (!nextValue) return;
+
+    setFormState((state) => ({
+      ...state,
+      homeCoverUrls: toSetupHomeCoverUrls([...state.homeCoverUrls, nextValue]),
+    }));
+    setHomeCoverDraftUrl("");
+  }
+
+  function removeHomeCoverUrl(index: number) {
+    setFormState((state) => ({
+      ...state,
+      homeCoverUrls: state.homeCoverUrls.filter((_, itemIndex) => itemIndex !== index),
+    }));
+  }
+
+  function removeHomeCoverFile(index: number) {
+    setHomeCoverFiles((files) => files.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function updateIcpRecord(index: number, key: "number" | "url", value: string) {
+    setFormState((state) => ({
+      ...state,
+      icpRecords: state.icpRecords.map((record, recordIndex) =>
+        recordIndex === index ? { ...record, [key]: value } : record,
+      ),
+    }));
+  }
+
+  function addIcpRecord() {
+    setFormState((state) => ({
+      ...state,
+      icpRecords: [
+        ...state.icpRecords,
+        createSetupIcpRecord(`setup-icp-record-${Date.now()}-${state.icpRecords.length + 1}`),
+      ],
+    }));
+  }
+
+  function removeIcpRecord(index: number) {
+    setFormState((state) => {
+      const icpRecords = state.icpRecords.filter((_, recordIndex) => recordIndex !== index);
+
+      return {
+        ...state,
+        icpRecords: icpRecords.length > 0 ? icpRecords : [createSetupIcpRecord()],
+      };
+    });
   }
 
   useEffect(() => {
@@ -257,8 +358,7 @@ export function SetupPage() {
           username: setupState.adminUsername,
         },
         filing: {
-          icpNumber: setupState.icpNumber || undefined,
-          icpUrl: setupState.icpUrl || undefined,
+          icpRecords: toSetupFilingPayload(setupState.icpRecords),
           policeNumber: setupState.policeNumber || undefined,
           policeUrl: setupState.policeUrl || undefined,
         },
@@ -277,6 +377,8 @@ export function SetupPage() {
           description: setupState.siteDescription,
           establishedAt: setupState.foundedAt,
           faviconUrl: setupState.favicon || undefined,
+          homeCoverUrls: setupState.homeCoverUrls,
+          homeSlogan: setupState.homeSlogan,
           logoDarkUrl: setupState.siteLogoDark || undefined,
           logoLightUrl: setupState.siteLogoLight || undefined,
           siteName: setupState.siteName,
@@ -487,6 +589,23 @@ export function SetupPage() {
                   onChange={updateField("siteDescription")}
                   value={formState.siteDescription}
                 />
+                <SetupHomeCoverField
+                  draftUrl={homeCoverDraftUrl}
+                  localFiles={homeCoverFiles}
+                  onAddUrl={addHomeCoverUrl}
+                  onDraftUrlChange={setHomeCoverDraftUrl}
+                  onLocalFilesChange={(files) => setHomeCoverFiles((state) => [...state, ...files])}
+                  onRemoveFile={removeHomeCoverFile}
+                  onRemoveUrl={removeHomeCoverUrl}
+                  values={formState.homeCoverUrls}
+                />
+                <SetupTextArea
+                  className="form-grid__wide"
+                  description="前台主页首屏会以打字效果展示这段文案。"
+                  label="前台主页文案"
+                  onChange={updateField("homeSlogan")}
+                  value={formState.homeSlogan}
+                />
                 <SetupTextField
                   description="浅色主题下显示的 Logo 图片链接。"
                   label="浅色 Logo"
@@ -596,20 +715,30 @@ export function SetupPage() {
 
             {currentStep === 3 ? (
               <div className="form-grid">
-                <SetupTextField
-                  description="工信部 ICP 备案号。"
-                  label="ICP备案号"
-                  onChange={updateField("icpNumber")}
-                  type="text"
-                  value={formState.icpNumber}
-                />
-                <SetupTextField
-                  description="ICP备案信息对应的官方链接。"
-                  label="ICP备案网址"
-                  onChange={updateField("icpUrl")}
-                  type="url"
-                  value={formState.icpUrl}
-                />
+                <section className="admin-account-social-panel setup-icp-panel form-grid__wide">
+                  <div className="admin-account-social-panel__heading">
+                    <div>
+                      <h3>ICP备案</h3>
+                      <p>可登记多个 ICP 备案。</p>
+                    </div>
+                    <Button onPress={addIcpRecord} size="sm" type="button" variant="tertiary">
+                      <AppIcon name="link" />
+                      添加 ICP 备案
+                    </Button>
+                  </div>
+                  <div className="admin-account-social-list">
+                    {formState.icpRecords.map((record, index) => (
+                      <SetupIcpRecordFields
+                        index={index}
+                        isRemoveDisabled={formState.icpRecords.length === 1}
+                        key={record.id}
+                        onRemove={() => removeIcpRecord(index)}
+                        onUpdate={(key, value) => updateIcpRecord(index, key, value)}
+                        record={record}
+                      />
+                    ))}
+                  </div>
+                </section>
                 <SetupTextField
                   description="公安联网备案号。"
                   label="公安备案号"
@@ -796,6 +925,183 @@ function NavBrand() {
       </span>
       <span>LeiBlog</span>
     </a>
+  );
+}
+
+type SetupHomeCoverFieldProps = {
+  draftUrl: string;
+  localFiles: File[];
+  onAddUrl: () => void;
+  onDraftUrlChange: (value: string) => void;
+  onLocalFilesChange: (files: File[]) => void;
+  onRemoveFile: (index: number) => void;
+  onRemoveUrl: (index: number) => void;
+  values: string[];
+};
+
+function SetupHomeCoverField({
+  draftUrl,
+  localFiles,
+  onAddUrl,
+  onDraftUrlChange,
+  onLocalFilesChange,
+  onRemoveFile,
+  onRemoveUrl,
+  values,
+}: SetupHomeCoverFieldProps) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const itemCount = values.length + localFiles.length;
+
+  return (
+    <section className="setup-list-panel form-grid__wide">
+      <TextField fullWidth>
+        <Label>主页封面</Label>
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name="image" size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            inputMode="url"
+            onChange={(event) => onDraftUrlChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              onAddUrl();
+            }}
+            placeholder="https://..."
+            type="text"
+            value={draftUrl}
+          />
+        </InputGroup>
+        <Description>可添加多张图片链接，也可以从本地选择。前台首页会按顺序轮播。</Description>
+        <FieldError>主页封面链接格式不正确</FieldError>
+      </TextField>
+      <input
+        accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+        className="visually-hidden"
+        multiple
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          if (files.length > 0) onLocalFilesChange(files);
+          event.target.value = "";
+        }}
+        ref={inputRef}
+        type="file"
+      />
+      <div className="setup-list-panel__actions">
+        <Button onPress={onAddUrl} size="sm" type="button" variant="tertiary">
+          <AppIcon name="checkmarkCircle" />
+          添加链接
+        </Button>
+        <Button
+          onPress={() => inputRef.current?.click()}
+          size="sm"
+          type="button"
+          variant="tertiary"
+        >
+          <AppIcon name="cloudUpload" />
+          本地选择
+        </Button>
+      </div>
+      <p className="setup-list-panel__hint">已设置 {itemCount} 张主页封面。</p>
+      {itemCount > 0 ? (
+        <div className="setup-home-cover-list">
+          {values.map((value, index) => (
+            <div className="setup-home-cover-row" key={`${value}-${index}`}>
+              <span>{index === 0 ? "主封面" : `封面 ${index + 1}`}</span>
+              <small>{value}</small>
+              <Button
+                aria-label={`移除第 ${index + 1} 张主页封面`}
+                isIconOnly
+                onPress={() => onRemoveUrl(index)}
+                size="sm"
+                type="button"
+                variant="danger-soft"
+              >
+                <AppIcon name="trash" />
+              </Button>
+            </div>
+          ))}
+          {localFiles.map((file, index) => (
+            <div className="setup-home-cover-row" key={`${file.name}-${index}`}>
+              <span>待上传 {index + 1}</span>
+              <small>{file.name}</small>
+              <Button
+                aria-label={`移除待上传主页封面 ${index + 1}`}
+                isIconOnly
+                onPress={() => onRemoveFile(index)}
+                size="sm"
+                type="button"
+                variant="danger-soft"
+              >
+                <AppIcon name="trash" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type SetupIcpRecordFieldsProps = {
+  index: number;
+  isRemoveDisabled: boolean;
+  onRemove: () => void;
+  onUpdate: (key: "number" | "url", value: string) => void;
+  record: SetupIcpRecordState;
+};
+
+function SetupIcpRecordFields({
+  index,
+  isRemoveDisabled,
+  onRemove,
+  onUpdate,
+  record,
+}: SetupIcpRecordFieldsProps) {
+  return (
+    <div className="admin-account-social-row setup-icp-record-row">
+      <TextField fullWidth>
+        <Label>备案号</Label>
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name="documentText" size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            onChange={(event) => onUpdate("number", event.target.value)}
+            placeholder="京ICP备..."
+            type="text"
+            value={record.number}
+          />
+        </InputGroup>
+        <FieldError>备案号格式不正确</FieldError>
+      </TextField>
+      <TextField fullWidth>
+        <Label>链接</Label>
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name="link" size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            onChange={(event) => onUpdate("url", event.target.value)}
+            placeholder="https://..."
+            type="url"
+            value={record.url}
+          />
+        </InputGroup>
+        <FieldError>备案链接格式不正确</FieldError>
+      </TextField>
+      <Button
+        aria-label={`移除第 ${index + 1} 条 ICP 备案`}
+        isDisabled={isRemoveDisabled}
+        isIconOnly
+        onPress={onRemove}
+        type="button"
+        variant="danger-soft"
+      >
+        <AppIcon name="trash" />
+      </Button>
+    </div>
   );
 }
 

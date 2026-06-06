@@ -1,5 +1,6 @@
 import type { UserRole } from "../../shared/auth";
 import type { DbClient } from "../../shared/db";
+import type { IcpFilingRecordInput } from "../../shared/site-filing";
 import type { UserProfile, UserProfileRow } from "../../shared/types/user";
 import { hashPassword } from "../../shared/auth";
 import { clearSiteCache } from "../../shared/cache/content";
@@ -39,6 +40,8 @@ export interface SetupSiteInfoInput {
   logoDarkUrl?: string;
   logoLightUrl?: string;
   faviconUrl?: string;
+  homeCoverUrls?: string[];
+  homeSlogan?: string;
   establishedAt: string;
 }
 
@@ -56,6 +59,7 @@ export interface SetupSiteConfigInput {
 
 export interface SetupFilingInput {
   icpNumber?: string;
+  icpRecords?: IcpFilingRecordInput[];
   icpUrl?: string;
   policeNumber?: string;
   policeUrl?: string;
@@ -350,13 +354,15 @@ export async function configureSiteInfo(
 ) {
   const client = options.client ?? db;
   const establishedAt = parseDate(input.establishedAt);
+  const homeCoverUrls = cleanList(input.homeCoverUrls);
 
   await withTransaction(async (tx) => {
     await ensureSetupOpen(tx);
 
     await tx`
       INSERT INTO site_info (
-        id, site_name, description, logo_dark_url, logo_light_url, favicon_url, established_at
+        id, site_name, description, logo_dark_url, logo_light_url, favicon_url,
+        home_cover_urls, home_slogan, established_at
       )
       VALUES (
         1,
@@ -365,6 +371,8 @@ export async function configureSiteInfo(
         ${cleanOptional(input.logoDarkUrl)},
         ${cleanOptional(input.logoLightUrl)},
         ${cleanOptional(input.faviconUrl)},
+        ${tx.array(homeCoverUrls, "TEXT")},
+        ${input.homeSlogan?.trim() ?? ""},
         ${establishedAt}
       )
       ON CONFLICT (id) DO UPDATE
@@ -373,6 +381,8 @@ export async function configureSiteInfo(
           logo_dark_url = EXCLUDED.logo_dark_url,
           logo_light_url = EXCLUDED.logo_light_url,
           favicon_url = EXCLUDED.favicon_url,
+          home_cover_urls = EXCLUDED.home_cover_urls,
+          home_slogan = EXCLUDED.home_slogan,
           established_at = EXCLUDED.established_at
     `;
 
@@ -452,6 +462,7 @@ export async function configureFiling(
   const icpRecords = cleanIcpFilingRecords({
     legacyNumber: input.icpNumber,
     legacyUrl: input.icpUrl,
+    records: input.icpRecords,
   });
 
   await withTransaction(async (tx) => {
