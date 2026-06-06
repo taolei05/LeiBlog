@@ -48,9 +48,19 @@ type SiteConfigState = {
   seoTitle: string;
 };
 
+type IcpRecordState = {
+  id: string;
+  number: string;
+  url: string;
+};
+
+type IcpRecordItem = {
+  number: string;
+  url: string | null;
+};
+
 type FilingState = {
-  icpNumber: string;
-  icpUrl: string;
+  icpRecords: IcpRecordState[];
   policeNumber: string;
   policeUrl: string;
 };
@@ -80,6 +90,7 @@ type SiteConfigItem = {
 
 type FilingItem = {
   icpNumber: string | null;
+  icpRecords?: IcpRecordItem[];
   icpUrl: string | null;
   policeNumber: string | null;
   policeUrl: string | null;
@@ -204,14 +215,47 @@ const defaultSiteConfig: SiteConfigState = {
 };
 
 const defaultFiling: FilingState = {
-  icpNumber: "",
-  icpUrl: "",
+  icpRecords: [createEmptyIcpRecord()],
   policeNumber: "",
   policeUrl: "",
 };
 
 const revealCodeResendCooldownMs = 60_000;
 const revealCodeResendStorageKey = "leiblog:admin:api-key-reveal-code-resend-available-at";
+
+function createEmptyIcpRecord(id = "icp-record-1"): IcpRecordState {
+  return {
+    id,
+    number: "",
+    url: "",
+  };
+}
+
+function toIcpRecordStates(item: FilingItem) {
+  const records =
+    item.icpRecords && item.icpRecords.length > 0
+      ? item.icpRecords
+      : item.icpNumber
+        ? [{ number: item.icpNumber, url: item.icpUrl }]
+        : [];
+
+  if (records.length === 0) return [createEmptyIcpRecord()];
+
+  return records.map((record, index) => ({
+    id: `icp-record-${index + 1}`,
+    number: record.number,
+    url: record.url ?? "",
+  }));
+}
+
+function toIcpRecordPayload(records: IcpRecordState[]) {
+  return records
+    .map((record) => ({
+      number: record.number.trim(),
+      url: toOptional(record.url),
+    }))
+    .filter((record) => record.number);
+}
 
 function toLocalDateTimeValue(date: Date) {
   const timezoneOffset = date.getTimezoneOffset() * 60_000;
@@ -417,8 +461,7 @@ export function SiteSettingsPage() {
 
     if (filingResponse.item) {
       setFiling({
-        icpNumber: filingResponse.item.icpNumber ?? "",
-        icpUrl: filingResponse.item.icpUrl ?? "",
+        icpRecords: toIcpRecordStates(filingResponse.item),
         policeNumber: filingResponse.item.policeNumber ?? "",
         policeUrl: filingResponse.item.policeUrl ?? "",
       });
@@ -601,8 +644,7 @@ export function SiteSettingsPage() {
     try {
       await adminFetch("/admin/system/filing", {
         body: {
-          icpNumber: toOptional(filing.icpNumber),
-          icpUrl: toOptional(filing.icpUrl),
+          icpRecords: toIcpRecordPayload(filing.icpRecords),
           policeNumber: toOptional(filing.policeNumber),
           policeUrl: toOptional(filing.policeUrl),
         },
@@ -615,6 +657,36 @@ export function SiteSettingsPage() {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function updateIcpRecord(index: number, key: "number" | "url", value: string) {
+    setFiling((state) => ({
+      ...state,
+      icpRecords: state.icpRecords.map((record, recordIndex) =>
+        recordIndex === index ? { ...record, [key]: value } : record,
+      ),
+    }));
+  }
+
+  function addIcpRecord() {
+    setFiling((state) => ({
+      ...state,
+      icpRecords: [
+        ...state.icpRecords,
+        createEmptyIcpRecord(`icp-record-${Date.now()}-${state.icpRecords.length + 1}`),
+      ],
+    }));
+  }
+
+  function removeIcpRecord(index: number) {
+    setFiling((state) => {
+      const icpRecords = state.icpRecords.filter((_, recordIndex) => recordIndex !== index);
+
+      return {
+        ...state,
+        icpRecords: icpRecords.length > 0 ? icpRecords : [createEmptyIcpRecord()],
+      };
+    });
   }
 
   async function sendRevealCode() {
@@ -996,26 +1068,27 @@ export function SiteSettingsPage() {
 
         <SettingsAccordionItem icon="documentText" id="filing" title="备案配置">
           <Form className="settings-form" onSubmit={(event) => requestSave("filing", event)}>
-            <SettingsTextField
-              description="工信部 ICP 备案号。"
-              label="ICP备案号"
-              onChange={createInputHandler<FilingState>({
-                key: "icpNumber",
-                setState: setFiling,
-              })}
-              type="text"
-              value={filing.icpNumber}
-            />
-            <SettingsTextField
-              description="ICP备案信息对应的官方链接。"
-              label="ICP备案网址"
-              onChange={createInputHandler<FilingState>({
-                key: "icpUrl",
-                setState: setFiling,
-              })}
-              type="url"
-              value={filing.icpUrl}
-            />
+            <div className="filing-record-list">
+              {filing.icpRecords.map((record, index) => (
+                <IcpRecordFields
+                  canRemove={filing.icpRecords.length > 1}
+                  index={index}
+                  key={record.id}
+                  onRemove={() => removeIcpRecord(index)}
+                  onUpdate={(key, value) => updateIcpRecord(index, key, value)}
+                  record={record}
+                />
+              ))}
+            </div>
+            <Button
+              isDisabled={isReadOnly || isSaving}
+              onPress={addIcpRecord}
+              type="button"
+              variant="tertiary"
+            >
+              <AppIcon name="create" />
+              添加 ICP 备案
+            </Button>
             <SettingsTextField
               description="公安联网备案号。"
               label="公安备案号"
@@ -1283,6 +1356,44 @@ function SettingsAccordionItem({ children, icon, id, title }: SettingsAccordionI
         <Accordion.Body>{children}</Accordion.Body>
       </Accordion.Panel>
     </Accordion.Item>
+  );
+}
+
+type IcpRecordFieldsProps = {
+  canRemove: boolean;
+  index: number;
+  onRemove: () => void;
+  onUpdate: (key: "number" | "url", value: string) => void;
+  record: IcpRecordState;
+};
+
+function IcpRecordFields({ canRemove, index, onRemove, onUpdate, record }: IcpRecordFieldsProps) {
+  return (
+    <div className="filing-record-card">
+      <div className="filing-record-card__header">
+        <strong>ICP备案 {index + 1}</strong>
+        {canRemove ? (
+          <Button onPress={onRemove} size="sm" type="button" variant="tertiary">
+            <AppIcon name="trash" />
+            移除
+          </Button>
+        ) : null}
+      </div>
+      <SettingsTextField
+        description="工信部 ICP 备案号。"
+        label="ICP备案号"
+        onChange={(event) => onUpdate("number", event.target.value)}
+        type="text"
+        value={record.number}
+      />
+      <SettingsTextField
+        description="ICP备案信息对应的官方链接。"
+        label="ICP备案网址"
+        onChange={(event) => onUpdate("url", event.target.value)}
+        type="url"
+        value={record.url}
+      />
+    </div>
   );
 }
 

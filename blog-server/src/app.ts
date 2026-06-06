@@ -62,6 +62,7 @@ function getValidationFieldName(path: string | null) {
     fileName: "文件名",
     folderSlug: "目标文件夹",
     icpNumber: "ICP备案号",
+    icpRecords: "ICP备案列表",
     icpUrl: "ICP备案网址",
     ipgeolocationApiKey: "IPGeolocation API Key",
     logoDarkUrl: "深色 Logo",

@@ -15,6 +15,10 @@ const singleArticleCategoryMigration = readFileSync(
   join(import.meta.dir, "../src/db/migrations/008_single_article_category.sql"),
   "utf8"
 );
+const siteFilingIcpRecordsMigration = readFileSync(
+  join(import.meta.dir, "../src/db/migrations/009_site_filing_icp_records.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("creates the required core tables", () => {
@@ -60,5 +64,11 @@ describe("initial database migration", () => {
     expect(migration).toContain("PRIMARY KEY (article_id)");
     expect(singleArticleCategoryMigration).toContain("ranked_article_categories");
     expect(singleArticleCategoryMigration).toContain("PRIMARY KEY (article_id)");
+  });
+
+  test("stores multiple ICP filing records", () => {
+    expect(migration).toContain("icp_records jsonb");
+    expect(siteFilingIcpRecordsMigration).toContain("ADD COLUMN IF NOT EXISTS icp_records");
+    expect(siteFilingIcpRecordsMigration).toContain("jsonb_build_array");
   });
 });

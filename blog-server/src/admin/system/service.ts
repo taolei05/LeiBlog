@@ -13,6 +13,8 @@ import { decryptSecret, encryptSecret } from "../../shared/crypto";
 import type { DbClient } from "../../shared/db";
 import { db } from "../../shared/db";
 import { validationError } from "../../shared/errors";
+import type { IcpFilingRecordInput } from "../../shared/site-filing";
+import { cleanIcpFilingRecords, readStoredIcpFilingRecords } from "../../shared/site-filing";
 
 export interface SystemSiteInfoInput {
   siteName: string;
@@ -39,6 +41,7 @@ export interface SystemSiteConfigInput {
 
 export interface SystemFilingInput {
   icpNumber?: string | null;
+  icpRecords?: IcpFilingRecordInput[] | null;
   icpUrl?: string | null;
   policeNumber?: string | null;
   policeUrl?: string | null;
@@ -69,6 +72,7 @@ interface SiteConfigRow {
 
 interface SiteFilingRow {
   icp_number: string | null;
+  icp_records: unknown;
   icp_url: string | null;
   police_number: string | null;
   police_url: string | null;
@@ -158,9 +162,17 @@ function toSiteConfig(row: SiteConfigRow) {
 }
 
 function toFiling(row: SiteFilingRow) {
+  const icpRecords = readStoredIcpFilingRecords({
+    legacyNumber: row.icp_number,
+    legacyUrl: row.icp_url,
+    storedRecords: row.icp_records,
+  });
+  const firstIcpRecord = icpRecords[0];
+
   return {
-    icpNumber: row.icp_number,
-    icpUrl: row.icp_url,
+    icpNumber: row.icp_number ?? firstIcpRecord?.number ?? null,
+    icpRecords,
+    icpUrl: row.icp_url ?? firstIcpRecord?.url ?? null,
     policeNumber: row.police_number,
     policeUrl: row.police_url,
   };
@@ -399,7 +411,7 @@ export async function getSystemFiling(currentUser: AuthUser, client: DbClient = 
   requireAdminOrDemo(currentUser);
 
   const [row] = await client<SiteFilingRow[]>`
-    SELECT icp_number, icp_url, police_number, police_url
+    SELECT icp_number, icp_records, icp_url, police_number, police_url
     FROM site_filing
     WHERE id = 1
   `;
@@ -414,18 +426,27 @@ export async function updateSystemFiling(
 ) {
   assertWritableAdmin(currentUser);
 
+  const icpRecords = cleanIcpFilingRecords({
+    legacyNumber: input.icpNumber,
+    legacyUrl: input.icpUrl,
+    records: input.icpRecords,
+  });
+  const firstIcpRecord = icpRecords[0];
+
   await client`
-    INSERT INTO site_filing (id, icp_number, icp_url, police_number, police_url)
+    INSERT INTO site_filing (id, icp_number, icp_url, icp_records, police_number, police_url)
     VALUES (
       1,
-      ${cleanOptional(input.icpNumber)},
-      ${cleanOptional(input.icpUrl)},
+      ${firstIcpRecord?.number ?? null},
+      ${firstIcpRecord?.url ?? null},
+      ${JSON.stringify(icpRecords)}::jsonb,
       ${cleanOptional(input.policeNumber)},
       ${cleanOptional(input.policeUrl)}
     )
     ON CONFLICT (id) DO UPDATE
     SET icp_number = EXCLUDED.icp_number,
         icp_url = EXCLUDED.icp_url,
+        icp_records = EXCLUDED.icp_records,
         police_number = EXCLUDED.police_number,
         police_url = EXCLUDED.police_url
   `;

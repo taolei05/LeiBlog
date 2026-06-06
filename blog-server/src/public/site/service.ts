@@ -4,6 +4,7 @@ import type { UserProfileRow } from "../../shared/types/user";
 import { db } from "../../shared/db";
 import { notFound } from "../../shared/errors";
 import { redisKeys } from "../../shared/redis";
+import { readStoredIcpFilingRecords } from "../../shared/site-filing";
 import { toUserProfile } from "../../shared/types/user";
 
 interface SiteInfoRow {
@@ -28,6 +29,7 @@ interface SiteConfigRow {
 
 interface SiteFilingRow {
   icp_number: string | null;
+  icp_records: unknown;
   icp_url: string | null;
   police_number: string | null;
   police_url: string | null;
@@ -105,16 +107,24 @@ export async function getPublicSiteConfig(client: DbClient = db) {
 export async function getPublicSiteFiling(client: DbClient = db) {
   return cacheRememberJson(redisKeys.siteFiling, async () => {
     const [row] = await client<SiteFilingRow[]>`
-      SELECT icp_number, icp_url, police_number, police_url
+      SELECT icp_number, icp_records, icp_url, police_number, police_url
       FROM site_filing
       WHERE id = 1
     `;
 
     if (!row) throw notFound("备案信息尚未配置");
 
+    const icpRecords = readStoredIcpFilingRecords({
+      legacyNumber: row.icp_number,
+      legacyUrl: row.icp_url,
+      storedRecords: row.icp_records,
+    });
+    const firstIcpRecord = icpRecords[0];
+
     return {
-      icpNumber: row.icp_number,
-      icpUrl: row.icp_url,
+      icpNumber: row.icp_number ?? firstIcpRecord?.number ?? null,
+      icpRecords,
+      icpUrl: row.icp_url ?? firstIcpRecord?.url ?? null,
       policeNumber: row.police_number,
       policeUrl: row.police_url,
     };

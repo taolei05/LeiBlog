@@ -25,6 +25,12 @@ const SystemSiteConfigItem = t.Object({
 
 const SystemFilingItem = t.Object({
   icpNumber: t.Nullable(t.String()),
+  icpRecords: t.Array(
+    t.Object({
+      number: t.String(),
+      url: t.Nullable(t.String()),
+    })
+  ),
   icpUrl: t.Nullable(t.String()),
   policeNumber: t.Nullable(t.String()),
   policeUrl: t.Nullable(t.String()),
@@ -55,6 +61,15 @@ export const SystemSiteConfigBody = t.Object({
 
 export const SystemFilingBody = t.Object({
   icpNumber: t.Optional(t.Nullable(t.String({ maxLength: 120 }))),
+  icpRecords: t.Optional(
+    t.Array(
+      t.Object({
+        number: t.String({ maxLength: 120 }),
+        url: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+      }),
+      { maxItems: 20 }
+    )
+  ),
   icpUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
   policeNumber: t.Optional(t.Nullable(t.String({ maxLength: 120 }))),
   policeUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),

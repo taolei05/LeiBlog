@@ -22,6 +22,12 @@ export const SiteConfigItem = t.Object({
 
 export const SiteFilingItem = t.Object({
   icpNumber: t.Nullable(t.String()),
+  icpRecords: t.Array(
+    t.Object({
+      number: t.String(),
+      url: t.Nullable(t.String()),
+    })
+  ),
   icpUrl: t.Nullable(t.String()),
   policeNumber: t.Nullable(t.String()),
   policeUrl: t.Nullable(t.String()),

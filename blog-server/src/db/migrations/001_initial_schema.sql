@@ -56,6 +56,7 @@ CREATE TABLE site_filing (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   icp_number varchar(120),
   icp_url text,
+  icp_records jsonb NOT NULL DEFAULT '[]'::jsonb,
   police_number varchar(120),
   police_url text,
   created_at timestamptz NOT NULL DEFAULT now(),
