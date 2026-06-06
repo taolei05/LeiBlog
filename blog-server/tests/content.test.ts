@@ -15,6 +15,7 @@ import {
   listTags,
   updateArticle,
 } from "../src/admin/content/service";
+import { listPublishedArticles } from "../src/public/articles/service";
 import { hashPassword, type AuthUser } from "../src/shared/auth";
 
 const POSTGRES_ADMIN_URL =
@@ -144,6 +145,19 @@ describe("admin content service", () => {
     expect(filtered.total).toBe(1);
     expect(filtered.items[0]?.authorName).toBe("admin");
     expect(filtered.items[0]?.id).toBe(article.id);
+
+    const publicByCategory = await listPublishedArticles(
+      { search: "技术文章", page: "1", pageSize: "10" },
+      testDb
+    );
+    const publicByTag = await listPublishedArticles(
+      { search: "react", page: "1", pageSize: "10" },
+      testDb
+    );
+    expect(publicByCategory.total).toBe(1);
+    expect(publicByCategory.items[0]?.id).toBe(article.id);
+    expect(publicByTag.total).toBe(1);
+    expect(publicByTag.items[0]?.id).toBe(article.id);
 
     const [revisionCount] = await testDb<{ count: string }[]>`
       SELECT count(*) AS count

@@ -1063,6 +1063,8 @@
 }
 
 .admin-user .avatar img,
+.user-avatar-cell .avatar img,
+.user-avatar-cell .avatar__image,
 .user-table-cell .avatar img,
 .user-table-cell .avatar__image {
   display: block;
@@ -1072,6 +1074,10 @@
   object-fit: cover;
 }
 
+.user-avatar-cell .avatar,
+.user-avatar-cell .avatar__image,
+.user-avatar-cell .avatar__fallback,
+.user-avatar-cell .avatar img,
 .user-table-cell .avatar,
 .user-table-cell .avatar__image,
 .user-table-cell .avatar__fallback,
@@ -2124,7 +2130,68 @@
 
 .articles-index-tools {
   display: flex;
+  align-items: center;
+  gap: 1rem;
   justify-content: flex-end;
+}
+
+.articles-index-search-state {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 0.85rem;
+  border: 1px solid var(--cursor-border-soft);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--cursor-surface) 88%, transparent);
+  padding: 0.65rem 0.85rem;
+  box-shadow: var(--cursor-shadow-soft);
+}
+
+.articles-index-search-state__query,
+.articles-index-search-state__count {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--cursor-ink);
+  font-weight: 750;
+}
+
+.articles-index-search-state__query {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.articles-index-search-state__query .app-icon {
+  flex: 0 0 auto;
+  color: var(--cursor-accent);
+}
+
+.articles-index-search-state__count {
+  flex: 0 0 auto;
+  color: var(--cursor-muted);
+  font-size: 0.9rem;
+}
+
+.articles-index-search-state__clear {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+  color: var(--cursor-accent);
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding: 0.35rem 0.75rem;
+  text-decoration: none;
+}
+
+.articles-index-search-state__clear:hover {
+  background: var(--cursor-accent);
+  color: white;
 }
 
 .articles-index-sort {
@@ -5539,6 +5606,7 @@
 .data-table-pagination__controls,
 .data-table-row-actions,
 .media-file-cell,
+.user-avatar-cell,
 .user-table-cell {
   display: flex;
   min-width: 0;
@@ -6346,6 +6414,10 @@
 }
 
 .user-table-cell {
+  justify-content: center;
+}
+
+.user-avatar-cell {
   justify-content: center;
 }
 
@@ -8620,7 +8692,18 @@
   }
 
   .articles-index-tools {
+    align-items: stretch;
+    flex-direction: column;
     justify-content: stretch;
+  }
+
+  .articles-index-search-state {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .articles-index-search-state__query {
+    white-space: normal;
   }
 
   .articles-index-sort {

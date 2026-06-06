@@ -29,7 +29,6 @@ type UserRow = DataTableRow & {
   lastLogin: string;
   name: string;
   role: "admin" | "demo" | "user";
-  status: "active" | "disabled";
   username: string;
   tags: string[];
 };
@@ -97,11 +96,10 @@ const emptyUserForm: UserFormState = {
 
 const userColumns: DataTableColumn<UserRow>[] = [
   {
-    header: "用户",
-    id: "username",
-    isRowHeader: true,
+    header: "头像",
+    id: "avatar",
     render: (row) => (
-      <span className="user-table-cell">
+      <span className="user-avatar-cell">
         <Avatar size="sm">
           {row.avatarUrl ? (
             <Avatar.Image
@@ -112,6 +110,16 @@ const userColumns: DataTableColumn<UserRow>[] = [
           ) : null}
           <Avatar.Fallback>{row.name.slice(0, 1).toUpperCase()}</Avatar.Fallback>
         </Avatar>
+      </span>
+    ),
+    value: (row) => row.name,
+  },
+  {
+    header: "用户",
+    id: "username",
+    isRowHeader: true,
+    render: (row) => (
+      <span className="user-table-cell">
         <span className="data-table-primary-cell">
           <strong title={row.name}>{truncateDataTablePrimaryText(row.name)}</strong>
           <small>
@@ -138,17 +146,6 @@ const userColumns: DataTableColumn<UserRow>[] = [
     value: (row) => roleLabel[row.role],
   },
   {
-    header: "状态",
-    id: "status",
-    render: (row) => (
-      <DataStatusChip tone={row.status === "active" ? "success" : "danger"}>
-        {row.status === "active" ? "启用" : "停用"}
-      </DataStatusChip>
-    ),
-    sortable: true,
-    value: (row) => (row.status === "active" ? "启用" : "停用"),
-  },
-  {
     header: "最近登录",
     id: "lastLogin",
     sortable: true,
@@ -167,15 +164,6 @@ const userFilters: DataTableFilter<UserRow>[] = [
       { label: "普通用户", predicate: (row) => row.role === "user", value: "user" },
     ],
   },
-  {
-    allLabel: "全部状态",
-    key: "status",
-    label: "状态",
-    options: [
-      { label: "启用", predicate: (row) => row.status === "active", value: "active" },
-      { label: "停用", predicate: (row) => row.status === "disabled", value: "disabled" },
-    ],
-  },
 ];
 
 function toUserRow(item: AdminUserItem): UserRow {
@@ -188,7 +176,6 @@ function toUserRow(item: AdminUserItem): UserRow {
     lastLogin: item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString("zh-CN") : "从未登录",
     name: item.name ?? item.username,
     role: item.role,
-    status: "active",
     tags: item.tags,
     username: item.username,
   };

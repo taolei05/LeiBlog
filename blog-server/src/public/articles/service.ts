@@ -94,6 +94,30 @@ function articleOrder(sortBy: PublicArticleQuery["sortBy"], sortOrder: SortOrder
   return `a.is_pinned DESC, ${column} ${order} NULLS LAST, a.published_at DESC, a.created_at DESC`;
 }
 
+const publicArticleSearchCondition = `
+  (
+    $1::text IS NULL
+    OR lower(a.title) LIKE $1
+    OR lower(a.slug) LIKE $1
+    OR lower(coalesce(a.summary, '')) LIKE $1
+    OR lower(coalesce(a.content_mdx, '')) LIKE $1
+    OR EXISTS (
+      SELECT 1
+      FROM article_category_links acl
+      JOIN article_categories c ON c.id = acl.category_id
+      WHERE acl.article_id = a.id
+        AND (lower(c.name) LIKE $1 OR lower(c.slug) LIKE $1)
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM article_tag_links atl
+      JOIN article_tags t ON t.id = atl.tag_id
+      WHERE atl.article_id = a.id
+        AND (lower(t.name) LIKE $1 OR lower(t.slug) LIKE $1)
+    )
+  )
+`;
+
 function toArticleSummary(row: ArticleSummaryRow) {
   return {
     id: row.id,
@@ -168,7 +192,7 @@ export async function listPublishedArticles(
           ), '[]'::jsonb) AS tags
         FROM articles a
         WHERE a.status = 'published'
-          AND ($1::text IS NULL OR lower(a.title) LIKE $1 OR lower(a.slug) LIKE $1 OR lower(coalesce(a.summary, '')) LIKE $1)
+          AND ${publicArticleSearchCondition}
           AND ($2::text IS NULL OR EXISTS (
             SELECT 1
             FROM article_category_links acl
@@ -200,7 +224,7 @@ export async function listPublishedArticles(
         SELECT count(*) AS total
         FROM articles a
         WHERE a.status = 'published'
-          AND ($1::text IS NULL OR lower(a.title) LIKE $1 OR lower(a.slug) LIKE $1 OR lower(coalesce(a.summary, '')) LIKE $1)
+          AND ${publicArticleSearchCondition}
           AND ($2::text IS NULL OR EXISTS (
             SELECT 1
             FROM article_category_links acl

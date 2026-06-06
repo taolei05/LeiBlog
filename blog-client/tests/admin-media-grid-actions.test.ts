@@ -18,4 +18,16 @@ describe("admin user actions", () => {
   it("does not expose the read-only view action", () => {
     expect(usersPageSource).not.toMatch(/label:\s*"查看"/);
   });
+
+  it("uses avatar as the first data column and removes the status column", () => {
+    const avatarColumnIndex = usersPageSource.indexOf('header: "头像"');
+    const userColumnIndex = usersPageSource.indexOf('header: "用户"');
+
+    expect(avatarColumnIndex).toBeGreaterThan(-1);
+    expect(userColumnIndex).toBeGreaterThan(-1);
+    expect(avatarColumnIndex).toBeLessThan(userColumnIndex);
+    expect(usersPageSource).not.toContain('header: "状态"');
+    expect(usersPageSource).not.toContain('key: "status"');
+    expect(usersPageSource).not.toContain('status: "active"');
+  });
 });

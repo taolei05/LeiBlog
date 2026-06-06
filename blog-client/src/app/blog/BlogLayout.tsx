@@ -3,7 +3,7 @@ import type { FocusEvent, FormEvent } from "react";
 import type { AppIconName } from "../../shared/icons/AppIcon";
 import type { PublicSiteInfo } from "../../shared/site/site-info";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { getAdminApiBaseUrl, resolveApiAssetUrl } from "../../shared/api/api-base-url";
 import { AppIcon } from "../../shared/icons/AppIcon";
@@ -571,6 +571,7 @@ function BlogMobileDrawer({
 }
 
 export function BlogLayout() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -581,6 +582,10 @@ export function BlogLayout() {
   );
   const siteName = siteInfo?.siteName ?? "LeiBlog";
   const siteLogoUrl = getPreferredSiteLogo(siteInfo, resolvedTheme);
+
+  useEffect(() => {
+    setSearchQuery(new URLSearchParams(location.search).get("q") ?? "");
+  }, [location.search]);
 
   useEffect(() => {
     let isActive = true;

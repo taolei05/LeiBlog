@@ -2,7 +2,7 @@ import type { Key } from "@heroui/react";
 
 import { Label, ListBox, Pagination, Select } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { AppIcon } from "../../../shared/icons";
 import type { PublicSiteInfo } from "../../../shared/site/site-info";
@@ -17,6 +17,7 @@ import {
 } from "../shared/HeroCoverCarousel";
 
 type ArticleSortMode = "earliest" | "latest" | "views";
+type ArticleListStatus = "error" | "idle" | "loading";
 
 export const ARTICLES_PER_PAGE = 9;
 
@@ -41,6 +42,26 @@ function getNextSortMode(value: Key | null) {
 
   const nextValue = String(value);
   return isArticleSortMode(nextValue) ? nextValue : "latest";
+}
+
+export function getArticleListEmptyText({
+  isSearchResult,
+  searchQuery,
+  status,
+}: {
+  isSearchResult: boolean;
+  searchQuery: string;
+  status: ArticleListStatus;
+}) {
+  if (status === "loading") {
+    return isSearchResult ? `正在搜索“${searchQuery}”。` : "正在加载文章。";
+  }
+
+  if (status === "error") {
+    return "文章接口暂时不可用。";
+  }
+
+  return isSearchResult ? `没有找到与“${searchQuery}”匹配的文章。` : "没有匹配的文章。";
 }
 
 function getArticleTime(article: BlogArticle) {
@@ -232,11 +253,14 @@ function ArticlesIndexHeroWaves() {
 }
 
 export function BlogArticlesPage() {
+  const [searchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q")?.trim() ?? "";
+  const isSearchResult = searchQuery.length > 0;
   const [articles, setArticles] = useState<BlogArticle[]>([]);
   const [articlePage, setArticlePage] = useState(1);
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo | null>(null);
   const [sortMode, setSortMode] = useState<ArticleSortMode>("latest");
-  const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
+  const [status, setStatus] = useState<ArticleListStatus>("loading");
   const sortedArticles = useMemo(() => sortArticles(articles, sortMode), [articles, sortMode]);
   const { currentPage, fromArticle, pageArticles, pageCount, toArticle } = useMemo(
     () =>
@@ -265,6 +289,10 @@ export function BlogArticlesPage() {
     if (articlePage === currentPage) return;
     setArticlePage(currentPage);
   }, [articlePage, currentPage]);
+
+  useEffect(() => {
+    setArticlePage(1);
+  }, [searchQuery]);
 
   function updateSortMode(value: Key | null) {
     setSortMode(getNextSortMode(value));
@@ -298,8 +326,10 @@ export function BlogArticlesPage() {
     async function loadArticles() {
       try {
         setStatus("loading");
+        setArticles([]);
         const nextArticles = await fetchPublicArticles({
           pageSize: 100,
+          search: searchQuery || undefined,
         });
         if (!isActive) return;
         setArticles(nextArticles);
@@ -316,7 +346,7 @@ export function BlogArticlesPage() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [searchQuery]);
 
   return (
     <section className="articles-index-page">
@@ -328,12 +358,30 @@ export function BlogArticlesPage() {
             <AppIcon name="reader" size="clamp(2.25rem, 5vw, 4.5rem)" />
             全部文章
           </h1>
-          <p>发现 {articles.length} 篇公开文章</p>
+          <p>
+            {isSearchResult
+              ? `搜索“${searchQuery}”，找到 ${articles.length} 篇公开文章`
+              : `发现 ${articles.length} 篇公开文章`}
+          </p>
         </div>
         <ArticlesIndexHeroWaves />
       </header>
       <section className="articles-index-content">
         <div className="articles-index-tools">
+          {isSearchResult ? (
+            <div className="articles-index-search-state">
+              <span className="articles-index-search-state__query">
+                <AppIcon name="search" />
+                搜索“{searchQuery}”
+              </span>
+              <span className="articles-index-search-state__count">
+                找到 {sortedArticles.length} 篇文章
+              </span>
+              <Link className="articles-index-search-state__clear" to="/articles">
+                清除搜索
+              </Link>
+            </div>
+          ) : null}
           <Select
             className="articles-index-sort"
             onChange={updateSortMode}
@@ -428,7 +476,7 @@ export function BlogArticlesPage() {
           </>
         ) : (
           <EmptyPlaceholder
-            text={status === "error" ? "文章接口暂时不可用。" : "没有匹配的文章。"}
+            text={getArticleListEmptyText({ isSearchResult, searchQuery, status })}
           />
         )}
       </section>
