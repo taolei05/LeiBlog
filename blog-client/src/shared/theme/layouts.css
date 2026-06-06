@@ -6788,32 +6788,6 @@
   gap: 1rem;
 }
 
-.filing-record-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.filing-record-card {
-  display: grid;
-  gap: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: var(--field-radius);
-  background: var(--surface-secondary);
-  padding: 0.75rem;
-}
-
-.filing-record-card__header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.filing-record-card__header strong {
-  font-size: 0.9375rem;
-}
-
 .settings-form .switch {
   align-items: center;
   border: 1px solid var(--border);

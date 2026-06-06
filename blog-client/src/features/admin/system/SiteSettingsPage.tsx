@@ -1068,27 +1068,36 @@ export function SiteSettingsPage() {
 
         <SettingsAccordionItem icon="documentText" id="filing" title="备案配置">
           <Form className="settings-form" onSubmit={(event) => requestSave("filing", event)}>
-            <div className="filing-record-list">
-              {filing.icpRecords.map((record, index) => (
-                <IcpRecordFields
-                  canRemove={filing.icpRecords.length > 1}
-                  index={index}
-                  key={record.id}
-                  onRemove={() => removeIcpRecord(index)}
-                  onUpdate={(key, value) => updateIcpRecord(index, key, value)}
-                  record={record}
-                />
-              ))}
-            </div>
-            <Button
-              isDisabled={isReadOnly || isSaving}
-              onPress={addIcpRecord}
-              type="button"
-              variant="tertiary"
-            >
-              <AppIcon name="create" />
-              添加 ICP 备案
-            </Button>
+            <section className="admin-account-social-panel filing-record-panel">
+              <div className="admin-account-social-panel__heading">
+                <div>
+                  <h3>ICP备案</h3>
+                  <p>可登记多个 ICP 备案。</p>
+                </div>
+                <Button
+                  isDisabled={isReadOnly || isSaving}
+                  onPress={addIcpRecord}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="link" />
+                  添加 ICP 备案
+                </Button>
+              </div>
+              <div className="admin-account-social-list">
+                {filing.icpRecords.map((record, index) => (
+                  <IcpRecordFields
+                    index={index}
+                    isRemoveDisabled={isReadOnly || isSaving || filing.icpRecords.length === 1}
+                    key={record.id}
+                    onRemove={() => removeIcpRecord(index)}
+                    onUpdate={(key, value) => updateIcpRecord(index, key, value)}
+                    record={record}
+                  />
+                ))}
+              </div>
+            </section>
             <SettingsTextField
               description="公安联网备案号。"
               label="公安备案号"
@@ -1360,39 +1369,62 @@ function SettingsAccordionItem({ children, icon, id, title }: SettingsAccordionI
 }
 
 type IcpRecordFieldsProps = {
-  canRemove: boolean;
   index: number;
+  isRemoveDisabled: boolean;
   onRemove: () => void;
   onUpdate: (key: "number" | "url", value: string) => void;
   record: IcpRecordState;
 };
 
-function IcpRecordFields({ canRemove, index, onRemove, onUpdate, record }: IcpRecordFieldsProps) {
+function IcpRecordFields({
+  index,
+  isRemoveDisabled,
+  onRemove,
+  onUpdate,
+  record,
+}: IcpRecordFieldsProps) {
   return (
-    <div className="filing-record-card">
-      <div className="filing-record-card__header">
-        <strong>ICP备案 {index + 1}</strong>
-        {canRemove ? (
-          <Button onPress={onRemove} size="sm" type="button" variant="tertiary">
-            <AppIcon name="trash" />
-            移除
-          </Button>
-        ) : null}
-      </div>
-      <SettingsTextField
-        description="工信部 ICP 备案号。"
-        label="ICP备案号"
-        onChange={(event) => onUpdate("number", event.target.value)}
-        type="text"
-        value={record.number}
-      />
-      <SettingsTextField
-        description="ICP备案信息对应的官方链接。"
-        label="ICP备案网址"
-        onChange={(event) => onUpdate("url", event.target.value)}
-        type="url"
-        value={record.url}
-      />
+    <div className="admin-account-social-row filing-record-row">
+      <TextField fullWidth>
+        <Label>备案号</Label>
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name="documentText" size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            onChange={(event) => onUpdate("number", event.target.value)}
+            placeholder="京ICP备..."
+            type="text"
+            value={record.number}
+          />
+        </InputGroup>
+        <FieldError>备案号格式不正确</FieldError>
+      </TextField>
+      <TextField fullWidth>
+        <Label>链接</Label>
+        <InputGroup fullWidth variant="secondary">
+          <InputGroup.Prefix>
+            <AppIcon name="link" size={16} />
+          </InputGroup.Prefix>
+          <InputGroup.Input
+            onChange={(event) => onUpdate("url", event.target.value)}
+            placeholder="https://..."
+            type="url"
+            value={record.url}
+          />
+        </InputGroup>
+        <FieldError>备案链接格式不正确</FieldError>
+      </TextField>
+      <Button
+        aria-label={`移除第 ${index + 1} 条 ICP 备案`}
+        isDisabled={isRemoveDisabled}
+        isIconOnly
+        onPress={onRemove}
+        type="button"
+        variant="danger-soft"
+      >
+        <AppIcon name="trash" />
+      </Button>
     </div>
   );
 }
