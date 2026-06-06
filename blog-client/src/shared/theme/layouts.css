@@ -4749,45 +4749,64 @@
 
 .comment-item.is-highlighted {
   position: relative;
+  isolation: isolate;
+}
+
+.comment-item.is-highlighted::before {
+  position: absolute;
+  inset: -0.625rem -0.75rem;
+  z-index: 0;
+  border: 1px solid color-mix(in srgb, var(--cursor-accent) 34%, transparent);
+  border-radius: 1rem;
+  background:
+    radial-gradient(
+      circle at 1.75rem 1.35rem,
+      color-mix(in srgb, var(--cursor-accent) 18%, transparent),
+      transparent 4.25rem
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--cursor-accent) 10%, transparent),
+      transparent 52%
+    ),
+    color-mix(in srgb, var(--cursor-surface) 92%, var(--cursor-accent) 8%);
+  box-shadow:
+    0 1rem 2.75rem color-mix(in srgb, var(--cursor-accent) 14%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, white 56%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.comment-item.is-highlighted::after {
+  position: absolute;
+  top: -0.625rem;
+  right: -0.75rem;
+  z-index: 2;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0 1rem 0 0.375rem;
+  background: linear-gradient(
+    135deg,
+    var(--cursor-accent),
+    color-mix(in srgb, var(--cursor-accent) 62%, var(--cursor-accent-2))
+  );
+  box-shadow: 0 0.625rem 1.375rem color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  content: "";
+  pointer-events: none;
+}
+
+.comment-item.is-highlighted > * {
+  position: relative;
+  z-index: 1;
 }
 
 .comment-item.is-highlighted .comment-item__avatar {
-  border-color: var(--cursor-accent);
+  border-color: color-mix(in srgb, var(--cursor-accent) 68%, var(--cursor-border));
   box-shadow:
-    0 0 0 0.25rem color-mix(in srgb, var(--cursor-accent) 16%, transparent),
-    0 0.875rem 1.875rem color-mix(in srgb, var(--cursor-accent) 22%, transparent);
-}
-
-.comment-item.is-highlighted .comment-item__body {
-  position: relative;
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 10%, transparent),
-    0 1rem 2.25rem color-mix(in srgb, var(--cursor-accent) 10%, transparent);
-}
-
-.comment-item.is-highlighted .comment-item__body::before {
-  position: absolute;
-  top: 0.875rem;
-  bottom: 0.875rem;
-  left: -0.3125rem;
-  width: 0.1875rem;
-  border-radius: 999px;
-  background: var(--cursor-accent);
-  box-shadow: 0 0 1rem color-mix(in srgb, var(--cursor-accent) 38%, transparent);
-  content: "";
-}
-
-.comment-item.is-highlighted .comment-item__body::after {
-  position: absolute;
-  top: 1rem;
-  left: -0.53125rem;
-  width: 0.625rem;
-  height: 0.625rem;
-  border: 2px solid var(--cursor-surface);
-  border-radius: 999px;
-  background: var(--cursor-accent);
-  box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--cursor-accent) 18%, transparent);
-  content: "";
+    0 0 0 0.1875rem color-mix(in srgb, var(--cursor-surface) 80%, transparent),
+    0 0 0 0.375rem color-mix(in srgb, var(--cursor-accent) 18%, transparent),
+    0 0.875rem 1.875rem color-mix(in srgb, var(--cursor-accent) 18%, transparent);
 }
 
 .comment-item__avatar {
