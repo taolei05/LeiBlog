@@ -1,7 +1,11 @@
 import { AlertDialog, Avatar, Button, Drawer, Dropdown, Label, SearchField } from "@heroui/react";
 import type { FocusEvent, FormEvent } from "react";
 import type { AppIconName } from "../../shared/icons/AppIcon";
-import type { PublicSiteInfo } from "../../shared/site/site-info";
+import type {
+  PublicSiteConfig,
+  PublicSiteFiling,
+  PublicSiteInfo,
+} from "../../shared/site/site-info";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
@@ -9,12 +13,15 @@ import { getAdminApiBaseUrl, resolveApiAssetUrl } from "../../shared/api/api-bas
 import { AppIcon } from "../../shared/icons/AppIcon";
 import {
   applyFavicon,
+  fetchPublicSiteConfig,
+  fetchPublicSiteFiling,
   fetchPublicSiteInfo,
   getPreferredSiteLogo,
 } from "../../shared/site/site-info";
 import { ThemeSwitcher } from "../../shared/theme/ThemeSwitcher";
 import { useTheme } from "../../shared/theme/ThemeProviderLite";
 import { showOperationToast } from "../../shared/toast/operation-toast";
+import { BlogFooter } from "./BlogFooter";
 import { InteractiveCursor } from "./InteractiveCursor";
 
 const primaryNavItems = [{ to: "/", label: "主页", icon: "home" }] as const;
@@ -576,6 +583,8 @@ export function BlogLayout() {
   const { resolvedTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [siteConfig, setSiteConfig] = useState<PublicSiteConfig | null>(null);
+  const [siteFiling, setSiteFiling] = useState<PublicSiteFiling | null>(null);
   const [siteInfo, setSiteInfo] = useState<PublicSiteInfo>();
   const [navSession, setNavSession] = useState<BlogNavSession | null>(() =>
     readCurrentBlogNavSession(),
@@ -602,6 +611,28 @@ export function BlogLayout() {
     }
 
     void loadSiteInfo();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadFooterData() {
+      const [configResult, filingResult] = await Promise.allSettled([
+        fetchPublicSiteConfig(),
+        fetchPublicSiteFiling(),
+      ]);
+
+      if (!isActive) return;
+
+      setSiteConfig(configResult.status === "fulfilled" ? configResult.value : null);
+      setSiteFiling(filingResult.status === "fulfilled" ? filingResult.value : null);
+    }
+
+    void loadFooterData();
 
     return () => {
       isActive = false;
@@ -689,6 +720,7 @@ export function BlogLayout() {
       <main className="blog-shell__main" id="main-content">
         <Outlet />
       </main>
+      <BlogFooter siteConfig={siteConfig} siteFiling={siteFiling} siteInfo={siteInfo} />
     </div>
   );
 }

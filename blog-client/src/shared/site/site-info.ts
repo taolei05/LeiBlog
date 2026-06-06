@@ -13,6 +13,28 @@ export type PublicSiteInfo = {
   siteName: string;
 };
 
+export type PublicSiteConfig = {
+  commentsEnabled: boolean;
+  copyright: string;
+  resendDomain: string | null;
+  seoDescription: string;
+  seoKeywords: string[];
+  seoTitle: string;
+};
+
+export type PublicSiteFilingRecord = {
+  number: string;
+  url: string | null;
+};
+
+export type PublicSiteFiling = {
+  icpNumber: string | null;
+  icpRecords: PublicSiteFilingRecord[];
+  icpUrl: string | null;
+  policeNumber: string | null;
+  policeUrl: string | null;
+};
+
 export type PublicSiteAuthor = {
   avatarUrl: string | null;
   blogUrl: string | null;
@@ -108,6 +130,46 @@ function toPublicSiteInfo(value: unknown): PublicSiteInfo {
   };
 }
 
+function toPublicSiteConfig(value: unknown): PublicSiteConfig {
+  if (!isRecord(value)) throw new Error("站点配置格式无效");
+
+  const commentsEnabled = value.commentsEnabled;
+  if (typeof commentsEnabled !== "boolean") throw new Error("接口字段 commentsEnabled 不是布尔值");
+
+  return {
+    commentsEnabled,
+    copyright: readString(value, "copyright"),
+    resendDomain: readNullableString(value, "resendDomain"),
+    seoDescription: readString(value, "seoDescription"),
+    seoKeywords: readStringArray(value, "seoKeywords"),
+    seoTitle: readString(value, "seoTitle"),
+  };
+}
+
+function toPublicSiteFilingRecord(value: unknown): PublicSiteFilingRecord {
+  if (!isRecord(value)) throw new Error("ICP备案格式无效");
+
+  return {
+    number: readString(value, "number"),
+    url: readNullableString(value, "url"),
+  };
+}
+
+function toPublicSiteFiling(value: unknown): PublicSiteFiling {
+  if (!isRecord(value)) throw new Error("备案信息格式无效");
+
+  const records = value.icpRecords;
+  if (!Array.isArray(records)) throw new Error("接口字段 icpRecords 不是数组");
+
+  return {
+    icpNumber: readNullableString(value, "icpNumber"),
+    icpRecords: records.map(toPublicSiteFilingRecord),
+    icpUrl: readNullableString(value, "icpUrl"),
+    policeNumber: readNullableString(value, "policeNumber"),
+    policeUrl: readNullableString(value, "policeUrl"),
+  };
+}
+
 function toPublicSiteAuthor(value: unknown): PublicSiteAuthor {
   if (!isRecord(value)) throw new Error("作者信息格式无效");
 
@@ -135,6 +197,36 @@ export async function fetchPublicSiteInfo() {
   }
 
   return toPublicSiteInfo(payload.item);
+}
+
+export async function fetchPublicSiteConfig() {
+  const response = await fetch(`${publicApiBaseUrl}/site/config`);
+  const payload: unknown = await response.json().catch(() => undefined);
+
+  if (!response.ok) {
+    throw new Error("站点配置读取失败");
+  }
+
+  if (!isRecord(payload)) {
+    throw new Error("站点配置响应格式无效");
+  }
+
+  return toPublicSiteConfig(payload.item);
+}
+
+export async function fetchPublicSiteFiling() {
+  const response = await fetch(`${publicApiBaseUrl}/site/filing`);
+  const payload: unknown = await response.json().catch(() => undefined);
+
+  if (!response.ok) {
+    throw new Error("备案信息读取失败");
+  }
+
+  if (!isRecord(payload)) {
+    throw new Error("备案信息响应格式无效");
+  }
+
+  return toPublicSiteFiling(payload.item);
 }
 
 export async function fetchPublicSiteAuthor() {
