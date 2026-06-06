@@ -1,11 +1,11 @@
 import { MDXProvider, useMDXComponents } from "@mdx-js/react";
-import {
-  isValidElement,
-  type AnchorHTMLAttributes,
-  type ComponentPropsWithoutRef,
-  type ReactElement,
-  type ReactNode,
+import type {
+  AnchorHTMLAttributes,
+  ComponentPropsWithoutRef,
+  ReactElement,
+  ReactNode,
 } from "react";
+import { isValidElement, useEffect, useMemo, useState } from "react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import { Link } from "react-router-dom";
 
@@ -48,6 +48,17 @@ export type MdxCodeBlockProps = {
 
 function getCodeLanguage(className: string | undefined) {
   return className?.match(/language-([\w-]+)/)?.[1];
+}
+
+function getCodeBlockText(children: ReactNode): string {
+  if (children === null || children === undefined || typeof children === "boolean") return "";
+  if (typeof children === "string" || typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(getCodeBlockText).join("");
+  if (isValidElement<{ children?: ReactNode }>(children)) {
+    return getCodeBlockText(children.props.children);
+  }
+
+  return "";
 }
 
 function MdxSmartLink({ children, href = "", ...props }: AnchorHTMLAttributes<HTMLAnchorElement>) {
@@ -96,13 +107,49 @@ function MdxCallout({ children, title, tone = "info" }: MdxCalloutProps) {
 }
 
 export function MdxCodeBlock({ children, fileName, language }: MdxCodeBlockProps) {
+  const [isCopied, setIsCopied] = useState(false);
+  const codeText = useMemo(() => getCodeBlockText(children), [children]);
+
+  useEffect(() => {
+    if (!isCopied) return;
+
+    const timer = window.setTimeout(() => {
+      setIsCopied(false);
+    }, 1600);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isCopied]);
+
+  async function copyCode() {
+    if (!codeText.trim()) return;
+    if (!navigator.clipboard) return;
+
+    await navigator.clipboard.writeText(codeText);
+    setIsCopied(true);
+  }
+
   return (
     <figure className="article-code-window">
       <figcaption>
-        <span />
-        <span />
-        <span />
+        <span className="article-code-window__dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
         <strong>{fileName ?? language ?? "mdx"}</strong>
+        <button
+          aria-label={isCopied ? "代码已复制" : "复制代码"}
+          className="article-code-window__copy"
+          data-copied={isCopied ? "true" : undefined}
+          disabled={!codeText.trim()}
+          onClick={() => void copyCode()}
+          type="button"
+        >
+          <AppIcon name={isCopied ? "checkmarkCircle" : "copy"} size={14} />
+          <span>{isCopied ? "已复制" : "复制"}</span>
+        </button>
       </figcaption>
       <pre>
         <code>{children}</code>

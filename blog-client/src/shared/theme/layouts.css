@@ -59,6 +59,9 @@
   --cursor-accent-2: #06b6d4;
   --cursor-warm: #f59e0b;
   --cursor-danger: #e11d48;
+  --article-code-dot-close: #ff5f57;
+  --article-code-dot-minimize: #ffbd2e;
+  --article-code-dot-maximize: #28c840;
   --cursor-active-bg: var(--cursor-ink);
   --cursor-active-foreground: white;
   --cursor-media-base: var(--cursor-ink);
@@ -66,6 +69,12 @@
   --cursor-y: 28vh;
   --cursor-shadow: 0 20px 50px rgb(9 9 11 / 10%);
   --cursor-shadow-soft: 0 12px 28px rgb(9 9 11 / 8%);
+  --article-code-bg: color-mix(in srgb, var(--cursor-surface) 94%, var(--cursor-accent) 6%);
+  --article-code-border: var(--cursor-border-soft);
+  --article-code-caption-bg: color-mix(in srgb, var(--cursor-surface-soft) 78%, transparent);
+  --article-code-caption-ink: var(--cursor-muted);
+  --article-code-ink: var(--cursor-ink);
+  --article-code-rule: color-mix(in srgb, var(--cursor-border-soft) 72%, transparent);
 
   position: relative;
   isolation: isolate;
@@ -108,6 +117,15 @@
     ),
     radial-gradient(circle at 84% 12%, rgb(6 182 212 / 16%), transparent 22rem),
     linear-gradient(180deg, #050506 0%, #111114 100%);
+}
+
+:is(.dark, [data-theme="dark"]) .blog-shell .article-code-window {
+  --article-code-bg: #09090b;
+  --article-code-border: rgb(250 250 250 / 18%);
+  --article-code-caption-bg: rgb(255 255 255 / 8%);
+  --article-code-caption-ink: rgb(244 244 245 / 76%);
+  --article-code-ink: #f4f4f5;
+  --article-code-rule: rgb(255 255 255 / 16%);
 }
 
 .blog-shell::before {
@@ -4065,42 +4083,100 @@
 .article-code-window {
   overflow: hidden;
   margin: 0;
-  border: 1px solid var(--cursor-border);
+  border: 1px solid var(--article-code-border);
   border-radius: 1rem;
-  background: var(--cursor-media-base);
-  color: #f4f4f5;
+  background: var(--article-code-bg);
+  color: var(--article-code-ink);
   box-shadow: var(--cursor-shadow);
 }
 
 .article-code-window figcaption {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  border-bottom: 1px solid rgb(255 255 255 / 16%);
-  background: rgb(255 255 255 / 8%);
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--article-code-rule);
+  background: var(--article-code-caption-bg);
   padding: 0.625rem 0.75rem;
 }
 
-.article-code-window figcaption span {
+.article-code-window__dots {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.article-code-window__dots span {
+  display: inline-block;
+  flex: 0 0 auto;
   width: 0.75rem;
   height: 0.75rem;
   border: 0;
   border-radius: 50%;
-  background: var(--cursor-danger);
+  background: var(--article-code-dot-close);
 }
 
-.article-code-window figcaption span:nth-child(2) {
-  background: var(--cursor-warm);
+.article-code-window__dots span:nth-child(2) {
+  background: var(--article-code-dot-minimize);
 }
 
-.article-code-window figcaption span:nth-child(3) {
-  background: var(--cursor-accent);
+.article-code-window__dots span:nth-child(3) {
+  background: var(--article-code-dot-maximize);
 }
 
 .article-code-window figcaption strong {
+  min-width: 0;
+  flex: 1 1 auto;
   margin-inline-start: 0.25rem;
-  color: rgb(244 244 245 / 76%);
+  color: var(--article-code-caption-ink);
   font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article-code-window__copy {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 1.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--article-code-border);
+  border-radius: 999rem;
+  background: color-mix(in srgb, var(--article-code-bg) 78%, var(--cursor-surface) 22%);
+  color: var(--article-code-caption-ink);
+  cursor: var(--cursor-interactive);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0 0.65rem;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.article-code-window__copy:hover:not(:disabled),
+.article-code-window__copy:focus-visible {
+  border-color: var(--cursor-accent);
+  background: color-mix(in srgb, var(--cursor-accent) 16%, var(--article-code-bg));
+  color: var(--cursor-accent);
+  transform: translateY(-1px);
+}
+
+.article-code-window__copy[data-copied="true"] {
+  border-color: var(--success, #16a34a);
+  color: var(--success, #16a34a);
+}
+
+.article-code-window__copy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .article-code-window pre {
@@ -4110,7 +4186,7 @@
 }
 
 .article-code-window code {
-  font-family: var(--font-code);
+  font-family: var(--font-blog-code);
   font-size: 0.875rem;
 }
 
