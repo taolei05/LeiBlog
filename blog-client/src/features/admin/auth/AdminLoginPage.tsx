@@ -128,10 +128,6 @@ export function AdminLoginPage() {
             </Chip>
           </div>
           <div className="admin-login-card__actions">
-            <Button isDisabled={isSubmitting} type="submit">
-              <AppIcon name="logIn" />
-              登录后台
-            </Button>
             <Button
               isDisabled={isSubmitting}
               onPress={() => void enterReadonlyDemo()}
@@ -140,6 +136,10 @@ export function AdminLoginPage() {
             >
               <AppIcon name="shield" />
               只读演示
+            </Button>
+            <Button isDisabled={isSubmitting} type="submit">
+              <AppIcon name="logIn" />
+              登录后台
             </Button>
           </div>
           {statusMessage ? <p className="front-form-note">{statusMessage}</p> : null}

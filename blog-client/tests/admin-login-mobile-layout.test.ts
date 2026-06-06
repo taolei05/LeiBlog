@@ -1,0 +1,36 @@
+import { describe, expect, it } from "vitest";
+
+import adminLoginPageSource from "../src/features/admin/auth/AdminLoginPage.tsx?raw";
+import layoutsCss from "../src/shared/theme/layouts.css?raw";
+
+describe("admin login mobile layout", () => {
+  it("keeps the readonly action left of login in one equal-width row", () => {
+    expect(adminLoginPageSource.indexOf("只读演示")).toBeLessThan(
+      adminLoginPageSource.indexOf("登录后台"),
+    );
+    const actionLayoutIndex = layoutsCss.indexOf(`.admin-login-card__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));`);
+    expect(actionLayoutIndex).toBeGreaterThan(-1);
+    expect(actionLayoutIndex).toBeLessThan(layoutsCss.indexOf("@media (max-width: 768px)"));
+    expect(layoutsCss).toContain(`.admin-login-card__actions > .button {
+  width: 100%;
+  min-width: 0;`);
+    expect(layoutsCss).not.toContain(".admin-login-card__actions > .button:first-child");
+  });
+
+  it("keeps the theme switcher beside the heading at every width", () => {
+    expect(layoutsCss).toContain(`.admin-login-card__header {
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+}`);
+    expect(layoutsCss).toContain(`.admin-login-card__header .theme-switcher {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;`);
+    expect(layoutsCss).not.toContain("@media (max-width: 520px)");
+    expect(layoutsCss).toContain(`.admin-login-card__header .theme-switcher span {
+    display: inline-flex;`);
+  });
+});

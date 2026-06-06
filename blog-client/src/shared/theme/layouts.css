@@ -7170,7 +7170,20 @@
 }
 
 .admin-login-card__header {
+  align-items: center;
+  flex-direction: row;
   justify-content: space-between;
+}
+
+.admin-login-card__header > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.admin-login-card__header .theme-switcher {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
 }
 
 .admin-login-card__header .card__title {
@@ -7193,7 +7206,13 @@
 }
 
 .admin-login-card__actions {
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-login-card__actions > .button {
+  width: 100%;
+  min-width: 0;
 }
 
 .setup-page--wizard {
@@ -9478,10 +9497,23 @@
     transform: translateX(-0.5rem);
   }
 
-  .admin-login-card__header,
+  .admin-login-card__header {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .admin-login-card__header .theme-switcher {
+    width: auto;
+    min-width: 0;
+    padding-inline: 0.75rem;
+  }
+
+  .admin-login-card__header .theme-switcher span {
+    display: inline-flex;
+  }
+
   .admin-login-card__actions {
     align-items: stretch;
-    flex-direction: column;
   }
 
   .setup-wizard__topbar {
