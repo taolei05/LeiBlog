@@ -1,10 +1,11 @@
+import type { ReactNode } from "react";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { AdminLayout } from "./admin/AdminLayout";
 import { BlogLayout } from "./blog/BlogLayout";
 import { NotFoundPage } from "./errors/404";
 import { ServerErrorPage } from "./errors/500";
-import { ArticleEditPage } from "../features/admin/content/ArticleEditPage";
 import {
   ArticlesPage,
   CategoryArticlesPage,
@@ -41,6 +42,32 @@ import {
 import { BlogHomePage } from "../features/blog/home/HomePage";
 import { AboutAuthorPage, AboutSitePage, GuestbookPage } from "../features/blog/site/SitePages";
 import { RequireAdminAccess, RequireSetupComplete } from "../shared/routing/adminGuards";
+
+type PrismGlobal = typeof globalThis & {
+  Prism?: unknown;
+};
+
+async function loadArticleEditPage() {
+  const prismModule = await import("prismjs");
+  (globalThis as PrismGlobal).Prism = prismModule.default;
+
+  const articleEditPageModule = await import("../features/admin/content/ArticleEditPage");
+  return { default: articleEditPageModule.ArticleEditPage };
+}
+
+const ArticleEditPage = lazy(loadArticleEditPage);
+
+function RouteLoading() {
+  return (
+    <div aria-live="polite" role="status">
+      页面加载中...
+    </div>
+  );
+}
+
+function lazyRoute(element: ReactNode) {
+  return <Suspense fallback={<RouteLoading />}>{element}</Suspense>;
+}
 
 export function AppRouter() {
   return (
@@ -83,8 +110,8 @@ export function AppRouter() {
         >
           <Route path="admin" element={<AdminDashboardPage />} />
           <Route path="admin/content/articles" element={<ArticlesPage />} />
-          <Route path="admin/content/articles/new" element={<ArticleEditPage />} />
-          <Route path="admin/content/articles/:id/edit" element={<ArticleEditPage />} />
+          <Route path="admin/content/articles/new" element={lazyRoute(<ArticleEditPage />)} />
+          <Route path="admin/content/articles/:id/edit" element={lazyRoute(<ArticleEditPage />)} />
           <Route path="admin/content/categories" element={<CategoriesPage />} />
           <Route path="admin/content/categories/:id/articles" element={<CategoryArticlesPage />} />
           <Route path="admin/content/tags" element={<TagsPage />} />
