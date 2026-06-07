@@ -1,34 +1,22 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
+const migrationsDir = join(import.meta.dir, "../src/db/migrations");
+const migrationFiles = readdirSync(migrationsDir)
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
 const migration = readFileSync(
-  join(import.meta.dir, "../src/db/migrations/001_initial_schema.sql"),
-  "utf8"
-);
-const mediaFolderMigration = readFileSync(
-  join(import.meta.dir, "../src/db/migrations/002_media_folders.sql"),
-  "utf8"
-);
-const singleArticleCategoryMigration = readFileSync(
-  join(import.meta.dir, "../src/db/migrations/008_single_article_category.sql"),
-  "utf8"
-);
-const siteFilingIcpRecordsMigration = readFileSync(
-  join(import.meta.dir, "../src/db/migrations/009_site_filing_icp_records.sql"),
-  "utf8"
-);
-const dropLegacyIcpColumnsMigration = readFileSync(
-  join(import.meta.dir, "../src/db/migrations/010_drop_site_filing_legacy_icp_columns.sql"),
-  "utf8"
-);
-const removeDemoRoleMigration = readFileSync(
-  join(import.meta.dir, "../src/db/migrations/011_remove_demo_role.sql"),
+  join(migrationsDir, "001_initial_schema.sql"),
   "utf8"
 );
 
 describe("initial database migration", () => {
+  test("keeps production initialization consolidated into one migration", () => {
+    expect(migrationFiles).toEqual(["001_initial_schema.sql"]);
+  });
+
   test("creates the required core tables", () => {
     for (const table of [
       "site_info",
@@ -41,6 +29,7 @@ describe("initial database migration", () => {
       "comments",
       "email_change_requests",
       "media_assets",
+      "media_folders",
       "setup_state",
     ]) {
       expect(migration).toContain(`CREATE TABLE ${table}`);
@@ -58,33 +47,32 @@ describe("initial database migration", () => {
     expect(migration).toContain("CREATE TYPE comment_target_type");
     expect(migration).toContain("target_type comment_target_type");
     expect(migration).toContain("'email_change'");
+    expect(migration).toContain("comment_location jsonb");
+    expect(migration).toContain("comment_device jsonb");
   });
 
   test("adds protected media folders", () => {
-    expect(mediaFolderMigration).toContain("CREATE TABLE media_folders");
-    expect(mediaFolderMigration).toContain("article-covers");
-    expect(mediaFolderMigration).toContain("avatars");
-    expect(mediaFolderMigration).toContain("comments");
-    expect(mediaFolderMigration).toContain("site");
+    expect(migration).toContain("CREATE TABLE media_folders");
+    expect(migration).toContain("media_assets_folder_created_at_idx");
+    expect(migration).toContain("article-covers");
+    expect(migration).toContain("avatars");
+    expect(migration).toContain("comments");
+    expect(migration).toContain("site");
   });
 
   test("limits articles to one linked category", () => {
-    expect(singleArticleCategoryMigration).toContain("ranked_article_categories");
-    expect(singleArticleCategoryMigration).toContain("PRIMARY KEY (article_id)");
+    expect(migration).toContain("PRIMARY KEY (article_id)");
+    expect(migration).not.toContain("PRIMARY KEY (article_id, category_id)");
   });
 
-  test("stores multiple ICP filing records", () => {
-    expect(siteFilingIcpRecordsMigration).toContain("ADD COLUMN IF NOT EXISTS icp_records");
-    expect(siteFilingIcpRecordsMigration).toContain("icp_records jsonb");
-    expect(siteFilingIcpRecordsMigration).toContain("jsonb_build_array");
-    expect(dropLegacyIcpColumnsMigration).toContain("DROP COLUMN IF EXISTS icp_number");
-    expect(dropLegacyIcpColumnsMigration).toContain("DROP COLUMN IF EXISTS icp_url");
+  test("stores multiple ICP filing records without legacy single ICP columns", () => {
+    expect(migration).toContain("icp_records jsonb NOT NULL DEFAULT '[]'::jsonb");
+    expect(migration).not.toContain("icp_number");
+    expect(migration).not.toContain("icp_url");
   });
 
-  test("removes demo accounts and keeps only admin and user roles", () => {
-    expect(removeDemoRoleMigration).toContain("DELETE FROM users");
-    expect(removeDemoRoleMigration).toContain("WHERE role = 'demo'");
-    expect(removeDemoRoleMigration).toContain("CREATE TYPE user_role AS ENUM ('admin', 'user')");
-    expect(removeDemoRoleMigration).toContain("DROP TYPE user_role_with_demo");
+  test("keeps only admin and user roles", () => {
+    expect(migration).toContain("CREATE TYPE user_role AS ENUM ('admin', 'user')");
+    expect(migration).not.toContain("'demo'");
   });
 });

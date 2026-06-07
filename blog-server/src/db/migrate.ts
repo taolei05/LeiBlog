@@ -11,9 +11,30 @@ const databaseUrl =
 
 const migrationsDir = fileURLToPath(new URL("./migrations", import.meta.url));
 const sql = new Bun.SQL(databaseUrl, { max: 1 });
+const CONSOLIDATED_INITIAL_MIGRATION = "001_initial_schema.sql";
+const LEGACY_FINAL_MIGRATION = "011_remove_demo_role.sql";
 
 function checksum(content: string) {
   return createHash("sha256").update(content).digest("hex");
+}
+
+function isLegacySchemaAlreadyConsolidated({
+  applied,
+  existingHash,
+  file,
+  hash,
+}: {
+  applied: Map<string, string>;
+  existingHash: string | undefined;
+  file: string;
+  hash: string;
+}) {
+  return (
+    file === CONSOLIDATED_INITIAL_MIGRATION &&
+    existingHash !== undefined &&
+    existingHash !== hash &&
+    applied.has(LEGACY_FINAL_MIGRATION)
+  );
 }
 
 async function main() {
@@ -45,6 +66,11 @@ async function main() {
 
     if (existingHash === hash) {
       console.log(`skip ${file}`);
+      continue;
+    }
+
+    if (isLegacySchemaAlreadyConsolidated({ applied, existingHash, file, hash })) {
+      console.log(`skip ${file} (legacy migrations already applied)`);
       continue;
     }
 

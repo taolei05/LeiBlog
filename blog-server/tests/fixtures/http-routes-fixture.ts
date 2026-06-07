@@ -203,7 +203,7 @@ async function main() {
   const userAuth = await login(app, "route-user", "user-password");
   assert(userAuth.user.id === seeded.userId, "普通用户登录用户不正确");
   await expectJson(
-    await app.handle(new Request("http://localhost/api/admin/setup/demo-session", {
+    await app.handle(new Request("http://localhost/api/admin/setup/unknown-session", {
       method: "POST",
       headers: jsonHeaders(),
     })),
@@ -396,7 +396,7 @@ async function main() {
       body: JSON.stringify({
         username: "unsupported-role",
         password: "unsupported-role-password",
-        role: "demo",
+        role: "owner",
       }),
     })),
     422

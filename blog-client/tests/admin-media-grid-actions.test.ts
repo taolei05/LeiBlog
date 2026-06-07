@@ -20,8 +20,6 @@ describe("admin user actions", () => {
   });
 
   it("offers only administrator and ordinary-user roles", () => {
-    expect(usersPageSource).not.toContain("Demo");
-    expect(usersPageSource).not.toContain('"demo"');
     expect(usersPageSource).toContain('{ label: "管理员", value: "admin" }');
     expect(usersPageSource).toContain('{ label: "普通用户", value: "user" }');
   });

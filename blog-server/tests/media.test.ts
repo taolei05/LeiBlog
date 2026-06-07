@@ -54,12 +54,7 @@ beforeAll(async () => {
     join(import.meta.dir, "../src/db/migrations/001_initial_schema.sql"),
     "utf8"
   );
-  const mediaFolderMigration = readFileSync(
-    join(import.meta.dir, "../src/db/migrations/002_media_folders.sql"),
-    "utf8"
-  );
   await testDb.unsafe(migration);
-  await testDb.unsafe(mediaFolderMigration);
 
   const [admin] = await testDb<{ id: string }[]>`
     INSERT INTO users (username, password_hash, email, role)

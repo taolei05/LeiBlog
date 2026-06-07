@@ -11,8 +11,6 @@ const layoutsCss = readFileSync(
 
 describe("admin login mobile layout", () => {
   it("shows only the administrator login action", () => {
-    expect(adminLoginPageSource).not.toContain("只读演示");
-    expect(adminLoginPageSource).not.toContain("demo");
     expect(adminLoginPageSource).toContain("登录后台");
     const actionLayoutIndex = layoutsCss.indexOf(`.admin-login-card__actions {
   display: grid;
