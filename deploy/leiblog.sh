@@ -2,10 +2,11 @@
 
 set -Eeuo pipefail
 
-LEIBLOG_SCRIPT_VERSION="0.1.0"
+LEIBLOG_SCRIPT_VERSION="0.1.1"
 LEIBLOG_BASE_DIR="${LEIBLOG_BASE_DIR:-/var/leiblog}"
 LEIBLOG_PROJECT_NAME="${LEIBLOG_PROJECT_NAME:-leiblog}"
-LEIBLOG_REPO_ARCHIVE_URL="${LEIBLOG_REPO_ARCHIVE_URL:-https://github.com/taolei05/LeiBlog/archive/refs/heads/main.tar.gz}"
+LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-cloud-server}"
+LEIBLOG_REPO_ARCHIVE_URL="${LEIBLOG_REPO_ARCHIVE_URL:-https://github.com/taolei05/LeiBlog/archive/refs/heads/${LEIBLOG_REPO_BRANCH}.tar.gz}"
 LEIBLOG_HTTP_PORT="${LEIBLOG_HTTP_PORT:-80}"
 LEIBLOG_SITE_URL="${LEIBLOG_SITE_URL:-}"
 LEIBLOG_INSTALL_DOCKER="${LEIBLOG_INSTALL_DOCKER:-1}"
@@ -221,7 +222,7 @@ fetch_source() {
   new_source="${LEIBLOG_BASE_DIR}/source.new"
   old_source="${LEIBLOG_BASE_DIR}/source.previous"
 
-  info "下载 LeiBlog 源码"
+  info "下载 LeiBlog 源码：${LEIBLOG_REPO_ARCHIVE_URL}"
   curl -fL "${LEIBLOG_REPO_ARCHIVE_URL}" -o "${tmp_dir}/source.tar.gz"
 
   rm -rf "${new_source}"
@@ -594,7 +595,7 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 
 用法:
   leiblog.sh install              安装或重新生成部署
-  leiblog.sh update               拉取 main 最新源码并重建服务
+  leiblog.sh update               拉取部署分支最新源码并重建服务
   leiblog.sh start                启动服务
   leiblog.sh stop                 停止服务
   leiblog.sh restart              重启服务
@@ -608,14 +609,15 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
   LEIBLOG_SITE_URL=https://example.com
   LEIBLOG_HTTP_PORT=80
   LEIBLOG_BASE_DIR=/var/leiblog
-  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/main.tar.gz
+  LEIBLOG_REPO_BRANCH=cloud-server
+  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/cloud-server.tar.gz
   LEIBLOG_FORCE=1
 
 一键安装示例:
-  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh | bash -s -- install
+  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh | bash -s -- install
 
 指定域名安装:
-  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh \\
+  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \\
     | LEIBLOG_SITE_URL=https://example.com bash -s -- install
 EOF
 }
