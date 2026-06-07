@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-LEIBLOG_SCRIPT_VERSION="0.1.1"
+LEIBLOG_SCRIPT_VERSION="0.1.2"
 LEIBLOG_BASE_DIR="${LEIBLOG_BASE_DIR:-/var/leiblog}"
 LEIBLOG_PROJECT_NAME="${LEIBLOG_PROJECT_NAME:-leiblog}"
 LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-cloud-server}"
@@ -273,7 +273,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY . .
-RUN bun run build
+RUN bun --bun ./node_modules/.bin/vp build
 
 FROM nginx:1.27-alpine
 
