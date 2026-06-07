@@ -264,6 +264,10 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
