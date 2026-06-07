@@ -58,7 +58,7 @@ type BlogNavUser = {
   avatarUrl: string | null;
   email: string | null;
   name: string | null;
-  role: "admin" | "demo" | "user";
+  role: "admin" | "user";
   username: string;
 };
 
@@ -304,7 +304,7 @@ function readBlogNavUser(value: unknown): BlogNavUser | null {
   const username = readString(user.username);
   if (!username) return null;
 
-  const role = user.role === "admin" || user.role === "demo" ? user.role : "user";
+  const role = user.role === "admin" ? "admin" : "user";
 
   return {
     avatarUrl: readNullableString(user.avatarUrl),
@@ -366,13 +366,7 @@ function BlogAccountDropdown({ onSessionClear, session }: BlogAccountDropdownPro
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const user = session?.user ?? null;
   const displayName = user?.name || user?.username || "游客";
-  const roleLabel = user
-    ? user.role === "admin"
-      ? "管理员"
-      : user.role === "demo"
-        ? "演示账号"
-        : "普通用户"
-    : "登录或注册";
+  const roleLabel = user ? (user.role === "admin" ? "管理员" : "普通用户") : "登录或注册";
   const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
   const visibleAvatarUrl = avatarUrl && avatarUrl !== brokenAvatarUrl ? avatarUrl : undefined;
   const fallbackInitial = user ? displayName.slice(0, 1).toUpperCase() || "访" : "游";

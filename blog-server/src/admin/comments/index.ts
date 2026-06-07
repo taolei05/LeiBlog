@@ -14,7 +14,7 @@ import {
   listAdminComments,
   reviewComment,
 } from "./service";
-import { requireAdminOrDemo } from "../../shared/auth";
+import { requireAdmin } from "../../shared/auth";
 import { authContext } from "../../shared/auth/plugin";
 
 export const adminCommentsModule = new Elysia({ prefix: "/comments" })
@@ -24,7 +24,7 @@ export const adminCommentsModule = new Elysia({ prefix: "/comments" })
     response: { 200: CommentListResponse },
   })
   .get("/:id", async ({ currentUser, params }) => {
-    requireAdminOrDemo(currentUser);
+    requireAdmin(currentUser);
     return { ok: true, item: await getCommentById(params.id) };
   }, {
     params: CommentParams,

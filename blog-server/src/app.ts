@@ -139,6 +139,12 @@ function createValidationErrorMessage(error: Error) {
   return "请求参数无效：请检查初始化表单字段";
 }
 
+function getRetryAfterSeconds(error: AppError) {
+  if (error.code !== "RATE_LIMITED" || !isRecord(error.details)) return null;
+
+  return readNumber(error.details, "retryAfterSeconds");
+}
+
 export async function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? appConfig;
   const enableStatic = options.enableStatic ?? true;
@@ -168,8 +174,13 @@ export async function createApp(options: CreateAppOptions = {}) {
         },
       })
     )
-    .onError(({ code, error, status }) => {
+    .onError(({ code, error, set, status }) => {
       if (error instanceof AppError) {
+        const retryAfterSeconds = getRetryAfterSeconds(error);
+        if (retryAfterSeconds !== null) {
+          set.headers["retry-after"] = String(retryAfterSeconds);
+        }
+
         return status(error.statusCode, createErrorBody(error));
       }
 

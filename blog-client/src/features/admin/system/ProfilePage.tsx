@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
-import { signOutAdminSession, useAdminSession } from "../../../shared/routing/adminGuards";
+import { signOutAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminInputGroupField, AdminTextAreaGroupField } from "../shared/admin-form-modal";
@@ -41,7 +41,7 @@ type AdminProfile = {
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
   name: string | null;
-  role: "admin" | "demo" | "user";
+  role: "admin" | "user";
   socialLinks: Record<string, string>;
   tags: string[];
   updatedAt: string;
@@ -174,7 +174,6 @@ function syncAdminSession(profile: AdminProfile) {
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const session = useAdminSession();
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [profileForm, setProfileForm] = useState(emptyProfileForm);
   const [socialLinks, setSocialLinks] = useState<SocialLinkDraft[]>(() => [
@@ -229,16 +228,8 @@ export function ProfilePage() {
     );
   }
 
-  function guardReadonlyAction() {
-    if (!session.isReadOnly) return false;
-
-    showOperationToast("演示账户仅允许查看管理员设置", "warning");
-    return true;
-  }
-
   function requestProfileSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (guardReadonlyAction()) return;
 
     setPendingSave("profile");
   }
@@ -284,7 +275,6 @@ export function ProfilePage() {
   }
 
   function validateSecuritySettings() {
-    if (guardReadonlyAction()) return;
     if (!email.trim()) {
       showOperationToast("请先填写邮箱", "warning");
       return false;
@@ -459,7 +449,6 @@ export function ProfilePage() {
                     <p>可登记多个平台链接。</p>
                   </div>
                   <Button
-                    isDisabled={session.isReadOnly}
                     onPress={() => setSocialLinks((drafts) => [...drafts, createSocialLinkDraft()])}
                     size="sm"
                     type="button"
@@ -508,7 +497,7 @@ export function ProfilePage() {
                       </TextField>
                       <Button
                         aria-label="移除社交链接"
-                        isDisabled={session.isReadOnly || socialLinks.length === 1}
+                        isDisabled={socialLinks.length === 1}
                         isIconOnly
                         onPress={() =>
                           setSocialLinks((drafts) =>
@@ -528,7 +517,7 @@ export function ProfilePage() {
               </section>
             </div>
             <div className="admin-account-card__footer">
-              <Button isDisabled={isLoading || isSavingProfile || session.isReadOnly} type="submit">
+              <Button isDisabled={isLoading || isSavingProfile} type="submit">
                 <AppIcon name="save" />
                 保存资料
               </Button>
@@ -585,10 +574,7 @@ export function ProfilePage() {
               />
             </div>
             <div className="admin-account-card__footer">
-              <Button
-                isDisabled={isLoading || isSavingSecurity || session.isReadOnly}
-                type="submit"
-              >
+              <Button isDisabled={isLoading || isSavingSecurity} type="submit">
                 <AppIcon name="save" />
                 保存安全设置
               </Button>

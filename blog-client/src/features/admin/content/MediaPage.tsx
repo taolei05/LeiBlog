@@ -5,7 +5,6 @@ import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
 import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
 import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
@@ -206,7 +205,6 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
 }
 
 export function MediaPage() {
-  const session = useAdminSession();
   const [mediaRows, setMediaRows] = useState<MediaRow[]>([]);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [activeFolderSlug, setActiveFolderSlug] = useState("all");
@@ -553,7 +551,6 @@ export function MediaPage() {
             <div className="media-library-toolbar">
               <div className="media-library-toolbar__actions">
                 <Button
-                  isDisabled={session.isReadOnly}
                   onPress={() => {
                     setFolderForm({ description: "", name: "", slug: "" });
                     setFolderModalState({ mode: "create", setNotice: setPageNotice });
@@ -566,7 +563,6 @@ export function MediaPage() {
                   新建文件夹
                 </Button>
                 <Button
-                  isDisabled={session.isReadOnly}
                   onPress={() => {
                     uploadInputRef.current?.click();
                     setPageNotice("请选择文件上传到媒体库");
@@ -594,7 +590,7 @@ export function MediaPage() {
               <div className="media-library-selection">
                 <Checkbox
                   aria-label="选择全部当前媒体"
-                  isDisabled={session.isReadOnly || visibleMediaRows.length === 0}
+                  isDisabled={visibleMediaRows.length === 0}
                   isIndeterminate={areSomeVisibleSelected}
                   isSelected={areAllVisibleSelected}
                   onChange={updateVisibleMediaSelection}
@@ -607,7 +603,7 @@ export function MediaPage() {
                 <span>已选择 {selectedMediaIds.size} 项</span>
                 <AlertDialog>
                   <Button
-                    isDisabled={session.isReadOnly || selectedMediaRows.length === 0}
+                    isDisabled={selectedMediaRows.length === 0}
                     size="sm"
                     type="button"
                     variant="danger-soft"
@@ -671,7 +667,6 @@ export function MediaPage() {
             {activeFolder ? (
               <div className="media-folder-actions">
                 <Button
-                  isDisabled={session.isReadOnly}
                   onPress={() => {
                     setFolderForm({
                       description: activeFolder.description,
@@ -693,7 +688,7 @@ export function MediaPage() {
                 </Button>
                 <AlertDialog>
                   <Button
-                    isDisabled={session.isReadOnly || activeFolder.isProtected}
+                    isDisabled={activeFolder.isProtected}
                     size="sm"
                     type="button"
                     variant="danger-soft"
@@ -746,7 +741,6 @@ export function MediaPage() {
                     <Checkbox
                       aria-label={`选择${row.fileName}`}
                       className="media-grid-card__selection"
-                      isDisabled={session.isReadOnly}
                       isSelected={isSelected}
                       onChange={(selected) => updateMediaSelection(row.id, selected)}
                       variant="secondary"
@@ -797,7 +791,6 @@ export function MediaPage() {
                       <AppIcon name="download" />
                     </Button>
                     <Button
-                      isDisabled={session.isReadOnly}
                       isIconOnly
                       aria-label={`重命名${row.fileName}`}
                       onPress={() => {
@@ -812,7 +805,6 @@ export function MediaPage() {
                     </Button>
                     <AlertDialog>
                       <Button
-                        isDisabled={session.isReadOnly}
                         isIconOnly
                         aria-label={`删除${row.fileName}`}
                         size="sm"

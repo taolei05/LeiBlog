@@ -20,7 +20,6 @@ import { useSearchParams } from "react-router-dom";
 
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 
 export type SortDirection = "asc" | "desc";
@@ -59,7 +58,6 @@ export type DataTableFilter<T extends DataTableRow> = {
 
 export type DataTableActionContext<T extends DataTableRow> = {
   clearSelection: () => void;
-  isReadOnly: boolean;
   selectedRows: T[];
   setNotice: (message: string) => void;
 };
@@ -155,10 +153,6 @@ function compareValues(a: number | string, b: number | string, direction: SortDi
 
 function getActionAccess(action: { access?: ActionAccess }) {
   return action.access ?? "write";
-}
-
-function isBlockedByReadOnly(action: { access?: ActionAccess }, isReadOnly: boolean) {
-  return isReadOnly && getActionAccess(action) !== "read";
 }
 
 function requiresConfirmation(action: {
@@ -494,8 +488,7 @@ function DataTableMobileRowActions<T extends DataTableRow>({
   const [pendingAction, setPendingAction] = useState<DataTableRowAction<T>>();
 
   function runAction(action: DataTableRowAction<T>) {
-    const isDisabled =
-      Boolean(action.isDisabled?.(row)) || isBlockedByReadOnly(action, context.isReadOnly);
+    const isDisabled = Boolean(action.isDisabled?.(row));
 
     if (isDisabled) return;
 
@@ -528,9 +521,7 @@ function DataTableMobileRowActions<T extends DataTableRow>({
             }}
           >
             {actions.map((action, index) => {
-              const isDisabled =
-                Boolean(action.isDisabled?.(row)) ||
-                isBlockedByReadOnly(action, context.isReadOnly);
+              const isDisabled = Boolean(action.isDisabled?.(row));
 
               return (
                 <Dropdown.Item
@@ -660,7 +651,6 @@ export function DataTable<T extends DataTableRow>({
   searchPlaceholder,
   toolbarActions = [],
 }: DataTableProps<T>) {
-  const session = useAdminSession();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(() => new Set());
   const [notice, setNoticeState] = useState("");
@@ -729,7 +719,6 @@ export function DataTable<T extends DataTableRow>({
 
   const context: DataTableActionContext<T> = {
     clearSelection: () => setSelectedRowIds(new Set()),
-    isReadOnly: session.isReadOnly,
     selectedRows,
     setNotice,
   };
@@ -776,10 +765,8 @@ export function DataTable<T extends DataTableRow>({
         {toolbarActions.length > 0 ? (
           <div className="data-table-actions">
             {toolbarActions.map((action) => {
-              const isDisabled = isBlockedByReadOnly(action, session.isReadOnly);
               const button = (
                 <Button
-                  isDisabled={isDisabled}
                   key={action.label}
                   onPress={
                     requiresConfirmation(action) ? undefined : () => void action.onPress(context)
@@ -792,7 +779,7 @@ export function DataTable<T extends DataTableRow>({
                 </Button>
               );
 
-              return requiresConfirmation(action) && !isDisabled ? (
+              return requiresConfirmation(action) ? (
                 <AdminActionConfirm
                   actionLabel={action.label}
                   description={`此操作会执行「${action.label}」，请确认后继续。`}
@@ -812,11 +799,6 @@ export function DataTable<T extends DataTableRow>({
 
       <div className="data-table-summary">
         <span>共 {filteredRows.length} 条记录</span>
-        {session.isReadOnly ? (
-          <Chip color="warning" size="sm" variant="soft">
-            <Chip.Label>demo 只读，写操作已禁用</Chip.Label>
-          </Chip>
-        ) : null}
         {notice ? (
           <Chip color="success" size="sm" variant="soft">
             <Chip.Label>{notice}</Chip.Label>
@@ -829,8 +811,7 @@ export function DataTable<T extends DataTableRow>({
           <span>已选择 {selectedRows.length} 项</span>
           <div className="data-table-bulkbar__actions">
             {bulkActions.map((action) => {
-              const isDisabled =
-                selectedRows.length === 0 || isBlockedByReadOnly(action, session.isReadOnly);
+              const isDisabled = selectedRows.length === 0;
               const button = (
                 <Button
                   isDisabled={isDisabled}
@@ -966,9 +947,7 @@ export function DataTable<T extends DataTableRow>({
                     <Table.Cell className="data-table-actions-column">
                       <div className="data-table-row-actions">
                         {rowActions.map((action) => {
-                          const isDisabled =
-                            Boolean(action.isDisabled?.(row)) ||
-                            isBlockedByReadOnly(action, session.isReadOnly);
+                          const isDisabled = Boolean(action.isDisabled?.(row));
                           const subject = String(columns[0]?.value(row) ?? row.id);
 
                           return (

@@ -56,7 +56,7 @@ export interface CommentRow {
   deleted_at: Date | string | null;
   username: string;
   name: string | null;
-  role: "admin" | "user" | "demo";
+  role: "admin" | "user";
   avatar_url: string | null;
   tags: string[];
   blog_url: string | null;

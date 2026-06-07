@@ -312,7 +312,7 @@ describe("auth and user services", () => {
     });
   });
 
-  test("allows admin user management and blocks demo writes", async () => {
+  test("allows admin user management and blocks ordinary users", async () => {
     const [admin] = await testDb<{ id: string; password_hash: string }[]>`
       INSERT INTO users (username, password_hash, email, role)
       VALUES (
@@ -338,44 +338,44 @@ describe("auth and user services", () => {
     const created = await createUserByAdmin(
       currentAdmin,
       {
-        username: "demo",
-        password: "demo-password",
-        email: "demo@example.com",
-        role: "demo",
-        tags: ["演示"],
+        username: "managed-reader",
+        password: "managed-reader-password",
+        email: "managed-reader@example.com",
+        role: "user",
+        tags: ["读者"],
       },
       testDb
     );
 
-    expect(created.role).toBe("demo");
+    expect(created.role).toBe("user");
 
     const list = await listUsers(
       currentAdmin,
-      { role: "demo", page: "1", pageSize: "10" },
+      { role: "user", search: "managed-reader", page: "1", pageSize: "10" },
       testDb
     );
     expect(list.total).toBe(1);
-    expect(list.items[0]?.username).toBe("demo");
+    expect(list.items[0]?.username).toBe("managed-reader");
 
     const updated = await updateUserByAdmin(
       currentAdmin,
       created.id,
       {
-        name: "演示账户",
+        name: "普通用户",
         role: "user",
       },
       testDb
     );
     expect(updated.role).toBe("user");
-    expect(updated.name).toBe("演示账户");
+    expect(updated.name).toBe("普通用户");
 
     await expect(
       createUserByAdmin(
         {
           ...currentAdmin,
           id: created.id,
-          role: "demo",
-          username: "demo",
+          role: "user",
+          username: "managed-reader",
         },
         {
           username: "blocked",
@@ -384,13 +384,13 @@ describe("auth and user services", () => {
         },
         testDb
       )
-    ).rejects.toThrow("演示账户仅允许读取");
+    ).rejects.toThrow("需要管理员权限");
 
     await deleteUserByAdmin(currentAdmin, created.id, testDb);
 
     const afterDelete = await listUsers(
       currentAdmin,
-      { search: "demo", page: "1", pageSize: "10" },
+      { search: "managed-reader", page: "1", pageSize: "10" },
       testDb
     );
     expect(afterDelete.total).toBe(0);

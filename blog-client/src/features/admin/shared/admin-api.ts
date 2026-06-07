@@ -2,7 +2,7 @@ import { getAdminApiBaseUrl } from "../../../shared/api/api-base-url";
 
 export const ADMIN_SESSION_STORAGE_KEY = "leiblog:admin-session";
 
-export type AdminRole = "admin" | "demo" | "user";
+export type AdminRole = "admin" | "user";
 
 export type AdminUser = {
   avatarUrl: string | null;
@@ -181,7 +181,7 @@ function readErrorMessage(payload: unknown) {
 }
 
 function readAdminRole(value: unknown): AdminRole {
-  if (value === "admin" || value === "demo" || value === "user") return value;
+  if (value === "admin" || value === "user") return value;
   throw new Error("用户角色格式无效");
 }
 
@@ -343,19 +343,6 @@ export async function loginAdmin(identifier: string, password: string) {
     requireAuth: false,
   });
   if (!isRecord(payload)) throw new Error("登录响应格式无效");
-
-  return {
-    token: readString(payload, "token"),
-    user: parseAdminUser(payload.user),
-  };
-}
-
-export async function createDemoSession() {
-  const payload = await adminFetch<unknown>("/admin/setup/demo-session", {
-    method: "POST",
-    requireAuth: false,
-  });
-  if (!isRecord(payload)) throw new Error("演示会话格式无效");
 
   return {
     token: readString(payload, "token"),

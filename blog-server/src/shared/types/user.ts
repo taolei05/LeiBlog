@@ -5,7 +5,6 @@ import type { UserRole } from "../auth";
 export const UserRoleSchema = t.Union([
   t.Literal("admin"),
   t.Literal("user"),
-  t.Literal("demo"),
 ]);
 
 export const UserProfileSchema = t.Object({

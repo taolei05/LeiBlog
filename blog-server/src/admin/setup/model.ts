@@ -1,7 +1,5 @@
 import { t } from "elysia";
 
-import { UserProfileSchema } from "../../shared/types/user";
-
 export const SetupStep = t.Union([
   t.Literal("admin"),
   t.Literal("site-info"),
@@ -23,12 +21,6 @@ export const SetupStatusResponse = t.Object({
       isCompleted: t.Boolean(),
     })
   ),
-});
-
-export const SetupDemoSessionResponse = t.Object({
-  ok: t.Boolean(),
-  token: t.String(),
-  user: UserProfileSchema,
 });
 
 export const SetupAdminBody = t.Object({

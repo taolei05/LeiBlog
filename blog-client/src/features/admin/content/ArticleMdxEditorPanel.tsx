@@ -3,10 +3,8 @@ import { useState } from "react";
 
 import { MdxEditorField } from "../../../shared/mdx/MdxEditorField";
 import { allowedMdxJsxComponentNames } from "../../../shared/mdx/mdxWhitelist";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 
 export function ArticleMdxEditorPanel() {
-  const session = useAdminSession();
   const [draftMdx, setDraftMdx] = useState("");
 
   return (
@@ -22,12 +20,7 @@ export function ArticleMdxEditorPanel() {
           </Chip>
         ))}
       </div>
-      <MdxEditorField
-        aria-label="文章 MDX 编辑器"
-        onChange={setDraftMdx}
-        readOnly={session.isReadOnly}
-        value={draftMdx}
-      />
+      <MdxEditorField aria-label="文章 MDX 编辑器" onChange={setDraftMdx} value={draftMdx} />
     </Card>
   );
 }

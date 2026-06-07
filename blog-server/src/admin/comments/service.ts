@@ -1,8 +1,4 @@
-import {
-  assertWritableAdmin,
-  requireAdminOrDemo,
-  type AuthUser,
-} from "../../shared/auth";
+import { requireAdmin, type AuthUser } from "../../shared/auth";
 import { clearArticleCacheById } from "../../shared/cache/content";
 import { db, type DbClient } from "../../shared/db";
 import { notFound } from "../../shared/errors";
@@ -73,7 +69,7 @@ export async function listAdminComments(
   query: AdminCommentQuery,
   client: DbClient = db
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
 
   const { page, pageSize, offset } = toPage(query);
   const search = query.search?.trim()
@@ -138,7 +134,7 @@ export async function reviewComment(
   status: CommentStatus,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const existing = await getCommentById(commentId, client);
 
   await client`
@@ -159,7 +155,7 @@ export async function deleteCommentByAdmin(
   commentId: string,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const existing = await getCommentById(commentId, client);
 
   await client`

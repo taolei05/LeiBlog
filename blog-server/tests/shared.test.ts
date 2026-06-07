@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { assertWritableAdmin, hashPassword, verifyPassword } from "../src/shared/auth";
+import { hashPassword, requireAdmin, verifyPassword } from "../src/shared/auth";
 import { loadConfig } from "../src/shared/config";
 import { decryptSecret, encryptSecret } from "../src/shared/crypto";
 import { AppError } from "../src/shared/errors";
@@ -40,12 +40,12 @@ describe("shared infrastructure", () => {
     expect(await verifyPassword("wrong", hash)).toBe(false);
   });
 
-  test("blocks demo writes", () => {
+  test("blocks ordinary users from admin access", () => {
     expect(() =>
-      assertWritableAdmin({
-        id: "demo",
-        role: "demo",
-        username: "demo",
+      requireAdmin({
+        id: "user",
+        role: "user",
+        username: "user",
         email: null,
         name: null,
         avatarUrl: null,

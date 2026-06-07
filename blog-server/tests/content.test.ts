@@ -183,16 +183,16 @@ describe("admin content service", () => {
     expect(afterDelete.total).toBe(0);
   });
 
-  test("blocks demo write operations", async () => {
+  test("blocks ordinary users from admin operations", async () => {
     await expect(
       createCategory(
         {
           ...currentAdmin,
-          role: "demo",
+          role: "user",
         },
-        { name: "只读测试" },
+        { name: "权限测试" },
         testDb
       )
-    ).rejects.toThrow("演示账户仅允许读取");
+    ).rejects.toThrow("需要管理员权限");
   });
 });

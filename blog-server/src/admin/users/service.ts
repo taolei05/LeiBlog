@@ -1,8 +1,7 @@
 import {
-  assertWritableAdmin,
   hashPassword,
   normalizeEmail,
-  requireAdminOrDemo,
+  requireAdmin,
   type AuthUser,
   type UserRole,
 } from "../../shared/auth";
@@ -127,7 +126,7 @@ export async function listUsers(
   input: UserListInput,
   client: DbClient = db
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
 
   const page = parsePositiveInt(input.page, 1, 10_000);
   const pageSize = parsePositiveInt(input.pageSize, 20, 100);
@@ -174,7 +173,7 @@ export async function createUserByAdmin(
   input: AdminCreateUserInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
 
   const username = input.username.trim();
   const email = cleanOptional(input.email);
@@ -219,7 +218,7 @@ export async function updateUserByAdmin(
   input: AdminUpdateUserInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
 
   if (currentUser.id === userId && input.role && input.role !== "admin") {
     throw forbidden("不能移除自己的管理员权限");
@@ -270,7 +269,7 @@ export async function deleteUserByAdmin(
   userId: string,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
 
   if (currentUser.id === userId) {
     throw forbidden("不能删除自己的账户");

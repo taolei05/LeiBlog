@@ -16,7 +16,7 @@ import {
   listUsers,
   updateUserByAdmin,
 } from "./service";
-import { requireAdminOrDemo } from "../../shared/auth";
+import { requireAdmin } from "../../shared/auth";
 import { authContext } from "../../shared/auth/plugin";
 
 export const adminUsersModule = new Elysia({ prefix: "/users" })
@@ -37,7 +37,7 @@ export const adminUsersModule = new Elysia({ prefix: "/users" })
     },
   })
   .get("/:id", async ({ currentUser, params }) => {
-    requireAdminOrDemo(currentUser);
+    requireAdmin(currentUser);
     return {
       ok: true,
       user: await getUserById(params.id),

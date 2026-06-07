@@ -2,7 +2,6 @@ import { Elysia } from "elysia";
 
 import {
   SetupAdminBody,
-  SetupDemoSessionResponse,
   SetupFilingBody,
   SetupSiteConfigBody,
   SetupSiteInfoBody,
@@ -16,50 +15,16 @@ import {
   configureFiling,
   configureSiteConfig,
   configureSiteInfo,
-  getOrCreateSetupDemoUser,
   getSetupStatus,
   uploadSetupAsset,
 } from "./service";
-import { createAuthSession, getRequestMeta } from "../../auth/service";
-import { jwtPlugin } from "../../shared/auth/plugin";
 
 export const setupModule = new Elysia({ prefix: "/setup" })
-  .use(jwtPlugin)
   .get("/status", () => getSetupStatus(), {
     response: {
       200: SetupStatusResponse,
     },
   })
-  .post(
-    "/demo-session",
-    async ({ headers, jwt, request, server }) => {
-      const { signableUser, user } = await getOrCreateSetupDemoUser();
-      const token = await jwt.sign({
-        sub: signableUser.id,
-        role: signableUser.role,
-        username: signableUser.username,
-        type: "access",
-        exp: "7d",
-      });
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-
-      await createAuthSession(signableUser, token, meta);
-
-      return {
-        ok: true,
-        token,
-        user,
-      };
-    },
-    {
-      response: {
-        200: SetupDemoSessionResponse,
-      },
-    }
-  )
   .post("/admin", ({ body }) => configureAdmin(body), {
     body: SetupAdminBody,
     response: {

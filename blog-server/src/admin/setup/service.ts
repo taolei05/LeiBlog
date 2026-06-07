@@ -1,14 +1,11 @@
-import type { UserRole } from "../../shared/auth";
 import type { DbClient } from "../../shared/db";
 import type { IcpFilingRecordInput } from "../../shared/site-filing";
-import type { UserProfile, UserProfileRow } from "../../shared/types/user";
 import { hashPassword } from "../../shared/auth";
 import { clearSiteCache } from "../../shared/cache/content";
 import { encryptSecret } from "../../shared/crypto";
 import { db, withTransaction } from "../../shared/db";
 import { conflict, validationError } from "../../shared/errors";
 import { cleanIcpFilingRecords } from "../../shared/site-filing";
-import { toUserProfile } from "../../shared/types/user";
 import { uploadSetupMedia } from "../media/service";
 
 export type SetupStepKey =
@@ -79,12 +76,6 @@ interface SetupStateRow {
 
 interface AdminCountRow {
   admin_count: string;
-}
-
-interface DemoUserRow {
-  id: string;
-  role: UserRole;
-  username: string;
 }
 
 const STEPS: Array<{ key: SetupStepKey; title: string }> = [
@@ -206,79 +197,6 @@ function toSetupStatus(state: SetupStateRow) {
 export async function getSetupStatus(options: SetupServiceOptions = {}) {
   const client = options.client ?? db;
   return toSetupStatus(await getSetupState(client));
-}
-
-async function getUserProfileById(id: string, client: DbClient) {
-  const [row] = await client<UserProfileRow[]>`
-    SELECT id, username, email, name, description, tags, role, avatar_url,
-           social_links, blog_url, created_at, updated_at, last_login_at,
-           host(last_login_ip) AS last_login_ip
-    FROM users
-    WHERE id = ${id}
-  `;
-
-  if (!row) throw validationError("演示账户创建失败");
-  return toUserProfile(row);
-}
-
-export async function getOrCreateSetupDemoUser(
-  options: SetupServiceOptions = {}
-): Promise<{ signableUser: DemoUserRow; user: UserProfile }> {
-  const client = options.client ?? db;
-  const passwordHash = await hashPassword(`demo-${Date.now()}-${Math.random()}`);
-  let userId = "";
-
-  await withTransaction(async (tx) => {
-    const [existing] = await tx<DemoUserRow[]>`
-      SELECT id, username, role
-      FROM users
-      WHERE lower(username) = 'demo'
-      LIMIT 1
-    `;
-
-    if (existing) {
-      await tx`
-        UPDATE users
-        SET role = 'demo',
-            name = '只读演示',
-            description = '后台初始化阶段使用的只读演示账户。',
-            tags = ${tx.array(["demo", "只读"], "TEXT")},
-            password_hash = ${passwordHash}
-        WHERE id = ${existing.id}
-      `;
-      userId = existing.id;
-      return;
-    }
-
-    const [created] = await tx<DemoUserRow[]>`
-      INSERT INTO users (
-        username, password_hash, email, name, description, tags, role
-      )
-      VALUES (
-        'demo',
-        ${passwordHash},
-        null,
-        '只读演示',
-        '后台初始化阶段使用的只读演示账户。',
-        ${tx.array(["demo", "只读"], "TEXT")},
-        'demo'
-      )
-      RETURNING id, username, role
-    `;
-
-    userId = created.id;
-  }, client);
-
-  const user = await getUserProfileById(userId, client);
-
-  return {
-    signableUser: {
-      id: user.id,
-      role: user.role,
-      username: user.username,
-    },
-    user,
-  };
 }
 
 export async function configureAdmin(

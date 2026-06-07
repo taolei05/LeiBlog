@@ -42,7 +42,7 @@ import {
   updateContributor,
   updateTag,
 } from "./service";
-import { requireAdminOrDemo } from "../../shared/auth";
+import { requireAdmin } from "../../shared/auth";
 import { authContext } from "../../shared/auth/plugin";
 
 export const adminContentModule = new Elysia({ prefix: "/content" })
@@ -59,7 +59,7 @@ export const adminContentModule = new Elysia({ prefix: "/content" })
     response: { 200: CategoryResponse },
   })
   .get("/categories/:id", async ({ currentUser, params }) => {
-    requireAdminOrDemo(currentUser);
+    requireAdmin(currentUser);
     return { ok: true, item: await getCategoryById(params.id) };
   }, {
     params: IdParams,
@@ -89,7 +89,7 @@ export const adminContentModule = new Elysia({ prefix: "/content" })
     response: { 200: TagResponse },
   })
   .get("/tags/:id", async ({ currentUser, params }) => {
-    requireAdminOrDemo(currentUser);
+    requireAdmin(currentUser);
     return { ok: true, item: await getTagById(params.id) };
   }, {
     params: IdParams,
@@ -119,7 +119,7 @@ export const adminContentModule = new Elysia({ prefix: "/content" })
     response: { 200: ContributorResponse },
   })
   .get("/contributors/:id", async ({ currentUser, params }) => {
-    requireAdminOrDemo(currentUser);
+    requireAdmin(currentUser);
     return { ok: true, item: await getContributorById(params.id) };
   }, {
     params: IdParams,
@@ -149,7 +149,7 @@ export const adminContentModule = new Elysia({ prefix: "/content" })
     response: { 200: ArticleResponse },
   })
   .get("/articles/:id", async ({ currentUser, params }) => {
-    requireAdminOrDemo(currentUser);
+    requireAdmin(currentUser);
     return { ok: true, item: await getArticleById(params.id) };
   }, {
     params: IdParams,

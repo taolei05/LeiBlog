@@ -220,16 +220,16 @@ describe("comment services", () => {
     await testDb`UPDATE site_config SET comments_enabled = true WHERE id = 1`;
   });
 
-  test("blocks demo moderation writes", async () => {
+  test("blocks ordinary users from moderation", async () => {
     const comment = await createPublicComment(
       currentUser,
       articleId,
-      { content: "演示权限测试" },
+      { content: "普通用户权限测试" },
       testDb
     );
 
     await expect(
-      reviewComment({ ...currentAdmin, role: "demo" }, comment.id, "rejected", testDb)
-    ).rejects.toThrow("演示账户仅允许读取");
+      reviewComment({ ...currentAdmin, role: "user" }, comment.id, "rejected", testDb)
+    ).rejects.toThrow("需要管理员权限");
   });
 });

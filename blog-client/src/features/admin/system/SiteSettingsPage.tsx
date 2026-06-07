@@ -21,7 +21,6 @@ import { useEffect, useState } from "react";
 import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
 import { PasswordInputGroup } from "../../../shared/password-input-group";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
 import { MediaAssetField, MultiMediaAssetField } from "../shared/media-asset-field";
@@ -375,7 +374,6 @@ function createInputHandler<T extends Record<string, unknown>>({
 }
 
 export function SiteSettingsPage() {
-  const session = useAdminSession();
   const [siteInfo, setSiteInfo] = useState<SiteInfoState>(defaultSiteInfo);
   const [siteConfig, setSiteConfig] = useState<SiteConfigState>(defaultSiteConfig);
   const [filing, setFiling] = useState<FilingState>(defaultFiling);
@@ -404,7 +402,6 @@ export function SiteSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [pendingSave, setPendingSave] = useState<SiteSettingsSaveKind | null>(null);
-  const isReadOnly = session.isReadOnly;
   const isResendDomainReveal = revealKey === "resendDomain";
   const revealCopy = revealKey ? secretRevealCopy[revealKey] : secretRevealCopy.resendApiKey;
   const isSecretRevealed = Boolean(revealedValue);
@@ -530,7 +527,7 @@ export function SiteSettingsPage() {
   function requestSave(kind: SiteSettingsSaveKind, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isReadOnly || isSaving) return;
+    if (isSaving) return;
 
     setPendingSave(kind);
   }
@@ -940,7 +937,7 @@ export function SiteSettingsPage() {
               type="datetime-local"
               value={siteInfo.establishedAt}
             />
-            <Button isDisabled={isReadOnly || isSaving} type="submit">
+            <Button isDisabled={isSaving} type="submit">
               <AppIcon name="save" />
               保存站点信息
             </Button>
@@ -1060,7 +1057,7 @@ export function SiteSettingsPage() {
                 <span>关闭后前台不再接收新评论。</span>
               </Switch.Content>
             </Switch>
-            <Button isDisabled={isReadOnly || isSaving} type="submit">
+            <Button isDisabled={isSaving} type="submit">
               <AppIcon name="save" />
               保存站点配置
             </Button>
@@ -1076,7 +1073,7 @@ export function SiteSettingsPage() {
                   <p>可登记多个 ICP 备案。</p>
                 </div>
                 <Button
-                  isDisabled={isReadOnly || isSaving}
+                  isDisabled={isSaving}
                   onPress={addIcpRecord}
                   size="sm"
                   type="button"
@@ -1090,7 +1087,7 @@ export function SiteSettingsPage() {
                 {filing.icpRecords.map((record, index) => (
                   <IcpRecordFields
                     index={index}
-                    isRemoveDisabled={isReadOnly || isSaving || filing.icpRecords.length === 1}
+                    isRemoveDisabled={isSaving || filing.icpRecords.length === 1}
                     key={record.id}
                     onRemove={() => removeIcpRecord(index)}
                     onUpdate={(key, value) => updateIcpRecord(index, key, value)}
@@ -1119,7 +1116,7 @@ export function SiteSettingsPage() {
               type="url"
               value={filing.policeUrl}
             />
-            <Button isDisabled={isReadOnly || isSaving} type="submit">
+            <Button isDisabled={isSaving} type="submit">
               <AppIcon name="save" />
               保存备案配置
             </Button>
@@ -1243,14 +1240,14 @@ export function SiteSettingsPage() {
               {!isResendDomainReveal && !isSecretRevealed ? (
                 <Modal.Footer>
                   <Button
-                    isDisabled={isReadOnly || revealResendCountdownSeconds > 0}
+                    isDisabled={revealResendCountdownSeconds > 0}
                     onPress={() => void sendRevealCode()}
                     variant="tertiary"
                   >
                     <AppIcon name="mail" />
                     {revealSendLabel}
                   </Button>
-                  <Button isDisabled={isReadOnly} onPress={() => void revealSecretValue()}>
+                  <Button onPress={() => void revealSecretValue()}>
                     <AppIcon name="eye" />
                     验证并显示
                   </Button>

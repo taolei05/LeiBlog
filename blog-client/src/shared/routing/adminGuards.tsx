@@ -15,7 +15,6 @@ type AdminSessionView = {
   avatarUrl?: string;
   displayName: string;
   isAuthenticated: boolean;
-  isReadOnly: boolean;
   role: AdminRole;
   status: "anonymous" | "authenticated";
   token: string | null;
@@ -36,8 +35,8 @@ type SetupStatusState =
 
 export { type AdminRole };
 
-export function parseAdminRole(value: unknown, fallback: AdminRole = "admin"): AdminRole {
-  if (value === "admin" || value === "demo" || value === "user") return value;
+export function parseAdminRole(value: unknown, fallback: AdminRole = "user"): AdminRole {
+  if (value === "admin" || value === "user") return value;
   return fallback;
 }
 
@@ -54,7 +53,6 @@ function toSessionView(session: AdminSession | null): AdminSessionView {
     return {
       displayName: "",
       isAuthenticated: false,
-      isReadOnly: false,
       role: "user",
       status: "anonymous",
       token: null,
@@ -65,7 +63,6 @@ function toSessionView(session: AdminSession | null): AdminSessionView {
     avatarUrl: resolveApiAssetUrl(session.user.avatarUrl),
     displayName: session.user.name ?? session.user.username,
     isAuthenticated: true,
-    isReadOnly: session.user.role === "demo",
     role: session.user.role,
     status: "authenticated",
     token: session.token,
@@ -73,7 +70,7 @@ function toSessionView(session: AdminSession | null): AdminSessionView {
   };
 }
 
-export function isAdminRoleAllowed(role: AdminRole, allowedRoles: AdminRole[] = ["admin", "demo"]) {
+export function isAdminRoleAllowed(role: AdminRole, allowedRoles: AdminRole[] = ["admin"]) {
   return allowedRoles.includes(role);
 }
 
@@ -88,7 +85,7 @@ export function getAdminAccessRedirect({
   role: AdminRole;
   setupComplete: boolean;
 }) {
-  if (!setupComplete && role !== "demo") {
+  if (!setupComplete) {
     return { state: { next: currentPath }, to: "/admin/setup" };
   }
 
@@ -143,7 +140,6 @@ function AdminRouteLoading() {
 export function RequireSetupComplete({ children }: { children: ReactNode }) {
   const location = useLocation();
   const setupState = useSetupStatusState();
-  const session = useAdminSession();
 
   if (setupState.status === "loading") {
     return <AdminRouteLoading />;
@@ -153,7 +149,7 @@ export function RequireSetupComplete({ children }: { children: ReactNode }) {
     return <Navigate replace to="/500" />;
   }
 
-  if (!setupState.setup.isCompleted && !session.isReadOnly) {
+  if (!setupState.setup.isCompleted) {
     return <Navigate replace state={{ next: location.pathname }} to="/admin/setup" />;
   }
 
@@ -161,7 +157,7 @@ export function RequireSetupComplete({ children }: { children: ReactNode }) {
 }
 
 export function RequireAdminRole({
-  allowedRoles = ["admin", "demo"],
+  allowedRoles = ["admin"],
   children,
 }: {
   allowedRoles?: AdminRole[];

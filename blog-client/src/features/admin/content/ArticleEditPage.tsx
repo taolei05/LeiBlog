@@ -25,7 +25,6 @@ import { AppIcon } from "../../../shared/icons";
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { MdxEditorField } from "../../../shared/mdx/MdxEditorField";
 import { allowedMdxJsxComponentNames } from "../../../shared/mdx/mdxWhitelist";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import type {
   AdminArticleCategory,
@@ -161,7 +160,6 @@ function createInputHandler(
 export function ArticleEditPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const session = useAdminSession();
   const isNewArticle = !id;
   const [formState, setFormState] = useState<ArticleFormState>(emptyFormState);
   const [categories, setCategories] = useState<AdminCategoryItem[]>([]);
@@ -289,7 +287,6 @@ export function ArticleEditPage() {
   }, [updateNotice]);
 
   async function saveArticle(statusOverride?: ArticleStatus) {
-    if (session.isReadOnly) return;
     if (!formState.title.trim()) {
       updateNotice("文章标题不能为空");
       return;
@@ -484,11 +481,7 @@ export function ArticleEditPage() {
             返回列表
           </Button>
           <AlertDialog>
-            <Button
-              isDisabled={session.isReadOnly || isLoading || isSaving}
-              type="button"
-              variant="primary"
-            >
+            <Button isDisabled={isLoading || isSaving} type="button" variant="primary">
               <AppIcon name="save" />
               {isNewArticle ? "保存草稿" : "更新文章"}
             </Button>
@@ -525,11 +518,7 @@ export function ArticleEditPage() {
           </AlertDialog>
           {isNewArticle ? (
             <AlertDialog>
-              <Button
-                isDisabled={session.isReadOnly || isLoading || isSaving}
-                type="button"
-                variant="tertiary"
-              >
+              <Button isDisabled={isLoading || isSaving} type="button" variant="tertiary">
                 <AppIcon name="send" />
                 发布
               </Button>
@@ -772,7 +761,6 @@ export function ArticleEditPage() {
                   </Select.Popover>
                 </Select>
                 <Button
-                  isDisabled={session.isReadOnly}
                   onPress={() => setIsContributorModalOpen(true)}
                   size="sm"
                   type="button"
@@ -863,7 +851,7 @@ export function ArticleEditPage() {
                 contentMdx: markdown,
               }))
             }
-            readOnly={session.isReadOnly || isLoading}
+            readOnly={isLoading}
             value={formState.contentMdx}
           />
         </Card>

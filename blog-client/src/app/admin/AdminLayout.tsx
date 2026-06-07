@@ -1,13 +1,4 @@
-import {
-  AlertDialog,
-  Avatar,
-  Breadcrumbs,
-  Button,
-  Chip,
-  Dropdown,
-  Label,
-  Tooltip,
-} from "@heroui/react";
+import { AlertDialog, Avatar, Breadcrumbs, Button, Dropdown, Label, Tooltip } from "@heroui/react";
 import type { AdminRole } from "../../shared/routing/adminGuards";
 import type { PublicSiteInfo } from "../../shared/site/site-info";
 import { useEffect, useState } from "react";
@@ -88,7 +79,6 @@ export function AdminLayout() {
   const siteLogoUrl = getPreferredSiteLogo(siteInfo, resolvedTheme);
   const currentDisplayName =
     currentProfile?.name || currentProfile?.username || session.displayName || "管理员";
-  const currentRole = currentProfile?.role ?? session.role;
   const currentAvatarUrl =
     resolveApiAssetUrl(currentProfile?.avatarUrl) ?? resolveApiAssetUrl(session.avatarUrl);
   const visibleAvatarUrl =
@@ -326,13 +316,8 @@ export function AdminLayout() {
                   </Avatar>
                   <div className="admin-user__copy">
                     <strong>{currentDisplayName}</strong>
-                    <span>{currentRole === "demo" ? "只读演示" : "管理员"}</span>
+                    <span>管理员</span>
                   </div>
-                  {session.isReadOnly ? (
-                    <Chip color="warning" size="sm" variant="soft">
-                      <Chip.Label>只读</Chip.Label>
-                    </Chip>
-                  ) : null}
                   <AppIcon name="chevronForward" size={14} />
                 </Button>
                 <Dropdown.Popover className="admin-account-menu">

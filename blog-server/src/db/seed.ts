@@ -6,7 +6,7 @@ import { closeRedis } from "../shared/redis";
 
 process.env.TZ ??= "Asia/Shanghai";
 
-type UserRole = "admin" | "demo" | "user";
+type UserRole = "admin" | "user";
 type MediaType = "document" | "image" | "video";
 
 type IdRow = {

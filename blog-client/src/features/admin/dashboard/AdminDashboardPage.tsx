@@ -2,7 +2,6 @@ import { Card, Chip, Table } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppIcon } from "../../../shared/icons/AppIcon";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 import { adminFetch } from "../shared/admin-api";
 
 const recentItems = [
@@ -12,7 +11,6 @@ const recentItems = [
 ] as const;
 
 export function AdminDashboardPage() {
-  const session = useAdminSession();
   const [metrics, setMetrics] = useState({
     mediaCreatedThisMonth: 0,
     pendingComments: 0,
@@ -93,10 +91,7 @@ export function AdminDashboardPage() {
             <AppIcon name="shield" />
             后台访问状态
           </Card.Title>
-          <Card.Description>
-            当前会话角色为 {session.role}，
-            {session.isReadOnly ? "写操作已在 UI 层置灰。" : "具备后台写操作入口。"}
-          </Card.Description>
+          <Card.Description>当前会话角色为管理员，具备后台写操作入口。</Card.Description>
         </Card.Header>
         <Table className="admin-table" variant="secondary">
           <Table.ScrollContainer>

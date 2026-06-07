@@ -19,7 +19,7 @@ import { PasswordInputGroup } from "../../../shared/password-input-group";
 import { signInAdminSession, useAdminSession } from "../../../shared/routing/adminGuards";
 import { ThemeSwitcher } from "../../../shared/theme/ThemeSwitcher";
 import { showErrorToast, showSuccessToast } from "../../../shared/toast/operation-toast";
-import { createDemoSession, loginAdmin } from "../shared/admin-api";
+import { loginAdmin } from "../shared/admin-api";
 
 export function AdminLoginPage() {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ export function AdminLoginPage() {
     return state?.next?.startsWith("/admin") ? state.next : "/admin";
   }, [location.state]);
 
-  if (session.isAuthenticated && (session.role === "admin" || session.role === "demo")) {
+  if (session.isAuthenticated && session.role === "admin") {
     return <Navigate replace to={nextPath} />;
   }
 
@@ -46,7 +46,7 @@ export function AdminLoginPage() {
 
     try {
       const nextSession = await loginAdmin(identifier, password);
-      if (nextSession.user.role !== "admin" && nextSession.user.role !== "demo") {
+      if (nextSession.user.role !== "admin") {
         setStatusMessage("普通用户不能进入后台。");
         showErrorToast("登录失败：普通用户不能进入后台。");
         return;
@@ -57,24 +57,6 @@ export function AdminLoginPage() {
       void navigate(nextPath, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "登录失败";
-      setStatusMessage(message);
-      showErrorToast(`登录失败：${message}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function enterReadonlyDemo() {
-    setStatusMessage("");
-    setIsSubmitting(true);
-
-    try {
-      const nextSession = await createDemoSession();
-      signInAdminSession(nextSession);
-      showSuccessToast(`登录成功，欢迎你 ${nextSession.user.name ?? nextSession.user.username}`);
-      void navigate(nextPath, { replace: true });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "演示会话创建失败";
       setStatusMessage(message);
       showErrorToast(`登录失败：${message}`);
     } finally {
@@ -93,7 +75,7 @@ export function AdminLoginPage() {
               <AppIcon name="shield" />
               进入 LeiBlog 控制台
             </Card.Title>
-            <Card.Description>管理员和 demo 账户可进入后台，demo 会保持只读。</Card.Description>
+            <Card.Description>使用管理员账户进入后台控制台。</Card.Description>
           </div>
           <ThemeSwitcher />
         </Card.Header>
@@ -106,7 +88,7 @@ export function AdminLoginPage() {
               type="text"
               value={identifier}
             />
-            <Description>请输入管理员或 demo 账户的用户名/邮箱。</Description>
+            <Description>请输入管理员账户的用户名或邮箱。</Description>
             <FieldError>用户名或邮箱不能为空</FieldError>
           </TextField>
           <TextField fullWidth isRequired>
@@ -123,20 +105,8 @@ export function AdminLoginPage() {
             <Chip color="accent" variant="soft">
               <Chip.Label>admin 全权限</Chip.Label>
             </Chip>
-            <Chip color="warning" variant="soft">
-              <Chip.Label>demo 只读</Chip.Label>
-            </Chip>
           </div>
           <div className="admin-login-card__actions">
-            <Button
-              isDisabled={isSubmitting}
-              onPress={() => void enterReadonlyDemo()}
-              type="button"
-              variant="tertiary"
-            >
-              <AppIcon name="shield" />
-              只读演示
-            </Button>
             <Button isDisabled={isSubmitting} type="submit">
               <AppIcon name="logIn" />
               登录后台

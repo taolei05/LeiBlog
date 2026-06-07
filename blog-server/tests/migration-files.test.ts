@@ -23,6 +23,10 @@ const dropLegacyIcpColumnsMigration = readFileSync(
   join(import.meta.dir, "../src/db/migrations/010_drop_site_filing_legacy_icp_columns.sql"),
   "utf8"
 );
+const removeDemoRoleMigration = readFileSync(
+  join(import.meta.dir, "../src/db/migrations/011_remove_demo_role.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("creates the required core tables", () => {
@@ -75,5 +79,12 @@ describe("initial database migration", () => {
     expect(siteFilingIcpRecordsMigration).toContain("jsonb_build_array");
     expect(dropLegacyIcpColumnsMigration).toContain("DROP COLUMN IF EXISTS icp_number");
     expect(dropLegacyIcpColumnsMigration).toContain("DROP COLUMN IF EXISTS icp_url");
+  });
+
+  test("removes demo accounts and keeps only admin and user roles", () => {
+    expect(removeDemoRoleMigration).toContain("DELETE FROM users");
+    expect(removeDemoRoleMigration).toContain("WHERE role = 'demo'");
+    expect(removeDemoRoleMigration).toContain("CREATE TYPE user_role AS ENUM ('admin', 'user')");
+    expect(removeDemoRoleMigration).toContain("DROP TYPE user_role_with_demo");
   });
 });

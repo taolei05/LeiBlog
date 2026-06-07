@@ -19,6 +19,13 @@ describe("admin user actions", () => {
     expect(usersPageSource).not.toMatch(/label:\s*"查看"/);
   });
 
+  it("offers only administrator and ordinary-user roles", () => {
+    expect(usersPageSource).not.toContain("Demo");
+    expect(usersPageSource).not.toContain('"demo"');
+    expect(usersPageSource).toContain('{ label: "管理员", value: "admin" }');
+    expect(usersPageSource).toContain('{ label: "普通用户", value: "user" }');
+  });
+
   it("uses avatar as the first data column and removes the status column", () => {
     const avatarColumnIndex = usersPageSource.indexOf('header: "头像"');
     const userColumnIndex = usersPageSource.indexOf('header: "用户"');

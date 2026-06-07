@@ -1,7 +1,6 @@
 import { Button, Card, Chip, SearchField, Table } from "@heroui/react";
 
 import { AppIcon, type AppIconName } from "../../../shared/icons";
-import { useAdminSession } from "../../../shared/routing/adminGuards";
 
 type PlaceholderMetric = {
   label: string;
@@ -40,8 +39,6 @@ export function AdminPlaceholderPage({
   rows,
   title,
 }: AdminPlaceholderPageProps) {
-  const session = useAdminSession();
-
   return (
     <section className="page-stack admin-page">
       <div className="admin-page__heading">
@@ -53,11 +50,6 @@ export function AdminPlaceholderPage({
           </h2>
           <p>{description}</p>
         </div>
-        {session.isReadOnly ? (
-          <Chip color="warning" variant="soft">
-            <Chip.Label>demo 只读</Chip.Label>
-          </Chip>
-        ) : null}
       </div>
 
       <div className="admin-metric-grid">
@@ -82,12 +74,7 @@ export function AdminPlaceholderPage({
           </SearchField>
           <div className="admin-data-card__actions">
             {actions.map((action) => (
-              <Button
-                isDisabled={session.isReadOnly && action.label !== "筛选"}
-                key={action.label}
-                size="sm"
-                variant="tertiary"
-              >
+              <Button key={action.label} size="sm" variant="tertiary">
                 <AppIcon name={action.icon} />
                 {action.label}
               </Button>

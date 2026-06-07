@@ -6,7 +6,7 @@ import {
   renderNoticeEmailHtml,
   renderVerificationCodeEmailHtml,
 } from "../../auth/service";
-import { assertWritableAdmin, requireAdmin, requireAdminOrDemo } from "../../shared/auth";
+import { requireAdmin } from "../../shared/auth";
 import { clearSiteCache } from "../../shared/cache/content";
 import type { StoredEncryptedSecret } from "../../shared/crypto";
 import { decryptSecret, encryptSecret } from "../../shared/crypto";
@@ -280,7 +280,7 @@ async function translateWithDeepL(apiKey: string, text: string) {
 }
 
 export async function getSystemSiteInfo(currentUser: AuthUser, client: DbClient = db) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
 
   const [row] = await client<SiteInfoRow[]>`
     SELECT site_name, description, logo_dark_url, logo_light_url, favicon_url,
@@ -297,7 +297,7 @@ export async function updateSystemSiteInfo(
   input: SystemSiteInfoInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
 
   const homeCoverUrls = cleanCoverUrls(input.homeCoverUrls);
 
@@ -333,7 +333,7 @@ export async function updateSystemSiteInfo(
 }
 
 export async function getSystemSiteConfig(currentUser: AuthUser, client: DbClient = db) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
 
   const row = await getSiteConfigRow(client);
 
@@ -345,7 +345,7 @@ export async function updateSystemSiteConfig(
   input: SystemSiteConfigInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
 
   const shouldUpdateResendApiKey = input.resendApiKey !== undefined;
   const shouldUpdateDeepLApiKey = input.deeplApiKey !== undefined;
@@ -404,7 +404,7 @@ export async function updateSystemSiteConfig(
 }
 
 export async function getSystemFiling(currentUser: AuthUser, client: DbClient = db) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
 
   const [row] = await client<SiteFilingRow[]>`
     SELECT icp_records, police_number, police_url
@@ -420,7 +420,7 @@ export async function updateSystemFiling(
   input: SystemFilingInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
 
   const icpRecords = cleanIcpFilingRecords({
     legacyNumber: input.icpNumber,

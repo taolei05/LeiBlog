@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { db } from "../db";
 import { forbidden, unauthorized } from "../errors";
 
-export type UserRole = "admin" | "user" | "demo";
+export type UserRole = "admin" | "user";
 
 export interface AuthUser {
   id: string;
@@ -100,24 +100,6 @@ export function requireAdmin(user: AuthUser | null | undefined) {
   const currentUser = requireUser(user);
   if (currentUser.role !== "admin") {
     throw forbidden("需要管理员权限");
-  }
-
-  return currentUser;
-}
-
-export function requireAdminOrDemo(user: AuthUser | null | undefined) {
-  const currentUser = requireUser(user);
-  if (currentUser.role !== "admin" && currentUser.role !== "demo") {
-    throw forbidden("需要后台访问权限");
-  }
-
-  return currentUser;
-}
-
-export function assertWritableAdmin(user: AuthUser | null | undefined) {
-  const currentUser = requireAdminOrDemo(user);
-  if (currentUser.role === "demo") {
-    throw forbidden("演示账户仅允许读取");
   }
 
   return currentUser;

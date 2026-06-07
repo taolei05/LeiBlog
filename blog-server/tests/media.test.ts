@@ -153,7 +153,7 @@ describe("admin media service", () => {
     await expect(stat(download.filePath)).rejects.toThrow();
   });
 
-  test("rejects invalid files and blocks demo writes", async () => {
+  test("rejects invalid files and blocks ordinary users", async () => {
     const config = loadConfig({
       NODE_ENV: "test",
       UPLOADS_DIR: uploadRoot,
@@ -173,10 +173,10 @@ describe("admin media service", () => {
 
     await expect(
       uploadMedia(
-        { ...currentAdmin, role: "demo" },
-        { file: pngFile("demo.png") },
+        { ...currentAdmin, role: "user" },
+        { file: pngFile("user.png") },
         { client: testDb, config }
       )
-    ).rejects.toThrow("演示账户仅允许读取");
+    ).rejects.toThrow("需要管理员权限");
   });
 });

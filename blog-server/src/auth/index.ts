@@ -21,6 +21,12 @@ import {
   revokeAuthSession,
   verifyLogin,
 } from "./service";
+import {
+  enforceEmailCodeRateLimit,
+  enforceForgotPasswordRateLimit,
+  enforceLoginRateLimit,
+  enforcePasswordResetRateLimit,
+} from "./rate-limit";
 import { authContext, jwtPlugin } from "../shared/auth/plugin";
 
 export const authModule = new Elysia({ prefix: "/api/auth" })
@@ -29,12 +35,24 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
     ok: true,
     scope: "auth",
   }))
-  .post("/email-code", ({ body }) => createEmailCode(body), {
-    body: EmailCodeBody,
-    response: {
-      200: EmailCodeResponse,
+  .post(
+    "/email-code",
+    async ({ body, headers, request, server }) => {
+      const meta = getRequestMeta({
+        headers,
+        requestIp: server?.requestIP(request)?.address,
+      });
+      await enforceEmailCodeRateLimit(meta, body.email, body.purpose);
+
+      return createEmailCode(body);
     },
-  })
+    {
+      body: EmailCodeBody,
+      response: {
+        200: EmailCodeResponse,
+      },
+    }
+  )
   .post(
     "/register",
     async ({ body, headers, jwt, request, server }) => {
@@ -73,6 +91,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         headers,
         requestIp: server?.requestIP(request)?.address,
       });
+      await enforceLoginRateLimit(meta, body.identifier);
       const user = await verifyLogin(body, meta);
       const token = await jwt.sign({
         sub: user.id,
@@ -97,18 +116,42 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
       },
     }
   )
-  .post("/password/forgot", ({ body }) => createPasswordResetToken(body.email), {
-    body: ForgotPasswordBody,
-    response: {
-      200: PasswordResetResponse,
+  .post(
+    "/password/forgot",
+    async ({ body, headers, request, server }) => {
+      const meta = getRequestMeta({
+        headers,
+        requestIp: server?.requestIP(request)?.address,
+      });
+      await enforceForgotPasswordRateLimit(meta, body.email);
+
+      return createPasswordResetToken(body.email);
     },
-  })
-  .post("/password/reset", ({ body }) => resetPassword(body), {
-    body: ResetPasswordBody,
-    response: {
-      200: OkResponse,
+    {
+      body: ForgotPasswordBody,
+      response: {
+        200: PasswordResetResponse,
+      },
+    }
+  )
+  .post(
+    "/password/reset",
+    async ({ body, headers, request, server }) => {
+      const meta = getRequestMeta({
+        headers,
+        requestIp: server?.requestIP(request)?.address,
+      });
+      await enforcePasswordResetRateLimit(meta, body);
+
+      return resetPassword(body);
     },
-  })
+    {
+      body: ResetPasswordBody,
+      response: {
+        200: OkResponse,
+      },
+    }
+  )
   .use(authContext)
   .post("/logout", ({ accessToken }) => revokeAuthSession(accessToken!), {
     response: {

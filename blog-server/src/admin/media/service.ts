@@ -5,10 +5,7 @@ import { basename, extname, resolve, sep } from "node:path";
 import type { AuthUser } from "../../shared/auth";
 import type { AppConfig } from "../../shared/config";
 import type { DbClient } from "../../shared/db";
-import {
-  assertWritableAdmin,
-  requireAdminOrDemo,
-} from "../../shared/auth";
+import { requireAdmin } from "../../shared/auth";
 import { appConfig } from "../../shared/config";
 import { db, withTransaction } from "../../shared/db";
 import { notFound, validationError } from "../../shared/errors";
@@ -454,7 +451,7 @@ export async function listMediaFolders(
   currentUser: AuthUser,
   options: MediaServiceOptions = {}
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const client = getClient(options);
   await ensureDefaultMediaFolders(client);
 
@@ -475,7 +472,7 @@ export async function createMediaFolder(
   input: MediaFolderInput,
   options: MediaServiceOptions = {}
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const client = getClient(options);
   await ensureDefaultMediaFolders(client);
 
@@ -496,7 +493,7 @@ export async function updateMediaFolder(
   input: MediaFolderInput,
   options: MediaServiceOptions = {}
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const client = getClient(options);
   const existing = await getFolderRow(id, client);
   const slug =
@@ -520,7 +517,7 @@ export async function deleteMediaFolder(
   id: string,
   options: MediaServiceOptions = {}
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const client = getClient(options);
   const folder = await getFolderRow(id, client);
 
@@ -537,7 +534,7 @@ export async function getMediaById(
   id: string,
   options: MediaServiceOptions = {}
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   return toMediaItem(await getMediaRow(id, getClient(options)));
 }
 
@@ -546,7 +543,7 @@ export async function listMedia(
   query: MediaListQuery,
   options: MediaServiceOptions = {}
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const client = getClient(options);
   await ensureDefaultMediaFolders(client);
   const { page, pageSize, offset } = toPage(query);
@@ -611,7 +608,7 @@ export async function uploadMedia(
   input: UploadMediaInput,
   options: MediaServiceOptions = {}
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   return storeMediaAsset(
     {
       ...input,
@@ -728,7 +725,7 @@ export async function renameMedia(
   fileName: string,
   options: MediaServiceOptions = {}
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const client = getClient(options);
   await getMediaRow(id, client);
 
@@ -746,7 +743,7 @@ export async function deleteMedia(
   id: string,
   options: MediaServiceOptions = {}
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const config = getConfig(options);
   const client = getClient(options);
   const row = await getMediaRow(id, client);
@@ -792,7 +789,7 @@ export async function getMediaDownload(
   id: string,
   options: MediaServiceOptions = {}
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const config = getConfig(options);
   const row = await getMediaRow(id, getClient(options));
 

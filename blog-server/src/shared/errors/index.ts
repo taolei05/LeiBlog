@@ -50,6 +50,15 @@ export function conflict(message = "资源已存在") {
   return new AppError(409, "CONFLICT", message);
 }
 
+export function tooManyRequests(
+  retryAfterSeconds: number,
+  message = "请求过于频繁，请稍后再试"
+) {
+  return new AppError(429, "RATE_LIMITED", message, {
+    retryAfterSeconds,
+  });
+}
+
 export function validationError(message = "请求参数无效", details?: unknown) {
   return new AppError(422, "VALIDATION_ERROR", message, details);
 }

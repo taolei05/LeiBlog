@@ -5,13 +5,13 @@ import {
   clearSiteCache,
 } from "../../src/shared/cache/content";
 import { db } from "../../src/shared/db";
-import { closeRedis } from "../../src/shared/redis";
+import { closeRedis, getRedis } from "../../src/shared/redis";
 
 interface AuthBody {
   token: string;
   user: {
     id: string;
-    role: "admin" | "user" | "demo";
+    role: "admin" | "user";
   };
 }
 
@@ -55,9 +55,35 @@ function jsonHeaders(token?: string) {
   };
 }
 
+async function clearAuthRateLimits() {
+  const redis = await getRedis();
+  const keys = await redis.keys("rate:auth-*");
+  if (keys.length > 0) await redis.del(keys);
+}
+
+async function expectRateLimited(response: Response) {
+  const body = await expectJson<{
+    code: string;
+    details: {
+      retryAfterSeconds: number;
+    };
+  }>(response, 429);
+
+  assert(body.code === "RATE_LIMITED", "超限响应应返回 RATE_LIMITED");
+  assert(
+    body.details.retryAfterSeconds > 0,
+    "超限响应应返回剩余等待秒数"
+  );
+  assert(
+    Number(response.headers.get("retry-after")) === body.details.retryAfterSeconds,
+    "超限响应头应返回剩余等待秒数"
+  );
+}
+
 async function seedRouteData() {
   await clearSiteCache();
   await clearAllArticleCache();
+  await clearAuthRateLimits();
 
   await db`
     INSERT INTO site_info (
@@ -93,11 +119,6 @@ async function seedRouteData() {
     VALUES ('route-admin', ${await hashPassword("admin-password")}, 'route-admin@example.com', 'admin')
     RETURNING id
   `;
-  const [demo] = await db<{ id: string }[]>`
-    INSERT INTO users (username, password_hash, email, role)
-    VALUES ('route-demo', ${await hashPassword("demo-password")}, 'route-demo@example.com', 'demo')
-    RETURNING id
-  `;
   const [user] = await db<{ id: string }[]>`
     INSERT INTO users (username, password_hash, email, role)
     VALUES ('route-user', ${await hashPassword("user-password")}, 'route-user@example.com', 'user')
@@ -129,7 +150,6 @@ async function seedRouteData() {
   return {
     article,
     adminId: admin.id,
-    demoId: demo.id,
     userId: user.id,
   };
 }
@@ -182,8 +202,135 @@ async function main() {
   assert(adminAuth.user.id === seeded.adminId, "管理员登录用户不正确");
   const userAuth = await login(app, "route-user", "user-password");
   assert(userAuth.user.id === seeded.userId, "普通用户登录用户不正确");
-  const demoAuth = await login(app, "route-demo", "demo-password");
-  assert(demoAuth.user.id === seeded.demoId, "演示用户登录用户不正确");
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/admin/setup/demo-session", {
+      method: "POST",
+      headers: jsonHeaders(),
+    })),
+    404
+  );
+
+  const loginHeaders = {
+    ...jsonHeaders(),
+    "x-forwarded-for": "203.0.113.10",
+  };
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await expectJson(
+      await app.handle(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: loginHeaders,
+        body: JSON.stringify({
+          identifier: "rate-limited-login",
+          password: "wrong-password",
+        }),
+      })),
+      401
+    );
+  }
+  await expectRateLimited(
+    await app.handle(new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: loginHeaders,
+      body: JSON.stringify({
+        identifier: "rate-limited-login",
+        password: "wrong-password",
+      }),
+    }))
+  );
+
+  const ipLoginHeaders = {
+    ...jsonHeaders(),
+    "x-forwarded-for": "203.0.113.14",
+  };
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await expectJson(
+      await app.handle(new Request("http://localhost/api/auth/login", {
+        method: "POST",
+        headers: ipLoginHeaders,
+        body: JSON.stringify({
+          identifier: `rate-limited-ip-${attempt}`,
+          password: "wrong-password",
+        }),
+      })),
+      401
+    );
+  }
+  await expectRateLimited(
+    await app.handle(new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: ipLoginHeaders,
+      body: JSON.stringify({
+        identifier: "rate-limited-ip-overflow",
+        password: "wrong-password",
+      }),
+    }))
+  );
+
+  const emailCodeRequest = () =>
+    app.handle(new Request("http://localhost/api/auth/email-code", {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(),
+        "x-forwarded-for": "203.0.113.11",
+      },
+      body: JSON.stringify({
+        email: "rate-code@example.com",
+        purpose: "register",
+      }),
+    }));
+  await expectJson(await emailCodeRequest(), 200);
+  await expectRateLimited(await emailCodeRequest());
+
+  const forgotPasswordRequest = () =>
+    app.handle(new Request("http://localhost/api/auth/password/forgot", {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(),
+        "x-forwarded-for": "203.0.113.12",
+      },
+      body: JSON.stringify({
+        email: "rate-forgot@example.com",
+      }),
+    }));
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await expectJson(await forgotPasswordRequest(), 200);
+  }
+  await expectRateLimited(await forgotPasswordRequest());
+
+  const resetPasswordRequest = () =>
+    app.handle(new Request("http://localhost/api/auth/password/reset", {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(),
+        "x-forwarded-for": "203.0.113.13",
+      },
+      body: JSON.stringify({
+        token: "invalid-rate-limit-token",
+        password: "new-password",
+      }),
+    }));
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await expectJson(await resetPasswordRequest(), 422);
+  }
+  await expectRateLimited(await resetPasswordRequest());
+
+  const emailResetPasswordRequest = () =>
+    app.handle(new Request("http://localhost/api/auth/password/reset", {
+      method: "POST",
+      headers: {
+        ...jsonHeaders(),
+        "x-forwarded-for": "203.0.113.15",
+      },
+      body: JSON.stringify({
+        email: "rate-reset@example.com",
+        emailCode: "000000",
+        password: "new-password",
+      }),
+    }));
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await expectJson(await emailResetPasswordRequest(), 422);
+  }
+  await expectRateLimited(await emailResetPasswordRequest());
 
   await expectJson(
     await app.handle(new Request("http://localhost/api/me/", {
@@ -212,15 +359,16 @@ async function main() {
   assert(adminArticles.total === 1, "管理员文章列表应返回文章");
 
   await expectJson(
-    await app.handle(new Request("http://localhost/api/admin/content/articles", {
+    await app.handle(new Request("http://localhost/api/admin/users/", {
       method: "POST",
-      headers: jsonHeaders(demoAuth.token),
+      headers: jsonHeaders(adminAuth.token),
       body: JSON.stringify({
-        title: "演示账户不能写入",
-        contentMdx: "# demo",
+        username: "unsupported-role",
+        password: "unsupported-role-password",
+        role: "demo",
       }),
     })),
-    403
+    422
   );
 
   await expectJson(
@@ -243,12 +391,14 @@ try {
   await main();
   await clearSiteCache();
   await clearAllArticleCache();
+  await clearAuthRateLimits();
   await closeRedis();
   await db.close({ timeout: 1 });
 } catch (error) {
   console.error(error);
   await clearSiteCache();
   await clearAllArticleCache();
+  await clearAuthRateLimits();
   await closeRedis();
   await db.close({ timeout: 1 });
   process.exit(1);

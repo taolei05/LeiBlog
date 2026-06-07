@@ -1,8 +1,4 @@
-import {
-  assertWritableAdmin,
-  requireAdminOrDemo,
-  type AuthUser,
-} from "../../shared/auth";
+import { requireAdmin, type AuthUser } from "../../shared/auth";
 import { decryptSecret, type StoredEncryptedSecret } from "../../shared/crypto";
 import {
   clearAllArticleCache,
@@ -384,7 +380,7 @@ export async function listCategories(
   query: ListQuery,
   client: DbClient = db
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const { page, pageSize, offset } = toPage(query);
   const search = query.search?.trim()
     ? `%${query.search.trim().toLowerCase()}%`
@@ -421,7 +417,7 @@ export async function createCategory(
   input: CategoryInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const slug = await createUniqueManagedSlug(client, "article_categories", input.slug ?? input.name);
   const [row] = await client<TaxonomyRow[]>`
     INSERT INTO article_categories (name, slug)
@@ -438,7 +434,7 @@ export async function updateCategory(
   input: CategoryInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   await getCategoryById(id, client);
   const slug = input.slug
     ? await createUniqueManagedSlug(client, "article_categories", input.slug, id)
@@ -455,7 +451,7 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(currentUser: AuthUser, id: string, client: DbClient = db) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   await getCategoryById(id, client);
   await client`DELETE FROM article_categories WHERE id = ${id}`;
   await clearAllArticleCache();
@@ -463,7 +459,7 @@ export async function deleteCategory(currentUser: AuthUser, id: string, client: 
 }
 
 export async function listTags(currentUser: AuthUser, query: ListQuery, client: DbClient = db) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const { page, pageSize, offset } = toPage(query);
   const search = query.search?.trim()
     ? `%${query.search.trim().toLowerCase()}%`
@@ -496,7 +492,7 @@ export async function listTags(currentUser: AuthUser, query: ListQuery, client: 
 }
 
 export async function createTag(currentUser: AuthUser, input: TagInput, client: DbClient = db) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const slug = await createUniqueManagedSlug(client, "article_tags", input.slug ?? input.name);
   const [row] = await client<TaxonomyRow[]>`
     INSERT INTO article_tags (name, slug, color)
@@ -513,7 +509,7 @@ export async function updateTag(
   input: TagInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   await getTagById(id, client);
   const slug = input.slug
     ? await createUniqueManagedSlug(client, "article_tags", input.slug, id)
@@ -531,7 +527,7 @@ export async function updateTag(
 }
 
 export async function deleteTag(currentUser: AuthUser, id: string, client: DbClient = db) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   await getTagById(id, client);
   await client`DELETE FROM article_tags WHERE id = ${id}`;
   await clearAllArticleCache();
@@ -543,7 +539,7 @@ export async function listContributors(
   query: ListQuery,
   client: DbClient = db
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const { page, pageSize, offset } = toPage(query);
   const search = query.search?.trim()
     ? `%${query.search.trim().toLowerCase()}%`
@@ -583,7 +579,7 @@ export async function createContributor(
   input: ContributorInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const [row] = await client<{ id: string }[]>`
     INSERT INTO article_contributors (name, avatar_url, link_url)
     VALUES (${input.name.trim()}, ${cleanOptional(input.avatarUrl)}, ${cleanOptional(input.linkUrl)})
@@ -599,7 +595,7 @@ export async function updateContributor(
   input: ContributorInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   await getContributorById(id, client);
   await client`
     UPDATE article_contributors
@@ -613,7 +609,7 @@ export async function updateContributor(
 }
 
 export async function deleteContributor(currentUser: AuthUser, id: string, client: DbClient = db) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   await getContributorById(id, client);
   await client`DELETE FROM article_contributors WHERE id = ${id}`;
   await clearAllArticleCache();
@@ -714,7 +710,7 @@ export async function listArticles(
   query: ArticleListQuery,
   client: DbClient = db
 ) {
-  requireAdminOrDemo(currentUser);
+  requireAdmin(currentUser);
   const { page, pageSize, offset } = toPage(query);
   const search = query.search?.trim()
     ? `%${query.search.trim().toLowerCase()}%`
@@ -816,7 +812,7 @@ export async function createArticle(
   input: ArticleInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const contentMdx = input.contentMdx ?? "";
   const status = input.status ?? "draft";
   const publishedAtInput = parseDate(input.publishedAt);
@@ -871,7 +867,7 @@ export async function updateArticle(
   input: ArticleUpdateInput,
   client: DbClient = db
 ) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const existing = await getArticleById(id, client);
   const title = input.title?.trim() ?? existing.title;
   const contentMdx = input.contentMdx ?? existing.contentMdx;
@@ -937,7 +933,7 @@ export async function updateArticle(
 }
 
 export async function deleteArticle(currentUser: AuthUser, id: string, client: DbClient = db) {
-  assertWritableAdmin(currentUser);
+  requireAdmin(currentUser);
   const existing = await getArticleById(id, client);
   await client`DELETE FROM articles WHERE id = ${id}`;
   await clearArticleCache([existing.slug]);

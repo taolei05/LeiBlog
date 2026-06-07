@@ -9,16 +9,16 @@ import {
 describe("admin route guards", () => {
   it("normalizes stored admin roles", () => {
     expect(parseAdminRole("admin")).toBe("admin");
-    expect(parseAdminRole("demo")).toBe("demo");
     expect(parseAdminRole("user")).toBe("user");
-    expect(parseAdminRole("root")).toBe("admin");
-    expect(parseAdminRole(null, "demo")).toBe("demo");
+    expect(parseAdminRole("demo")).toBe("user");
+    expect(parseAdminRole("root")).toBe("user");
+    expect(parseAdminRole(null)).toBe("user");
   });
 
-  it("allows admin and demo roles by default", () => {
+  it("allows only administrators by default", () => {
     expect(isAdminRoleAllowed("admin")).toBe(true);
-    expect(isAdminRoleAllowed("demo")).toBe(true);
     expect(isAdminRoleAllowed("user")).toBe(false);
+    expect(isAdminRoleAllowed(parseAdminRole("demo"))).toBe(false);
   });
 
   it("prioritizes setup, login, and role redirects", () => {
@@ -59,9 +59,9 @@ describe("admin route guards", () => {
       getAdminAccessRedirect({
         currentPath: "/admin/content/articles",
         isAuthenticated: true,
-        role: "demo",
+        role: parseAdminRole("demo"),
         setupComplete: true,
       }),
-    ).toBeNull();
+    ).toEqual({ to: "/" });
   });
 });

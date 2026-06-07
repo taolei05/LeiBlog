@@ -65,7 +65,7 @@ export type BlogComment = {
   author: {
     avatarUrl: string | null;
     name: string | null;
-    role: "admin" | "demo" | "user";
+    role: "admin" | "user";
     tags: string[];
     username: string;
   };
@@ -134,7 +134,7 @@ type ApiCommentItem = {
   author: {
     avatarUrl: string | null;
     name: string | null;
-    role: "admin" | "demo" | "user";
+    role: "admin" | "user";
     tags: string[];
     username: string;
   };
@@ -183,7 +183,7 @@ function readArray(source: Record<string, unknown>, key: string) {
 }
 
 function readRole(value: unknown) {
-  if (value === "admin" || value === "demo" || value === "user") return value;
+  if (value === "admin" || value === "user") return value;
   throw new Error("评论作者角色无效");
 }
 

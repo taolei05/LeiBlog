@@ -25,7 +25,7 @@ import { useTheme } from "../../../shared/theme/ThemeProviderLite";
 import { BlogPageHeader } from "../shared/BlogComponents";
 
 type AuthDialogMode = "login" | "register";
-type BlogUserRole = "admin" | "demo" | "user";
+type BlogUserRole = "admin" | "user";
 type ProfilePanelMode = "email" | "password" | "profile" | "theme";
 type ProfileConfirmAction = "change-email" | "change-password" | "logout" | "save-profile";
 
@@ -185,7 +185,7 @@ function readNullableString(value: unknown) {
 }
 
 function readRole(value: unknown): BlogUserRole {
-  return value === "admin" || value === "demo" || value === "user" ? value : "user";
+  return value === "admin" || value === "user" ? value : "user";
 }
 
 function readStringArray(value: unknown) {
@@ -2020,13 +2020,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                 <div className="front-profile-meta">
                   <strong>{getDisplayName(user)}</strong>
                   <span>{user.email ?? "未设置邮箱"}</span>
-                  <small>
-                    {user.role === "admin"
-                      ? "管理员"
-                      : user.role === "demo"
-                        ? "演示账号"
-                        : "普通用户"}
-                  </small>
+                  <small>{user.role === "admin" ? "管理员" : "普通用户"}</small>
                 </div>
               </div>
               <dl className="front-profile-login-list">

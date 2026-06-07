@@ -28,7 +28,7 @@ type UserRow = DataTableRow & {
   email: string;
   lastLogin: string;
   name: string;
-  role: "admin" | "demo" | "user";
+  role: "admin" | "user";
   username: string;
   tags: string[];
 };
@@ -72,13 +72,11 @@ type UserModalState =
 
 const roleLabel = {
   admin: "管理员",
-  demo: "Demo",
   user: "普通用户",
 } as const;
 
 const userRoleOptions: Array<{ label: string; value: UserRow["role"] }> = [
   { label: "管理员", value: "admin" },
-  { label: "Demo", value: "demo" },
   { label: "普通用户", value: "user" },
 ];
 
@@ -136,9 +134,7 @@ const userColumns: DataTableColumn<UserRow>[] = [
     header: "角色",
     id: "role",
     render: (row) => (
-      <DataStatusChip
-        tone={row.role === "admin" ? "accent" : row.role === "demo" ? "warning" : "default"}
-      >
+      <DataStatusChip tone={row.role === "admin" ? "accent" : "default"}>
         {roleLabel[row.role]}
       </DataStatusChip>
     ),
@@ -160,7 +156,6 @@ const userFilters: DataTableFilter<UserRow>[] = [
     label: "角色",
     options: [
       { label: "管理员", predicate: (row) => row.role === "admin", value: "admin" },
-      { label: "Demo", predicate: (row) => row.role === "demo", value: "demo" },
       { label: "普通用户", predicate: (row) => row.role === "user", value: "user" },
     ],
   },
@@ -203,7 +198,7 @@ function toCreateOptional(value: string) {
 }
 
 function isUserRole(value: string): value is UserRow["role"] {
-  return value === "admin" || value === "demo" || value === "user";
+  return value === "admin" || value === "user";
 }
 
 export function UsersPage() {
@@ -394,7 +389,6 @@ export function UsersPage() {
     },
   ];
   const adminCount = userRows.filter((row) => row.role === "admin").length;
-  const demoCount = userRows.filter((row) => row.role === "demo").length;
   const userCount = userRows.filter((row) => row.role === "user").length;
 
   return (
@@ -404,7 +398,6 @@ export function UsersPage() {
       icon="people"
       metrics={[
         { label: "管理员", value: String(adminCount) },
-        { label: "Demo", value: String(demoCount) },
         { label: "普通用户", value: String(userCount) },
       ]}
       title="用户管理"
@@ -415,7 +408,7 @@ export function UsersPage() {
         description={
           userModalState?.mode === "edit"
             ? "角色、头像、邮箱、密码和个人资料都在这里统一修改。"
-            : "创建普通用户、Demo 或管理员账户。"
+            : "创建普通用户或管理员账户。"
         }
         icon={userModalState?.mode === "edit" ? "pencil" : "people"}
         isBodyScrollable

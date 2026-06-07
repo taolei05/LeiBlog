@@ -28,7 +28,6 @@ import { showErrorToast, showSuccessToast } from "../../../shared/toast/operatio
 import type { SetupSubmitStepKey } from "../shared/admin-api";
 import {
   completeInitialSetup,
-  createDemoSession,
   getSetupStatus,
   isSetupSubmitStepError,
   loginAdmin,
@@ -410,21 +409,6 @@ export function SetupPage() {
     }
   }
 
-  async function enterReadonlyDemo() {
-    setIsSubmitting(true);
-    setStatusMessage("");
-
-    try {
-      const nextSession = await createDemoSession();
-      signInAdminSession(nextSession);
-      void navigate(nextPath, { replace: true });
-    } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "演示会话创建失败");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   if (completed) {
     return <Navigate replace to={getCompletedSetupRedirectPath()} />;
   }
@@ -434,11 +418,7 @@ export function SetupPage() {
       <InteractiveCursor />
       <div className="setup-shell">
         <aside className="setup-shell__aside setup-shell__aside--desktop">
-          <SetupSidebarContent
-            currentStep={currentStep}
-            isSubmitting={isSubmitting}
-            onEnterReadonlyDemo={() => void enterReadonlyDemo()}
-          />
+          <SetupSidebarContent currentStep={currentStep} />
         </aside>
 
         <Card className="setup-wizard">
@@ -817,15 +797,7 @@ export function SetupPage() {
           <Drawer.Dialog aria-label="初始化配置步骤" className="setup-drawer-dialog">
             <Drawer.CloseTrigger />
             <Drawer.Body className="setup-drawer-body">
-              <SetupSidebarContent
-                currentStep={currentStep}
-                isSubmitting={isSubmitting}
-                showThemeSwitcher={false}
-                onEnterReadonlyDemo={() => {
-                  setIsSetupDrawerOpen(false);
-                  void enterReadonlyDemo();
-                }}
-              />
+              <SetupSidebarContent currentStep={currentStep} showThemeSwitcher={false} />
             </Drawer.Body>
           </Drawer.Dialog>
         </Drawer.Content>
@@ -847,17 +819,10 @@ function splitList(value: string) {
 
 type SetupSidebarContentProps = {
   currentStep: number;
-  isSubmitting: boolean;
-  onEnterReadonlyDemo: () => void;
   showThemeSwitcher?: boolean;
 };
 
-function SetupSidebarContent({
-  currentStep,
-  isSubmitting,
-  onEnterReadonlyDemo,
-  showThemeSwitcher = true,
-}: SetupSidebarContentProps) {
+function SetupSidebarContent({ currentStep, showThemeSwitcher = true }: SetupSidebarContentProps) {
   return (
     <>
       <div className="setup-shell__brand-row">
@@ -867,17 +832,8 @@ function SetupSidebarContent({
       <div className="setup-shell__intro">
         <p className="eyebrow">首次配置</p>
         <h1>完成 4 步后进入后台</h1>
-        <p>没有管理员时只能停留在初始化页，或进入只读演示后台。</p>
+        <p>没有管理员时只能停留在初始化页，完成配置后进入后台。</p>
       </div>
-      <Button
-        isDisabled={isSubmitting}
-        onPress={onEnterReadonlyDemo}
-        type="button"
-        variant="secondary"
-      >
-        <AppIcon name="shield" />
-        只读演示进入后台
-      </Button>
       <ol className="setup-steps">
         {setupSteps.map((step, index) => (
           <li

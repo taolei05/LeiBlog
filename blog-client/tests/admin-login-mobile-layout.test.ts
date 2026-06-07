@@ -4,13 +4,13 @@ import adminLoginPageSource from "../src/features/admin/auth/AdminLoginPage.tsx?
 import layoutsCss from "../src/shared/theme/layouts.css?raw";
 
 describe("admin login mobile layout", () => {
-  it("keeps the readonly action left of login in one equal-width row", () => {
-    expect(adminLoginPageSource.indexOf("只读演示")).toBeLessThan(
-      adminLoginPageSource.indexOf("登录后台"),
-    );
+  it("shows only the administrator login action", () => {
+    expect(adminLoginPageSource).not.toContain("只读演示");
+    expect(adminLoginPageSource).not.toContain("demo");
+    expect(adminLoginPageSource).toContain("登录后台");
     const actionLayoutIndex = layoutsCss.indexOf(`.admin-login-card__actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));`);
+  grid-template-columns: minmax(0, 1fr);`);
     expect(actionLayoutIndex).toBeGreaterThan(-1);
     expect(actionLayoutIndex).toBeLessThan(layoutsCss.indexOf("@media (max-width: 768px)"));
     expect(layoutsCss).toContain(`.admin-login-card__actions > .button {

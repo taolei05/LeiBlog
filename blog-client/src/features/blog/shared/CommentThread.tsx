@@ -34,7 +34,7 @@ type CommentTarget = "article" | "guestbook";
 type BlogCommentSessionUser = {
   avatarUrl: string | null;
   name: string | null;
-  role: "admin" | "demo" | "user";
+  role: "admin" | "user";
   tags: string[];
   username: string;
 };
@@ -98,7 +98,7 @@ function readCommentSessionUser(value: unknown): BlogCommentSessionUser | null {
   const username = readString(value.username);
   if (!username) return null;
 
-  const role = value.role === "admin" || value.role === "demo" ? value.role : "user";
+  const role = value.role === "admin" ? "admin" : "user";
 
   return {
     avatarUrl: readNullableString(value.avatarUrl),
