@@ -15,8 +15,8 @@ type SlugTable = "article_categories" | "article_tags" | "articles";
 
 export interface ListQuery {
   search?: string;
-  page?: string;
-  pageSize?: string;
+  page?: number;
+  pageSize?: number;
   sortBy?: string;
   sortOrder?: SortOrder;
 }
@@ -26,7 +26,7 @@ export interface ArticleListQuery extends ListQuery {
   categoryId?: string;
   tagId?: string;
   contributorId?: string;
-  isPinned?: string;
+  isPinned?: boolean;
 }
 
 export interface CategoryInput {
@@ -130,19 +130,6 @@ function cleanIdList(values: string[] | undefined) {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
 
-function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
-}
-
-function parseBoolean(value: string | undefined) {
-  if (value === undefined) return null;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return null;
-}
-
 function parseDate(value: string | null | undefined) {
   if (value === undefined) return undefined;
   if (value === null || value.trim() === "") return null;
@@ -153,8 +140,8 @@ function parseDate(value: string | null | undefined) {
 }
 
 function toPage(input: ListQuery) {
-  const page = parsePositiveInt(input.page, 1, 10_000);
-  const pageSize = parsePositiveInt(input.pageSize, 20, 100);
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 20;
   return {
     page,
     pageSize,
@@ -719,7 +706,7 @@ export async function listArticles(
   const categoryId = query.categoryId ?? null;
   const tagId = query.tagId ?? null;
   const contributorId = query.contributorId ?? null;
-  const isPinned = parseBoolean(query.isPinned);
+  const isPinned = query.isPinned ?? null;
   const orderBy = articleOrder(query.sortBy, query.sortOrder);
 
   const rows = await client.unsafe<ArticleRow[]>(

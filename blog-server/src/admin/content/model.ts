@@ -8,8 +8,8 @@ const ArticleStatus = t.Union([
 
 const PaginationQuery = {
   search: t.Optional(t.String({ maxLength: 160 })),
-  page: t.Optional(t.String()),
-  pageSize: t.Optional(t.String()),
+  page: t.Optional(t.Numeric({ minimum: 1, maximum: 10_000 })),
+  pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
   sortOrder: t.Optional(t.Union([t.Literal("asc"), t.Literal("desc")])),
 };
 
@@ -52,7 +52,7 @@ export const ArticleQuery = t.Object({
   categoryId: t.Optional(t.String()),
   tagId: t.Optional(t.String()),
   contributorId: t.Optional(t.String()),
-  isPinned: t.Optional(t.String()),
+  isPinned: t.Optional(t.Boolean()),
   sortBy: t.Optional(
     t.Union([
       t.Literal("createdAt"),

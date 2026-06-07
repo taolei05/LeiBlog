@@ -11,7 +11,12 @@ import { meModule } from "./me";
 import { publicModule } from "./public";
 import type { AppConfig } from "./shared/config";
 import { appConfig } from "./shared/config";
-import { AppError, createErrorBody } from "./shared/errors";
+import {
+  AppError,
+  createErrorBody,
+  ErrorResponseSchema,
+  RateLimitErrorResponseSchema,
+} from "./shared/errors";
 
 export interface CreateAppOptions {
   config?: AppConfig;
@@ -159,21 +164,15 @@ export async function createApp(options: CreateAppOptions = {}) {
       cors({
         origin: createCorsOrigin(config),
         credentials: true,
-        allowedHeaders: ["Content-Type", "Authorization"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-Setup-Token"],
+        exposeHeaders: ["Retry-After"],
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       })
     )
-    .use(
-      openapi({
-        path: "/api/openapi",
-        documentation: {
-          info: {
-            title: "LeiBlog API",
-            version: "0.1.0",
-          },
-        },
-      })
-    )
+    .model({
+      ErrorResponse: ErrorResponseSchema,
+      RateLimitErrorResponse: RateLimitErrorResponseSchema,
+    })
     .onError(({ code, error, set, status }) => {
       if (error instanceof AppError) {
         const retryAfterSeconds = getRetryAfterSeconds(error);
@@ -198,8 +197,10 @@ export async function createApp(options: CreateAppOptions = {}) {
         return status(422, {
           ok: false,
           code: "VALIDATION_ERROR",
-          message,
-          details: error.message,
+          message: config.isProduction
+            ? "请求参数无效：请检查初始化表单字段"
+            : message,
+          ...(config.isProduction ? {} : { details: error.message }),
         });
       }
 
@@ -208,7 +209,7 @@ export async function createApp(options: CreateAppOptions = {}) {
           ok: false,
           code: "PARSE_ERROR",
           message: "请求内容格式无效",
-          details: error.message,
+          ...(config.isProduction ? {} : { details: error.message }),
         });
       }
 
@@ -224,6 +225,20 @@ export async function createApp(options: CreateAppOptions = {}) {
       ok: true,
       name: "LeiBlog API",
     }));
+
+  if (config.openapiEnabled) {
+    app.use(
+      openapi({
+        path: "/api/openapi",
+        documentation: {
+          info: {
+            title: "LeiBlog API",
+            version: "0.1.0",
+          },
+        },
+      })
+    );
+  }
 
   if (enableStatic) {
     app.use(

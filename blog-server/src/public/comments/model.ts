@@ -7,8 +7,8 @@ export const ArticleCommentsParams = t.Object({
 });
 
 export const PublicCommentQuery = t.Object({
-  page: t.Optional(t.String()),
-  pageSize: t.Optional(t.String()),
+  page: t.Optional(t.Numeric({ minimum: 1, maximum: 10_000 })),
+  pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
   parentId: t.Optional(t.String()),
 });
 

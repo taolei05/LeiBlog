@@ -15,21 +15,11 @@ export interface AdminCommentQuery {
   articleId?: string;
   userId?: string;
   status?: CommentStatus;
-  includeDeleted?: string;
-  page?: string;
-  pageSize?: string;
+  includeDeleted?: boolean;
+  page?: number;
+  pageSize?: number;
   sortBy?: "createdAt" | "updatedAt";
   sortOrder?: "asc" | "desc";
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
-}
-
-function parseBoolean(value: string | undefined) {
-  return value === "true";
 }
 
 function orderClause(sortBy: AdminCommentQuery["sortBy"], sortOrder: AdminCommentQuery["sortOrder"]) {
@@ -39,8 +29,8 @@ function orderClause(sortBy: AdminCommentQuery["sortBy"], sortOrder: AdminCommen
 }
 
 function toPage(input: AdminCommentQuery) {
-  const page = parsePositiveInt(input.page, 1, 10_000);
-  const pageSize = parsePositiveInt(input.pageSize, 20, 100);
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 20;
   return {
     page,
     pageSize,
@@ -79,7 +69,7 @@ export async function listAdminComments(
   const articleId = query.articleId ?? null;
   const userId = query.userId ?? null;
   const status = query.status ?? null;
-  const includeDeleted = parseBoolean(query.includeDeleted);
+  const includeDeleted = query.includeDeleted ?? false;
   const orderBy = orderClause(query.sortBy, query.sortOrder);
 
   const rows = await client.unsafe<CommentRow[]>(

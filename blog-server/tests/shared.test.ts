@@ -14,6 +14,43 @@ describe("shared infrastructure", () => {
     expect(config.port).toBe(3000);
     expect(config.databaseUrl).toContain("lei_blog");
     expect(config.redisUrl).toBe("redis://localhost:6379");
+    expect(config.openapiEnabled).toBe(true);
+    expect(config.setupToken).toBeNull();
+    expect(config.trustedProxyIps).toEqual([]);
+  });
+
+  test("requires setup token and explicit CORS origins in production", () => {
+    const productionEnv = {
+      APP_SECRET_KEY: "production-app-secret",
+      JWT_SECRET: "production-jwt-secret",
+      NODE_ENV: "production",
+    };
+
+    expect(() => loadConfig(productionEnv)).toThrow("SETUP_TOKEN");
+    expect(() =>
+      loadConfig({
+        ...productionEnv,
+        SETUP_TOKEN: "production-setup-token",
+      })
+    ).toThrow("CORS_ORIGINS");
+
+    const config = loadConfig({
+      ...productionEnv,
+      CORS_ORIGINS: "https://blog.example.com",
+      SETUP_TOKEN: "production-setup-token",
+      TRUSTED_PROXY_IPS: "127.0.0.1,10.0.0.10",
+    });
+
+    expect(config.setupToken).toBe("production-setup-token");
+    expect(config.trustedProxyIps).toEqual(["127.0.0.1", "10.0.0.10"]);
+    expect(config.openapiEnabled).toBe(false);
+
+    expect(loadConfig({
+      ...productionEnv,
+      CORS_ORIGINS: "https://blog.example.com",
+      OPENAPI_ENABLED: "true",
+      SETUP_TOKEN: "production-setup-token",
+    }).openapiEnabled).toBe(true);
   });
 
   test("encrypts and decrypts secrets", () => {

@@ -12,8 +12,8 @@ import { toUserProfile, type UserProfileRow } from "../../shared/types/user";
 export interface UserListInput {
   search?: string;
   role?: UserRole;
-  page?: string;
-  pageSize?: string;
+  page?: number;
+  pageSize?: number;
   sortBy?: "createdAt" | "username" | "lastLoginAt";
   sortOrder?: "asc" | "desc";
 }
@@ -61,12 +61,6 @@ function cleanSocialLinks(values: Record<string, string> | undefined) {
       .map(([key, value]) => [key.trim(), value.trim()])
       .filter(([key, value]) => key && value)
   );
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
 }
 
 function sortClause(sortBy?: UserListInput["sortBy"], sortOrder?: UserListInput["sortOrder"]) {
@@ -128,8 +122,8 @@ export async function listUsers(
 ) {
   requireAdmin(currentUser);
 
-  const page = parsePositiveInt(input.page, 1, 10_000);
-  const pageSize = parsePositiveInt(input.pageSize, 20, 100);
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 20;
   const offset = (page - 1) * pageSize;
   const search = input.search?.trim() ? `%${input.search.trim().toLowerCase()}%` : null;
   const role = input.role ?? null;

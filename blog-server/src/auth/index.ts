@@ -15,7 +15,6 @@ import {
   createAuthSession,
   createEmailCode,
   createPasswordResetToken,
-  getRequestMeta,
   registerUser,
   resetPassword,
   revokeAuthSession,
@@ -28,21 +27,19 @@ import {
   enforcePasswordResetRateLimit,
 } from "./rate-limit";
 import { authContext, jwtPlugin } from "../shared/auth/plugin";
+import { requestContext } from "../shared/http/plugin";
 
 export const authModule = new Elysia({ prefix: "/api/auth" })
   .use(jwtPlugin)
+  .use(requestContext)
   .get("/status", () => ({
     ok: true,
     scope: "auth",
   }))
   .post(
     "/email-code",
-    async ({ body, headers, request, server }) => {
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-      await enforceEmailCodeRateLimit(meta, body.email, body.purpose);
+    async ({ body, requestMeta }) => {
+      await enforceEmailCodeRateLimit(requestMeta, body.email, body.purpose);
 
       return createEmailCode(body);
     },
@@ -55,7 +52,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
   )
   .post(
     "/register",
-    async ({ body, headers, jwt, request, server }) => {
+    async ({ body, jwt, requestMeta }) => {
       const user = await registerUser(body);
       const token = await jwt.sign({
         sub: user.id,
@@ -64,12 +61,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         type: "access",
         exp: "7d",
       });
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-
-      await createAuthSession(user, token, meta);
+      await createAuthSession(user, token, requestMeta);
 
       return {
         ok: true,
@@ -86,13 +78,9 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
   )
   .post(
     "/login",
-    async ({ body, headers, jwt, request, server }) => {
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-      await enforceLoginRateLimit(meta, body.identifier);
-      const user = await verifyLogin(body, meta);
+    async ({ body, jwt, requestMeta }) => {
+      await enforceLoginRateLimit(requestMeta, body.identifier);
+      const user = await verifyLogin(body, requestMeta);
       const token = await jwt.sign({
         sub: user.id,
         role: user.role,
@@ -101,7 +89,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         exp: "7d",
       });
 
-      await createAuthSession(user, token, meta);
+      await createAuthSession(user, token, requestMeta);
 
       return {
         ok: true,
@@ -118,12 +106,8 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
   )
   .post(
     "/password/forgot",
-    async ({ body, headers, request, server }) => {
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-      await enforceForgotPasswordRateLimit(meta, body.email);
+    async ({ body, requestMeta }) => {
+      await enforceForgotPasswordRateLimit(requestMeta, body.email);
 
       return createPasswordResetToken(body.email);
     },
@@ -136,12 +120,8 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
   )
   .post(
     "/password/reset",
-    async ({ body, headers, request, server }) => {
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-      await enforcePasswordResetRateLimit(meta, body);
+    async ({ body, requestMeta }) => {
+      await enforcePasswordResetRateLimit(requestMeta, body);
 
       return resetPassword(body);
     },

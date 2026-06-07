@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import adminLoginPageSource from "../src/features/admin/auth/AdminLoginPage.tsx?raw";
-import layoutsCss from "../src/shared/theme/layouts.css?raw";
+
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
+);
 
 describe("admin login mobile layout", () => {
   it("shows only the administrator login action", () => {

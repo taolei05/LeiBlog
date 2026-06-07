@@ -10,6 +10,7 @@ import {
   configureSiteConfig,
   configureSiteInfo,
   getSetupStatus,
+  requireSetupToken,
 } from "../src/admin/setup/service";
 import type { EncryptedSecret } from "../src/shared/crypto";
 import { hashPassword, verifyPassword } from "../src/shared/auth";
@@ -50,6 +51,17 @@ afterAll(async () => {
 });
 
 describe("admin setup service", () => {
+  test("requires the configured setup token", () => {
+    expect(() => requireSetupToken(undefined, "required-token")).toThrow(
+      "初始化令牌无效"
+    );
+    expect(() => requireSetupToken("wrong-token", "required-token")).toThrow(
+      "初始化令牌无效"
+    );
+    expect(() => requireSetupToken("required-token", "required-token")).not.toThrow();
+    expect(() => requireSetupToken(undefined, null)).not.toThrow();
+  });
+
   test("treats an existing admin user as completed setup for legacy databases", async () => {
     const passwordHash = await hashPassword("12345678");
 
@@ -114,6 +126,15 @@ describe("admin setup service", () => {
       { client: setupDb }
     );
     expect(afterAdmin.currentStep).toBe("site-info");
+    await expect(
+      configureAdmin(
+        {
+          username: "attacker",
+          password: "attacker-password",
+        },
+        { client: setupDb }
+      )
+    ).rejects.toThrow("管理员配置已完成");
 
     const [admin] = await setupDb<{
       username: string;

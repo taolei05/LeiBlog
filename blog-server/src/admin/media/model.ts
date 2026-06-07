@@ -14,8 +14,8 @@ export const MediaQuery = t.Object({
   fileFormat: t.Optional(t.String({ maxLength: 20 })),
   createdFrom: t.Optional(t.String()),
   createdTo: t.Optional(t.String()),
-  page: t.Optional(t.String()),
-  pageSize: t.Optional(t.String()),
+  page: t.Optional(t.Numeric({ minimum: 1, maximum: 10_000 })),
+  pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
   sortBy: t.Optional(
     t.Union([
       t.Literal("createdAt"),

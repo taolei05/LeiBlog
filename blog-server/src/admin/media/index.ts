@@ -29,10 +29,13 @@ import {
   renameMedia,
   uploadMedia,
 } from "./service";
-import { authContext } from "../../shared/auth/plugin";
+import { adminContext } from "../../shared/auth/plugin";
+import { requestContext } from "../../shared/http/plugin";
+import { enforceUploadRateLimit } from "../../shared/http/rate-limit";
 
 export const adminMediaModule = new Elysia({ prefix: "/media" })
-  .use(authContext)
+  .use(requestContext)
+  .use(adminContext)
   .get("/folders", ({ currentUser }) => listMediaFolders(currentUser), {
     response: { 200: MediaFolderListResponse },
   })
@@ -59,10 +62,13 @@ export const adminMediaModule = new Elysia({ prefix: "/media" })
   })
   .post(
     "/",
-    async ({ currentUser, body }) => ({
-      ok: true,
-      item: await uploadMedia(currentUser, body),
-    }),
+    async ({ currentUser, body, requestMeta }) => {
+      await enforceUploadRateLimit("admin-media", currentUser.id, requestMeta);
+      return {
+        ok: true,
+        item: await uploadMedia(currentUser, body),
+      };
+    },
     {
       body: UploadMediaBody,
       response: { 200: MediaResponse },

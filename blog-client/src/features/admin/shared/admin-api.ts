@@ -49,6 +49,7 @@ type RequestOptions = {
   body?: FormData | Record<string, unknown>;
   method?: "DELETE" | "GET" | "PATCH" | "POST";
   requireAuth?: boolean;
+  setupToken?: string;
 };
 
 const API_BASE_URL = getAdminApiBaseUrl();
@@ -231,7 +232,7 @@ export function clearAdminSession() {
   window.localStorage.removeItem("leiblog:admin-role");
 }
 
-function buildHeaders(body: RequestOptions["body"], requireAuth: boolean) {
+function buildHeaders(body: RequestOptions["body"], requireAuth: boolean, setupToken?: string) {
   const headers = new Headers();
   const session = readStoredAdminSession();
 
@@ -241,6 +242,9 @@ function buildHeaders(body: RequestOptions["body"], requireAuth: boolean) {
 
   if (requireAuth && session?.token) {
     headers.set("Authorization", `Bearer ${session.token}`);
+  }
+  if (setupToken?.trim()) {
+    headers.set("X-Setup-Token", setupToken.trim());
   }
 
   return headers;
@@ -260,7 +264,7 @@ export async function adminFetch<T>(path: string, options: RequestOptions = {}) 
         : undefined;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     body,
-    headers: buildHeaders(options.body, options.requireAuth ?? true),
+    headers: buildHeaders(options.body, options.requireAuth ?? true, options.setupToken),
     method,
   });
   const payload: unknown = await response.json().catch(() => null);
@@ -354,10 +358,12 @@ export async function uploadSetupAsset({
   file,
   fileName,
   folderSlug,
+  setupToken,
 }: {
   file: File;
   fileName?: string;
   folderSlug: "avatars" | "site";
+  setupToken?: string;
 }) {
   const formData = new FormData();
   formData.set("file", file);
@@ -370,6 +376,7 @@ export async function uploadSetupAsset({
     body: formData,
     method: "POST",
     requireAuth: false,
+    setupToken,
   });
   if (!isRecord(payload)) throw new Error("初始化上传响应格式无效");
 
@@ -382,14 +389,24 @@ export async function uploadSetupAsset({
 export async function completeInitialSetup(input: {
   admin: Record<string, unknown>;
   filing: Record<string, unknown>;
+  setupToken?: string;
   siteConfig: Record<string, unknown>;
   siteInfo: Record<string, unknown>;
 }) {
-  await submitSetupStep("admin", "管理员配置", "/admin/setup/admin", input.admin);
+  await submitSetupStep("admin", "管理员配置", "/admin/setup/admin", input.admin, {
+    requireAuth: false,
+    setupToken: input.setupToken,
+  });
+  const admin = input.admin;
+  const session = await loginAdmin(readString(admin, "username"), readString(admin, "password"));
+  writeAdminSession(session);
+
   await submitSetupStep("site-info", "站点信息", "/admin/setup/site-info", input.siteInfo);
   await submitSetupStep("site-config", "站点配置", "/admin/setup/site-config", input.siteConfig);
   await submitSetupStep("filing", "备案配置", "/admin/setup/filing", input.filing);
   await submitSetupStep("complete", "完成配置", "/admin/setup/complete");
+
+  return session;
 }
 
 export function isSetupSubmitStepError(error: unknown): error is SetupSubmitStepError {
@@ -401,12 +418,14 @@ async function submitSetupStep(
   label: string,
   path: string,
   body?: Record<string, unknown>,
+  options: Pick<RequestOptions, "requireAuth" | "setupToken"> = {},
 ) {
   try {
     await adminFetch(path, {
       body,
       method: "POST",
-      requireAuth: false,
+      requireAuth: options.requireAuth ?? true,
+      setupToken: options.setupToken,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "请求失败";

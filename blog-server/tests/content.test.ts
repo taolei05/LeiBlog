@@ -136,9 +136,9 @@ describe("admin content service", () => {
         categoryId: category.id,
         tagId: tag.id,
         contributorId: contributor.id,
-        isPinned: "true",
-        page: "1",
-        pageSize: "10",
+        isPinned: true,
+        page: 1,
+        pageSize: 10,
       },
       testDb
     );
@@ -147,11 +147,11 @@ describe("admin content service", () => {
     expect(filtered.items[0]?.id).toBe(article.id);
 
     const publicByCategory = await listPublishedArticles(
-      { search: "技术文章", page: "1", pageSize: "10" },
+      { search: "技术文章", page: 1, pageSize: 10 },
       testDb
     );
     const publicByTag = await listPublishedArticles(
-      { search: "react", page: "1", pageSize: "10" },
+      { search: "react", page: 1, pageSize: 10 },
       testDb
     );
     expect(publicByCategory.total).toBe(1);
@@ -179,7 +179,7 @@ describe("admin content service", () => {
     expect(contributors.items[0]?.articleCount).toBe(1);
 
     await deleteArticle(currentAdmin, article.id, testDb);
-    const afterDelete = await listArticles(currentAdmin, { page: "1" }, testDb);
+    const afterDelete = await listArticles(currentAdmin, { page: 1 }, testDb);
     expect(afterDelete.total).toBe(0);
   });
 

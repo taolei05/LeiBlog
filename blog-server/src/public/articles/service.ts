@@ -7,11 +7,11 @@ type SortOrder = "asc" | "desc";
 
 export interface PublicArticleQuery {
   search?: string;
-  page?: string;
-  pageSize?: string;
+  page?: number;
+  pageSize?: number;
   categorySlug?: string;
   tagSlug?: string;
-  isPinned?: string;
+  isPinned?: boolean;
   sortBy?: "createdAt" | "publishedAt" | "title" | "readCount";
   sortOrder?: SortOrder;
 }
@@ -52,27 +52,14 @@ function toIso(value: Date | string | null) {
   return new Date(value).toISOString();
 }
 
-function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
-}
-
-function parseBoolean(value: string | undefined) {
-  if (value === undefined) return null;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return null;
-}
-
 function parseRelations(value: string | RelationItem[]) {
   if (Array.isArray(value)) return value;
   return JSON.parse(value) as RelationItem[];
 }
 
 function toPage(input: PublicArticleQuery) {
-  const page = parsePositiveInt(input.page, 1, 10_000);
-  const pageSize = parsePositiveInt(input.pageSize, 12, 100);
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 12;
   return {
     page,
     pageSize,
@@ -155,7 +142,7 @@ export async function listPublishedArticles(
     pageSize,
     categorySlug: query.categorySlug?.trim().toLowerCase() || null,
     tagSlug: query.tagSlug?.trim().toLowerCase() || null,
-    isPinned: parseBoolean(query.isPinned),
+    isPinned: query.isPinned ?? null,
     sortBy: query.sortBy ?? "publishedAt",
     sortOrder: query.sortOrder ?? "desc",
   };

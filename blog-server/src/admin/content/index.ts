@@ -43,10 +43,10 @@ import {
   updateTag,
 } from "./service";
 import { requireAdmin } from "../../shared/auth";
-import { authContext } from "../../shared/auth/plugin";
+import { adminContext } from "../../shared/auth/plugin";
 
 export const adminContentModule = new Elysia({ prefix: "/content" })
-  .use(authContext)
+  .use(adminContext)
   .get("/categories", ({ currentUser, query }) => listCategories(currentUser, query), {
     query: TaxonomyQuery,
     response: { 200: CategoryListResponse },

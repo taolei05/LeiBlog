@@ -23,8 +23,8 @@ export interface MediaListQuery {
   folderSlug?: string;
   fileType?: MediaType;
   fileFormat?: string;
-  page?: string;
-  pageSize?: string;
+  page?: number;
+  pageSize?: number;
   sortBy?: "createdAt" | "fileName" | "fileSize" | "fileType";
   sortOrder?: SortOrder;
 }
@@ -174,12 +174,6 @@ function toMediaFolder(row: MediaFolderRow) {
   };
 }
 
-function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
-}
-
 function parseDateFilter(value: string | undefined) {
   if (!value?.trim()) return null;
 
@@ -192,8 +186,8 @@ function parseDateFilter(value: string | undefined) {
 }
 
 function toPage(input: MediaListQuery) {
-  const page = parsePositiveInt(input.page, 1, 10_000);
-  const pageSize = parsePositiveInt(input.pageSize, 24, 100);
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 24;
   return {
     page,
     pageSize,

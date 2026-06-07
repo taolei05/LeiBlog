@@ -9,8 +9,8 @@ import {
 import { resolveLoginLocation, type RequestMeta } from "../../auth/service";
 
 export interface PublicCommentQuery {
-  page?: string;
-  pageSize?: string;
+  page?: number;
+  pageSize?: number;
   parentId?: string;
 }
 
@@ -29,15 +29,9 @@ type CommentTarget =
       targetType: "guestbook";
     };
 
-function parsePositiveInt(value: string | undefined, fallback: number, max: number) {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
-  return Math.min(parsed, max);
-}
-
 function toPage(input: PublicCommentQuery) {
-  const page = parsePositiveInt(input.page, 1, 10_000);
-  const pageSize = parsePositiveInt(input.pageSize, 50, 100);
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 50;
   return {
     page,
     pageSize,

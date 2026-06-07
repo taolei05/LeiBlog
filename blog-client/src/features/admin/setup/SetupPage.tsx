@@ -30,7 +30,6 @@ import {
   completeInitialSetup,
   getSetupStatus,
   isSetupSubmitStepError,
-  loginAdmin,
   uploadSetupAsset,
 } from "../shared/admin-api";
 
@@ -81,6 +80,7 @@ type SetupFormState = {
   seoDescription: string;
   seoKeywords: string;
   seoTitle: string;
+  setupToken: string;
   siteDescription: string;
   siteLogoDark: string;
   siteLogoLight: string;
@@ -141,6 +141,7 @@ const initialFormState: SetupFormState = {
   seoDescription: "",
   seoKeywords: "LeiBlog, 个人博客, 工程实践",
   seoTitle: "LeiBlog",
+  setupToken: "",
   siteDescription: "一个内容优先的个人博客。",
   siteLogoDark: "",
   siteLogoLight: "",
@@ -235,6 +236,7 @@ export function SetupPage() {
       file,
       fileName: file.name,
       folderSlug: setupUploadFolders[key],
+      setupToken: nextState.setupToken,
     });
 
     return response.accessUrl;
@@ -253,6 +255,7 @@ export function SetupPage() {
           file,
           fileName: file.name,
           folderSlug: "site",
+          setupToken: formState.setupToken,
         });
 
         return response.accessUrl;
@@ -351,7 +354,7 @@ export function SetupPage() {
 
     try {
       const setupState = await resolveSetupAssets();
-      await completeInitialSetup({
+      const nextSession = await completeInitialSetup({
         admin: {
           avatarUrl: setupState.adminAvatar || undefined,
           description: setupState.adminDescription,
@@ -361,6 +364,7 @@ export function SetupPage() {
           tags: splitList(setupState.adminTags),
           username: setupState.adminUsername,
         },
+        setupToken: setupState.setupToken,
         filing: {
           icpRecords: toSetupFilingPayload(setupState.icpRecords),
           policeNumber: setupState.policeNumber || undefined,
@@ -388,7 +392,6 @@ export function SetupPage() {
           siteName: setupState.siteName,
         },
       });
-      const nextSession = await loginAdmin(setupState.adminUsername, setupState.adminPassword);
       signInAdminSession(nextSession);
       setCompleted(true);
       showSuccessToast(
@@ -474,6 +477,14 @@ export function SetupPage() {
                   onChange={updateField("adminPassword")}
                   type="password"
                   value={formState.adminPassword}
+                />
+                <SetupTextField
+                  autoComplete="off"
+                  description="生产环境部署时由后端 SETUP_TOKEN 提供；开发环境可留空。"
+                  label="初始化令牌"
+                  onChange={updateField("setupToken")}
+                  type="password"
+                  value={formState.setupToken}
                 />
                 <SetupTextField
                   autoComplete="email"

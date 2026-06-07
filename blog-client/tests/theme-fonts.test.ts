@@ -1,17 +1,16 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-const tokensCss = await fetch(new URL("../src/shared/theme/tokens.css", import.meta.url)).then(
-  (response) => response.text(),
+const tokensCss = readFileSync(new URL("../src/shared/theme/tokens.css", import.meta.url), "utf8");
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
 );
-const layoutsCss = await fetch(new URL("../src/shared/theme/layouts.css", import.meta.url)).then(
-  (response) => response.text(),
-);
-const lxgwFont = await fetch(
-  new URL("../public/fonts/LXGWWenKai-Medium.woff2", import.meta.url),
-).then((response) => response.arrayBuffer());
-const mapleMonoFont = await fetch(
+const lxgwFont = readFileSync(new URL("../public/fonts/LXGWWenKai-Medium.woff2", import.meta.url));
+const mapleMonoFont = readFileSync(
   new URL("../public/fonts/MapleMono-Medium.woff2", import.meta.url),
-).then((response) => response.arrayBuffer());
+);
 
 describe("theme fonts", () => {
   it("uses bundled public fonts for global text and frontend code blocks", () => {

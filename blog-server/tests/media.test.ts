@@ -106,7 +106,7 @@ describe("admin media service", () => {
 
     const list = await listMedia(
       currentAdmin,
-      { fileType: "image", fileFormat: "png", search: "封面", page: "1" },
+      { fileType: "image", fileFormat: "png", search: "封面", page: 1 },
       { client: testDb, config }
     );
     expect(list.total).toBe(1);

@@ -13,7 +13,14 @@ export function getHealth() {
   };
 }
 
-export async function getLiveHealth() {
+export function getLiveHealth() {
+  return {
+    ok: true as const,
+    time: toShanghaiISOString(),
+  };
+}
+
+export async function getReadyHealth() {
   const [database, redis] = await Promise.allSettled([pingDb(), pingRedis()]);
   const checks = {
     database: database.status === "fulfilled" && database.value,

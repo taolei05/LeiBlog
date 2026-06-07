@@ -55,9 +55,9 @@ function jsonHeaders(token?: string) {
   };
 }
 
-async function clearAuthRateLimits() {
+async function clearRateLimits() {
   const redis = await getRedis();
-  const keys = await redis.keys("rate:auth-*");
+  const keys = await redis.keys("rate:*");
   if (keys.length > 0) await redis.del(keys);
 }
 
@@ -83,7 +83,7 @@ async function expectRateLimited(response: Response) {
 async function seedRouteData() {
   await clearSiteCache();
   await clearAllArticleCache();
-  await clearAuthRateLimits();
+  await clearRateLimits();
 
   await db`
     INSERT INTO site_info (
@@ -209,6 +209,17 @@ async function main() {
     })),
     404
   );
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/admin/setup/site-info", {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        establishedAt: new Date().toISOString(),
+        siteName: "Unauthorized setup change",
+      }),
+    })),
+    401
+  );
 
   const loginHeaders = {
     ...jsonHeaders(),
@@ -237,6 +248,7 @@ async function main() {
       }),
     }))
   );
+  await clearRateLimits();
 
   const ipLoginHeaders = {
     ...jsonHeaders(),
@@ -339,6 +351,17 @@ async function main() {
     200
   );
 
+  const emailChangeCodeRequest = () =>
+    app.handle(new Request("http://localhost/api/me/email-change-code", {
+      method: "POST",
+      headers: jsonHeaders(userAuth.token),
+      body: JSON.stringify({
+        email: "route-user-next@example.com",
+      }),
+    }));
+  await expectJson(await emailChangeCodeRequest(), 200);
+  await expectRateLimited(await emailChangeCodeRequest());
+
   await expectJson(
     await app.handle(new Request("http://localhost/api/admin/content/articles")),
     401
@@ -358,6 +381,14 @@ async function main() {
   );
   assert(adminArticles.total === 1, "管理员文章列表应返回文章");
 
+  const apiKeyEmailCodeRequest = () =>
+    app.handle(new Request("http://localhost/api/admin/system/api-keys/email-code", {
+      method: "POST",
+      headers: jsonHeaders(adminAuth.token),
+    }));
+  await expectJson(await apiKeyEmailCodeRequest(), 422);
+  await expectRateLimited(await apiKeyEmailCodeRequest());
+
   await expectJson(
     await app.handle(new Request("http://localhost/api/admin/users/", {
       method: "POST",
@@ -371,34 +402,36 @@ async function main() {
     422
   );
 
-  await expectJson(
-    await app.handle(new Request(`http://localhost/api/public/articles/${seeded.article.id}/comments`, {
+  const commentRequest = (content: string) =>
+    app.handle(new Request(`http://localhost/api/public/articles/${seeded.article.id}/comments`, {
       method: "POST",
       headers: jsonHeaders(userAuth.token),
-      body: JSON.stringify({ content: "第二条公开评论" }),
-    })),
-    200
-  );
+      body: JSON.stringify({ content }),
+    }));
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await expectJson(await commentRequest(`公开评论 ${attempt}`), 200);
+  }
+  await expectRateLimited(await commentRequest("超限公开评论"));
 
   const detailAfterComment = await expectJson<{ item: ArticleBody }>(
     await app.handle(new Request("http://localhost/api/public/articles/slug/route-post")),
     200
   );
-  assert(detailAfterComment.item.commentCount === 2, "评论后文章详情缓存应刷新");
+  assert(detailAfterComment.item.commentCount === 11, "评论后文章详情缓存应刷新");
 }
 
 try {
   await main();
   await clearSiteCache();
   await clearAllArticleCache();
-  await clearAuthRateLimits();
+  await clearRateLimits();
   await closeRedis();
   await db.close({ timeout: 1 });
 } catch (error) {
   console.error(error);
   await clearSiteCache();
   await clearAllArticleCache();
-  await clearAuthRateLimits();
+  await clearRateLimits();
   await closeRedis();
   await db.close({ timeout: 1 });
   process.exit(1);

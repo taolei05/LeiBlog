@@ -9,6 +9,11 @@ export const HealthResponse = t.Object({
 });
 
 export const LiveHealthResponse = t.Object({
+  ok: t.Literal(true),
+  time: t.String(),
+});
+
+export const ReadyHealthResponse = t.Object({
   ok: t.Boolean(),
   checks: t.Object({
     database: t.Boolean(),

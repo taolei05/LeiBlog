@@ -15,12 +15,17 @@ import {
   listGuestbookComments,
   listPublicComments,
 } from "./service";
-import { getRequestMeta } from "../../auth/service";
 import { uploadCommentImage } from "../../admin/media/service";
 import { authContext } from "../../shared/auth/plugin";
 import { db } from "../../shared/db";
+import { requestContext } from "../../shared/http/plugin";
+import {
+  enforceCommentWriteRateLimit,
+  enforceUploadRateLimit,
+} from "../../shared/http/rate-limit";
 
 export const publicCommentsModule = new Elysia()
+  .use(requestContext)
   .get(
     "/articles/:articleId/comments",
     ({ params, query }) => listPublicComments(params.articleId, query),
@@ -41,7 +46,8 @@ export const publicCommentsModule = new Elysia()
   .use(authContext)
   .post(
     "/comments/images",
-    async ({ currentUser, body }) => {
+    async ({ currentUser, body, requestMeta }) => {
+      await enforceUploadRateLimit("comment-image", currentUser.id, requestMeta);
       const item = await uploadCommentImage(currentUser.id, body);
 
       return {
@@ -56,15 +62,11 @@ export const publicCommentsModule = new Elysia()
   )
   .post(
     "/articles/:articleId/comments",
-    async ({ currentUser, params, body, headers, request, server }) => {
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-
+    async ({ currentUser, params, body, requestMeta }) => {
+      await enforceCommentWriteRateLimit(currentUser.id, requestMeta);
       return {
         ok: true,
-        item: await createPublicComment(currentUser, params.articleId, body, db, meta),
+        item: await createPublicComment(currentUser, params.articleId, body, db, requestMeta),
       };
     },
     {
@@ -75,15 +77,11 @@ export const publicCommentsModule = new Elysia()
   )
   .post(
     "/guestbook/comments",
-    async ({ currentUser, body, headers, request, server }) => {
-      const meta = getRequestMeta({
-        headers,
-        requestIp: server?.requestIP(request)?.address,
-      });
-
+    async ({ currentUser, body, requestMeta }) => {
+      await enforceCommentWriteRateLimit(currentUser.id, requestMeta);
       return {
         ok: true,
-        item: await createGuestbookComment(currentUser, body, db, meta),
+        item: await createGuestbookComment(currentUser, body, db, requestMeta),
       };
     },
     {

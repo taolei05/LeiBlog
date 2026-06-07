@@ -27,10 +27,13 @@ import {
   updateSystemSiteConfig,
   updateSystemSiteInfo,
 } from "./service";
-import { authContext } from "../../shared/auth/plugin";
+import { adminContext } from "../../shared/auth/plugin";
+import { requestContext } from "../../shared/http/plugin";
+import { enforceApiKeyEmailCodeRateLimit } from "../../shared/http/rate-limit";
 
 export const adminSystemModule = new Elysia({ prefix: "/system" })
-  .use(authContext)
+  .use(requestContext)
+  .use(adminContext)
   .get("/site-info", ({ currentUser }) => getSystemSiteInfo(currentUser), {
     response: { 200: SystemSiteInfoResponse },
   })
@@ -56,7 +59,10 @@ export const adminSystemModule = new Elysia({ prefix: "/system" })
     body: SystemFilingBody,
     response: { 200: SystemFilingResponse },
   })
-  .post("/api-keys/email-code", ({ currentUser }) => createApiKeyRevealCode(currentUser), {
+  .post("/api-keys/email-code", async ({ currentUser, requestMeta }) => {
+    await enforceApiKeyEmailCodeRateLimit(currentUser.id, requestMeta);
+    return createApiKeyRevealCode(currentUser);
+  }, {
     response: { 200: ApiKeyEmailCodeResponse },
   })
   .post("/api-keys/reveal", ({ currentUser, body }) => revealSystemApiKeys(currentUser, body), {

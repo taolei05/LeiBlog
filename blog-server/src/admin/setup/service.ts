@@ -3,8 +3,10 @@ import type { IcpFilingRecordInput } from "../../shared/site-filing";
 import { hashPassword } from "../../shared/auth";
 import { clearSiteCache } from "../../shared/cache/content";
 import { encryptSecret } from "../../shared/crypto";
+import { appConfig } from "../../shared/config";
 import { db, withTransaction } from "../../shared/db";
 import { conflict, validationError } from "../../shared/errors";
+import { forbidden } from "../../shared/errors";
 import { cleanIcpFilingRecords } from "../../shared/site-filing";
 import { uploadSetupMedia } from "../media/service";
 
@@ -85,6 +87,16 @@ const STEPS: Array<{ key: SetupStepKey; title: string }> = [
   { key: "filing", title: "站点备案配置" },
   { key: "complete", title: "完成配置" },
 ];
+
+export function requireSetupToken(
+  providedToken: string | undefined,
+  configuredToken = appConfig.setupToken
+) {
+  if (!configuredToken) return;
+  if (providedToken !== configuredToken) {
+    throw forbidden("初始化令牌无效");
+  }
+}
 
 function cleanOptional(value: string | undefined) {
   const trimmed = value?.trim();
@@ -169,6 +181,17 @@ async function ensureSetupOpen(client: DbClient) {
   return state;
 }
 
+async function ensureSetupStep(client: DbClient, expectedStep: SetupStepKey) {
+  const state = await ensureSetupOpen(client);
+  if (state.current_step !== expectedStep) {
+    throw conflict(
+      expectedStep === "admin" ? "管理员配置已完成" : "首次配置步骤不正确"
+    );
+  }
+
+  return state;
+}
+
 async function setCurrentStep(client: DbClient, step: SetupStepKey) {
   await client`
     UPDATE setup_state
@@ -208,45 +231,23 @@ export async function configureAdmin(
   const tags = cleanList(input.tags);
 
   await withTransaction(async (tx) => {
-    await ensureSetupOpen(tx);
+    await ensureSetupStep(tx, "admin");
 
-    const [admin] = await tx<{ id: string }[]>`
-      SELECT id
-      FROM users
-      WHERE role = 'admin'
-      ORDER BY created_at
-      LIMIT 1
+    await tx`
+      INSERT INTO users (
+        username, password_hash, email, name, tags, description, avatar_url, role
+      )
+      VALUES (
+        ${input.username.trim()},
+        ${passwordHash},
+        ${cleanOptional(input.email)},
+        ${cleanOptional(input.name)},
+        ${tx.array(tags, "TEXT")},
+        ${input.description?.trim() ?? ""},
+        ${cleanOptional(input.avatarUrl)},
+        'admin'
+      )
     `;
-
-    if (admin) {
-      await tx`
-        UPDATE users
-        SET username = ${input.username.trim()},
-            password_hash = ${passwordHash},
-            email = ${cleanOptional(input.email)},
-            name = ${cleanOptional(input.name)},
-            tags = ${tx.array(tags, "TEXT")},
-            description = ${input.description?.trim() ?? ""},
-            avatar_url = ${cleanOptional(input.avatarUrl)}
-        WHERE id = ${admin.id}
-      `;
-    } else {
-      await tx`
-        INSERT INTO users (
-          username, password_hash, email, name, tags, description, avatar_url, role
-        )
-        VALUES (
-          ${input.username.trim()},
-          ${passwordHash},
-          ${cleanOptional(input.email)},
-          ${cleanOptional(input.name)},
-          ${tx.array(tags, "TEXT")},
-          ${input.description?.trim() ?? ""},
-          ${cleanOptional(input.avatarUrl)},
-          'admin'
-        )
-      `;
-    }
 
     await setCurrentStep(tx, "site-info");
   }, client);

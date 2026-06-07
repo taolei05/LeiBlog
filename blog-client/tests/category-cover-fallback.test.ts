@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-const layoutsCss = await fetch(new URL("../src/shared/theme/layouts.css", import.meta.url)).then(
-  (response) => response.text(),
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
 );
 
 describe("category cover fallback", () => {

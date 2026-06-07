@@ -126,7 +126,7 @@ describe("comment services", () => {
 
     const publicList = await listPublicComments(
       articleId,
-      { page: "1", pageSize: "10" },
+      { page: 1, pageSize: 10 },
       testDb
     );
     expect(publicList.total).toBe(2);
@@ -144,14 +144,14 @@ describe("comment services", () => {
 
     const afterReview = await listPublicComments(
       articleId,
-      { page: "1", pageSize: "10" },
+      { page: 1, pageSize: 10 },
       testDb
     );
     expect(afterReview.total).toBe(1);
 
     const adminList = await listAdminComments(
       currentAdmin,
-      { status: "rejected", search: "更新", page: "1", pageSize: "10" },
+      { status: "rejected", search: "更新", page: 1, pageSize: 10 },
       testDb
     );
     expect(adminList.total).toBe(1);
@@ -160,7 +160,7 @@ describe("comment services", () => {
     await deleteMyComment(currentUser, reply.id, testDb);
     const afterUserDelete = await listPublicComments(
       articleId,
-      { page: "1", pageSize: "10" },
+      { page: 1, pageSize: 10 },
       testDb
     );
     expect(afterUserDelete.total).toBe(0);
@@ -168,7 +168,7 @@ describe("comment services", () => {
     await deleteCommentByAdmin(currentAdmin, root.id, testDb);
     const withDeleted = await listAdminComments(
       currentAdmin,
-      { includeDeleted: "true", page: "1", pageSize: "10" },
+      { includeDeleted: true, page: 1, pageSize: 10 },
       testDb
     );
     expect(withDeleted.total).toBe(2);
@@ -185,21 +185,21 @@ describe("comment services", () => {
     expect(message.articleId).toBeNull();
 
     const guestbookList = await listGuestbookComments(
-      { page: "1", pageSize: "10" },
+      { page: 1, pageSize: 10 },
       testDb
     );
     expect(guestbookList.items.some((item) => item.id === message.id)).toBe(true);
 
     const articleList = await listPublicComments(
       articleId,
-      { page: "1", pageSize: "50" },
+      { page: 1, pageSize: 50 },
       testDb
     );
     expect(articleList.items.some((item) => item.id === message.id)).toBe(false);
 
     const adminList = await listAdminComments(
       currentAdmin,
-      { targetType: "guestbook", page: "1", pageSize: "10" },
+      { targetType: "guestbook", page: 1, pageSize: 10 },
       testDb
     );
     expect(adminList.items.some((item) => item.id === message.id)).toBe(true);

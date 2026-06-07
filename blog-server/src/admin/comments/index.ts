@@ -15,10 +15,10 @@ import {
   reviewComment,
 } from "./service";
 import { requireAdmin } from "../../shared/auth";
-import { authContext } from "../../shared/auth/plugin";
+import { adminContext } from "../../shared/auth/plugin";
 
 export const adminCommentsModule = new Elysia({ prefix: "/comments" })
-  .use(authContext)
+  .use(adminContext)
   .get("/", ({ currentUser, query }) => listAdminComments(currentUser, query), {
     query: AdminCommentQuery,
     response: { 200: CommentListResponse },

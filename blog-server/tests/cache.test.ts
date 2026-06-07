@@ -149,7 +149,7 @@ describe("cache layer", () => {
     expect(refreshedDetail.commentCount).toBe(1);
 
     const list = await listPublishedArticles(
-      { search: article.slug, page: "1", pageSize: "10" },
+      { search: article.slug, page: 1, pageSize: 10 },
       testDb
     );
     expect(list.total).toBe(1);

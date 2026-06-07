@@ -5,8 +5,8 @@ import { UserProfileSchema, UserRoleSchema } from "../../shared/types/user";
 export const UserListQuery = t.Object({
   search: t.Optional(t.String({ maxLength: 120 })),
   role: t.Optional(UserRoleSchema),
-  page: t.Optional(t.String()),
-  pageSize: t.Optional(t.String()),
+  page: t.Optional(t.Numeric({ minimum: 1, maximum: 10_000 })),
+  pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
   sortBy: t.Optional(
     t.Union([
       t.Literal("createdAt"),

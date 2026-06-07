@@ -12,9 +12,9 @@ export const AdminCommentQuery = t.Object({
   articleId: t.Optional(t.String()),
   userId: t.Optional(t.String()),
   status: t.Optional(CommentStatusSchema),
-  includeDeleted: t.Optional(t.String()),
-  page: t.Optional(t.String()),
-  pageSize: t.Optional(t.String()),
+  includeDeleted: t.Optional(t.Boolean()),
+  page: t.Optional(t.Numeric({ minimum: 1, maximum: 10_000 })),
+  pageSize: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
   sortBy: t.Optional(t.Union([t.Literal("createdAt"), t.Literal("updatedAt")])),
   sortOrder: t.Optional(t.Union([t.Literal("asc"), t.Literal("desc")])),
 });

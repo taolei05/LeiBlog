@@ -17,10 +17,10 @@ import {
   updateUserByAdmin,
 } from "./service";
 import { requireAdmin } from "../../shared/auth";
-import { authContext } from "../../shared/auth/plugin";
+import { adminContext } from "../../shared/auth/plugin";
 
 export const adminUsersModule = new Elysia({ prefix: "/users" })
-  .use(authContext)
+  .use(adminContext)
   .get("/", ({ currentUser, query }) => listUsers(currentUser, query), {
     query: UserListQuery,
     response: {

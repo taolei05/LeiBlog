@@ -1,4 +1,20 @@
-import { status } from "elysia";
+import { status, t } from "elysia";
+
+export const ErrorResponseSchema = t.Object({
+  ok: t.Literal(false),
+  code: t.String(),
+  message: t.String(),
+  details: t.Optional(t.Unknown()),
+});
+
+export const RateLimitErrorResponseSchema = t.Object({
+  ok: t.Literal(false),
+  code: t.Literal("RATE_LIMITED"),
+  message: t.String(),
+  details: t.Object({
+    retryAfterSeconds: t.Number(),
+  }),
+});
 
 export interface ErrorBody {
   ok: false;

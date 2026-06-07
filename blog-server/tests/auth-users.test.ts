@@ -74,6 +74,7 @@ describe("auth and user services", () => {
           "x-forwarded-for": "invalid, 203.0.113.9, 10.0.0.2",
         },
         requestIp: "127.0.0.1",
+        trustedProxyIps: ["127.0.0.1"],
       })
     ).toEqual({
       ip: "203.0.113.9",
@@ -84,8 +85,10 @@ describe("auth and user services", () => {
       getRequestMeta({
         headers: {
           "user-agent": "direct-browser",
+          "x-forwarded-for": "203.0.113.10",
         },
         requestIp: "192.168.3.125",
+        trustedProxyIps: ["127.0.0.1"],
       })
     ).toEqual({
       ip: "192.168.3.125",
@@ -351,7 +354,7 @@ describe("auth and user services", () => {
 
     const list = await listUsers(
       currentAdmin,
-      { role: "user", search: "managed-reader", page: "1", pageSize: "10" },
+      { role: "user", search: "managed-reader", page: 1, pageSize: 10 },
       testDb
     );
     expect(list.total).toBe(1);
@@ -390,7 +393,7 @@ describe("auth and user services", () => {
 
     const afterDelete = await listUsers(
       currentAdmin,
-      { search: "managed-reader", page: "1", pageSize: "10" },
+      { search: "managed-reader", page: 1, pageSize: 10 },
       testDb
     );
     expect(afterDelete.total).toBe(0);

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -10,8 +12,9 @@ import {
   mdxJsxComponentDescriptors,
 } from "../src/shared/mdx/mdxWhitelist";
 
-const layoutsCss = await fetch(new URL("../src/shared/theme/layouts.css", import.meta.url)).then(
-  (response) => response.text(),
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
 );
 
 describe("MDX rendering safety", () => {

@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import layoutsCss from "../src/shared/theme/layouts.css?raw";
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
+);
 
 describe("admin article editor layout", () => {
   it("keeps taxonomy select icons separated from selected text", () => {

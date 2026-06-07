@@ -12,6 +12,9 @@ export interface AppConfig {
   jwtSecret: string;
   appSecretKey: string;
   corsOrigins: string[];
+  openapiEnabled: boolean;
+  setupToken: string | null;
+  trustedProxyIps: string[];
   uploadsDir: string;
   uploadsUrlPrefix: string;
   uploadMaxFileSizeBytes: number;
@@ -67,6 +70,14 @@ function readNumberAliases(env: EnvSource, keys: string[], fallback: number) {
   return fallback;
 }
 
+function readBoolean(env: EnvSource, key: string, fallback: boolean) {
+  const raw = env[key]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`Invalid boolean environment variable: ${key}`);
+}
+
 function readList(env: EnvSource, key: string) {
   return (env[key] ?? "")
     .split(",")
@@ -93,10 +104,18 @@ export function loadConfig(env: EnvSource = Bun.env): AppConfig {
   const appEnv = readEnv(env);
   const appSecretKey = readString(env, "APP_SECRET_KEY", DEV_SECRET);
   const jwtSecret = readString(env, "JWT_SECRET", appSecretKey);
+  const corsOrigins = readList(env, "CORS_ORIGINS");
+  const openapiEnabled = readBoolean(env, "OPENAPI_ENABLED", appEnv !== "production");
+  const setupToken = env.SETUP_TOKEN?.trim() || null;
+  const trustedProxyIps = readList(env, "TRUSTED_PROXY_IPS");
 
   if (appEnv === "production") {
     ensureProductionSecret("APP_SECRET_KEY", appSecretKey);
     ensureProductionSecret("JWT_SECRET", jwtSecret);
+    if (!setupToken) throw new Error("SETUP_TOKEN must be configured in production");
+    if (corsOrigins.length === 0) {
+      throw new Error("CORS_ORIGINS must be configured in production");
+    }
   }
 
   return {
@@ -108,7 +127,10 @@ export function loadConfig(env: EnvSource = Bun.env): AppConfig {
     redisUrl: readString(env, "REDIS_URL", DEFAULT_REDIS_URL),
     jwtSecret,
     appSecretKey,
-    corsOrigins: readList(env, "CORS_ORIGINS"),
+    corsOrigins,
+    openapiEnabled,
+    setupToken,
+    trustedProxyIps,
     uploadsDir: readString(env, "UPLOADS_DIR", "uploads"),
     uploadsUrlPrefix: readString(env, "UPLOADS_URL_PREFIX", "/uploads"),
     uploadMaxFileSizeBytes: readNumber(env, "UPLOAD_MAX_FILE_SIZE_BYTES", 50 * 1024 * 1024),

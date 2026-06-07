@@ -27,6 +27,7 @@ export interface RequestMeta {
 export interface RequestMetaInput {
   headers: Record<string, string | undefined>;
   requestIp?: string | null;
+  trustedProxyIps?: string[];
 }
 
 export interface AuthUserInput {
@@ -380,10 +381,12 @@ export async function resolveLoginLocation(meta: RequestMeta, client: DbClient) 
 export function getRequestMeta({
   headers,
   requestIp,
+  trustedProxyIps = appConfig.trustedProxyIps,
 }: RequestMetaInput): RequestMeta {
-  const forwarded = readForwardedIp(headers["x-forwarded-for"]);
-  const realIp = normalizeIp(headers["x-real-ip"]);
   const directIp = normalizeIp(requestIp);
+  const trustsProxy = directIp !== null && trustedProxyIps.includes(directIp);
+  const forwarded = trustsProxy ? readForwardedIp(headers["x-forwarded-for"]) : null;
+  const realIp = trustsProxy ? normalizeIp(headers["x-real-ip"]) : null;
 
   return {
     ip: forwarded ?? realIp ?? directIp,
