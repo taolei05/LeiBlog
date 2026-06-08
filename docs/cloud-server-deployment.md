@@ -350,7 +350,7 @@ curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deplo
 sudo grep '^TRUSTED_PROXY_IPS=' /var/leiblog/.env
 ```
 
-默认应返回 `TRUSTED_PROXY_IPS=172.16.0.0/12`。这个配置用于避免后端把 Docker Nginx 内网 IP 当成管理员真实登录 IP。
+默认应返回 `TRUSTED_PROXY_IPS=172.16.0.0/12`。最新脚本会在 `update` 时自动补齐这个变量；这个配置用于避免后端把 Docker Nginx 内网 IP 当成管理员真实登录 IP。
 
 ### 端口 80 被占用
 

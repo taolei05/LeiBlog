@@ -209,6 +209,16 @@ EOF
   chmod 600 "${ENV_FILE}"
 }
 
+ensure_env_defaults() {
+  [[ -f "${ENV_FILE}" ]] || return
+
+  if ! grep -q '^TRUSTED_PROXY_IPS=' "${ENV_FILE}"; then
+    info "补充环境变量：TRUSTED_PROXY_IPS=172.16.0.0/12"
+    printf '\nTRUSTED_PROXY_IPS=172.16.0.0/12\n' >>"${ENV_FILE}"
+    chmod 600 "${ENV_FILE}"
+  fi
+}
+
 load_env_file() {
   [[ -f "${ENV_FILE}" ]] || die "未找到环境变量文件：${ENV_FILE}"
   set -a
@@ -408,6 +418,7 @@ install_leiblog() {
   ensure_compose
   prepare_directories
   write_env_if_missing
+  ensure_env_defaults
   fetch_source
   write_runtime_files
   write_compose_file
@@ -426,6 +437,7 @@ update_leiblog() {
   ensure_compose
   prepare_directories
   [[ -f "${ENV_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
+  ensure_env_defaults
   fetch_source
   write_runtime_files
   write_compose_file
