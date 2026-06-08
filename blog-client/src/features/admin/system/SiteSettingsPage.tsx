@@ -902,6 +902,7 @@ export function SiteSettingsPage() {
               value={siteInfo.homeSlogan}
             />
             <MediaAssetField
+              canRemoveValue
               folderSlug="site"
               label="浅色 Logo"
               localFile={logoLightFile}
@@ -910,6 +911,7 @@ export function SiteSettingsPage() {
               value={siteInfo.logoLightUrl}
             />
             <MediaAssetField
+              canRemoveValue
               folderSlug="site"
               label="深色 Logo"
               localFile={logoDarkFile}
@@ -919,6 +921,7 @@ export function SiteSettingsPage() {
             />
             <MediaAssetField
               accept="image/png,image/svg+xml,image/webp,image/x-icon"
+              canRemoveValue
               folderSlug="site"
               label="favicon"
               localFile={faviconFile}
@@ -937,7 +940,7 @@ export function SiteSettingsPage() {
               type="datetime-local"
               value={siteInfo.establishedAt}
             />
-            <Button isDisabled={isSaving} type="submit">
+            <Button className="settings-form__submit" isDisabled={isSaving} type="submit">
               <AppIcon name="save" />
               保存站点信息
             </Button>
@@ -1057,7 +1060,7 @@ export function SiteSettingsPage() {
                 <span>关闭后前台不再接收新评论。</span>
               </Switch.Content>
             </Switch>
-            <Button isDisabled={isSaving} type="submit">
+            <Button className="settings-form__submit" isDisabled={isSaving} type="submit">
               <AppIcon name="save" />
               保存站点配置
             </Button>
@@ -1116,7 +1119,7 @@ export function SiteSettingsPage() {
               type="url"
               value={filing.policeUrl}
             />
-            <Button isDisabled={isSaving} type="submit">
+            <Button className="settings-form__submit" isDisabled={isSaving} type="submit">
               <AppIcon name="save" />
               保存备案配置
             </Button>
@@ -1265,7 +1268,7 @@ export function SiteSettingsPage() {
         }}
         variant="blur"
       >
-        <Modal.Container placement="auto" size="sm">
+        <Modal.Container placement="center" size="sm">
           <Modal.Dialog>
             <div className="admin-form-modal">
               <Modal.CloseTrigger />

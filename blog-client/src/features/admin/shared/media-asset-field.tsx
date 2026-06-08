@@ -1,4 +1,5 @@
 import {
+  AlertDialog,
   Button,
   Card,
   Description,
@@ -27,6 +28,7 @@ type MediaAssetItem = {
 
 type MediaAssetFieldProps = {
   accept?: string;
+  canRemoveValue?: boolean;
   folderSlug: string;
   icon?: AppIconName;
   label: string;
@@ -50,12 +52,25 @@ type MultiMediaAssetFieldProps = {
   values: string[];
 };
 
+type PendingCoverRemoval =
+  | {
+      index: number;
+      kind: "local";
+      name: string;
+    }
+  | {
+      index: number;
+      kind: "stored";
+      name: string;
+    };
+
 function cleanAssetValues(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 export function MediaAssetField({
   accept = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml",
+  canRemoveValue = false,
   folderSlug,
   icon = "image",
   label,
@@ -85,6 +100,7 @@ export function MediaAssetField({
     return null;
   }, [folderSlug]);
   const previewUrl = localPreviewUrl ?? resolveApiAssetUrl(value);
+  const hasStoredValue = value.trim().length > 0;
 
   useEffect(() => {
     if (!localFile) {
@@ -206,6 +222,21 @@ export function MediaAssetField({
             重新编辑
           </Button>
         ) : null}
+        {canRemoveValue && hasStoredValue ? (
+          <Button
+            onPress={() => {
+              onChange("");
+              onLocalFileChange(null);
+              showOperationToast(`已移除${label}`, "success");
+            }}
+            size="sm"
+            type="button"
+            variant="danger-soft"
+          >
+            <AppIcon name="trash" />
+            移除当前图片
+          </Button>
+        ) : null}
       </div>
       <p className="media-asset-field__hint">
         {localFile ? `待上传到「${folderLabel}」：${localFile.name}` : `目标文件夹：${folderLabel}`}
@@ -296,6 +327,7 @@ export function MultiMediaAssetField({
   const [items, setItems] = useState<MediaAssetItem[]>([]);
   const [localPreviewUrls, setLocalPreviewUrls] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
+  const [pendingRemoval, setPendingRemoval] = useState<PendingCoverRemoval | null>(null);
   const cleanValues = useMemo(() => cleanAssetValues(values), [values]);
   const itemCount = cleanValues.length + localFiles.length;
   const folderLabel = useMemo(() => {
@@ -380,6 +412,19 @@ export function MultiMediaAssetField({
 
   function removeLocalFile(index: number) {
     onLocalFilesChange(localFiles.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function confirmPendingRemoval() {
+    if (!pendingRemoval) return;
+
+    if (pendingRemoval.kind === "stored") {
+      removeValue(pendingRemoval.index);
+    } else {
+      removeLocalFile(pendingRemoval.index);
+    }
+
+    showOperationToast(`已移除${pendingRemoval.name}`, "success");
+    setPendingRemoval(null);
   }
 
   return (
@@ -483,7 +528,13 @@ export function MultiMediaAssetField({
                   下移
                 </Button>
                 <Button
-                  onPress={() => removeValue(index)}
+                  onPress={() =>
+                    setPendingRemoval({
+                      index,
+                      kind: "stored",
+                      name: index === 0 ? "主封面" : `封面 ${index + 1}`,
+                    })
+                  }
                   size="sm"
                   type="button"
                   variant="danger-soft"
@@ -506,7 +557,13 @@ export function MultiMediaAssetField({
               </div>
               <div className="multi-media-asset-card__actions">
                 <Button
-                  onPress={() => removeLocalFile(index)}
+                  onPress={() =>
+                    setPendingRemoval({
+                      index,
+                      kind: "local",
+                      name: `待上传封面 ${index + 1}`,
+                    })
+                  }
                   size="sm"
                   type="button"
                   variant="danger-soft"
@@ -569,6 +626,38 @@ export function MultiMediaAssetField({
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
+      {pendingRemoval ? (
+        <AlertDialog>
+          <AlertDialog.Backdrop
+            isOpen
+            onOpenChange={(isOpen) => {
+              if (isOpen) return;
+              setPendingRemoval(null);
+            }}
+          >
+            <AlertDialog.Container placement="center" size="sm">
+              <AlertDialog.Dialog>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>确认移除封面？</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>将从站点信息中移除「{pendingRemoval.name}」，保存后前台首页不再使用它。</p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    取消
+                  </Button>
+                  <Button onPress={confirmPendingRemoval} slot="close" variant="danger-soft">
+                    确认移除
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      ) : null}
     </div>
   );
 }
