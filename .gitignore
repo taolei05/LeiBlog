@@ -1,5 +1,6 @@
 # Local documentation and references
-docs/
+docs/superpowers/
+docs/.DS_Store
 
 # Dependencies
 node_modules/
