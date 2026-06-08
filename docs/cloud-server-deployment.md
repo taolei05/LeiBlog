@@ -171,6 +171,7 @@ sudo sed -n '1,120p' /var/leiblog/.env
 - `JWT_SECRET`：JWT 签名密钥
 - `SETUP_TOKEN`：首次初始化后台时使用
 - `CORS_ORIGINS`：允许跨域的来源
+- `TRUSTED_PROXY_IPS`：可信反向代理 IP 或 CIDR；脚本默认 `172.16.0.0/12`，用于让后端信任 Docker Nginx 转发的真实访客 IP
 
 注意事项：
 
@@ -333,6 +334,23 @@ sudo docker compose -p leiblog -f /var/leiblog/docker-compose.yml logs --tail=20
 sudo docker compose -p leiblog -f /var/leiblog/docker-compose.yml logs --tail=200 postgres
 sudo docker compose -p leiblog -f /var/leiblog/docker-compose.yml logs --tail=200 redis
 ```
+
+### IPGeolocation API Key 测试失败
+
+如果 Resend 和 DeepL 测试正常，但 IPGeolocation 测试失败，先更新到最新部署脚本和后端镜像：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+  | sudo bash -s -- update
+```
+
+更新后确认 `.env` 里有可信代理配置：
+
+```bash
+sudo grep '^TRUSTED_PROXY_IPS=' /var/leiblog/.env
+```
+
+默认应返回 `TRUSTED_PROXY_IPS=172.16.0.0/12`。这个配置用于避免后端把 Docker Nginx 内网 IP 当成管理员真实登录 IP。
 
 ### 端口 80 被占用
 

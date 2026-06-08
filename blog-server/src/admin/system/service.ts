@@ -3,6 +3,7 @@ import type { AuthUser } from "../../shared/auth";
 import {
   consumeEmailCode,
   createEmailCode,
+  isPrivateIp,
   renderNoticeEmailHtml,
   renderVerificationCodeEmailHtml,
 } from "../../auth/service";
@@ -597,7 +598,7 @@ export async function testIpGeolocationIntegration(
   const apiUrl = new URL("https://api.ipgeolocation.io/ipgeo");
   apiUrl.searchParams.set("apiKey", stored.ipgeolocationApiKey);
   apiUrl.searchParams.set("lang", "cn");
-  if (row?.last_login_ip && row.last_login_ip !== "127.0.0.1" && row.last_login_ip !== "::1") {
+  if (row?.last_login_ip && !isPrivateIp(row.last_login_ip)) {
     apiUrl.searchParams.set("ip", row.last_login_ip);
   }
   const response = await fetch(apiUrl);

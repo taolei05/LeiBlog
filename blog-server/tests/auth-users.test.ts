@@ -20,6 +20,7 @@ import {
   listUsers,
   updateUserByAdmin,
 } from "../src/admin/users/service";
+import { testIpGeolocationIntegration } from "../src/admin/system/service";
 import { hashPassword, verifyPassword } from "../src/shared/auth";
 import { encryptSecret } from "../src/shared/crypto";
 import {
@@ -93,6 +94,20 @@ describe("auth and user services", () => {
     ).toEqual({
       ip: "192.168.3.125",
       userAgent: "direct-browser",
+    });
+
+    expect(
+      getRequestMeta({
+        headers: {
+          "user-agent": "docker-proxy-browser",
+          "x-forwarded-for": "8.8.8.8",
+        },
+        requestIp: "172.18.0.4",
+        trustedProxyIps: ["172.16.0.0/12"],
+      })
+    ).toEqual({
+      ip: "8.8.8.8",
+      userAgent: "docker-proxy-browser",
     });
   });
 
@@ -313,6 +328,80 @@ describe("auth and user services", () => {
       city: "上海",
       country_name: "中国",
     });
+  });
+
+  test("does not send private last login IP when testing IPGeolocation key", async () => {
+    const [admin] = await testDb<{ id: string }[]>`
+      INSERT INTO users (
+        username, password_hash, email, role, last_login_ip, last_login_device
+      )
+      VALUES (
+        'geo-admin-private',
+        ${await hashPassword("geo-admin-private-password")},
+        'geo-admin-private@example.com',
+        'admin',
+        '172.18.0.4'::inet,
+        ${JSON.stringify({ userAgent: "nginx-proxy" })}::jsonb
+      )
+      RETURNING id
+    `;
+    const encryptedApiKey = encryptSecret("geo-secret");
+
+    await testDb`
+      INSERT INTO site_config (id, ipgeolocation_api_key_encrypted)
+      VALUES (1, ${JSON.stringify(encryptedApiKey)}::jsonb)
+      ON CONFLICT (id) DO UPDATE
+      SET ipgeolocation_api_key_encrypted = EXCLUDED.ipgeolocation_api_key_encrypted
+    `;
+
+    const requestedUrls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    const locationFetch = async (input: RequestInfo | URL) => {
+      const url = input instanceof URL ? input.toString() : String(input);
+      requestedUrls.push(url);
+
+      const requestUrl = new URL(url);
+      if (requestUrl.searchParams.has("ip")) {
+        return new Response("private ip is not accepted", { status: 400 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          country_name: "中国",
+          city: "上海",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    };
+    globalThis.fetch = Object.assign(locationFetch, {
+      preconnect: originalFetch.preconnect,
+    });
+
+    try {
+      const result = await testIpGeolocationIntegration(
+        {
+          id: admin.id,
+          username: "geo-admin-private",
+          email: "geo-admin-private@example.com",
+          name: null,
+          role: "admin",
+          avatarUrl: null,
+        },
+        testDb
+      );
+
+      const requestedUrl = requestedUrls[0];
+      if (!requestedUrl) throw new Error("IPGeolocation test did not call fetch");
+
+      expect(result.ok).toBe(true);
+      expect(new URL(requestedUrl).searchParams.has("ip")).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("allows admin user management and blocks ordinary users", async () => {

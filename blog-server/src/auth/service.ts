@@ -313,8 +313,37 @@ function readForwardedIp(value: string | undefined) {
     .find((candidate) => candidate !== null) ?? null;
 }
 
-function isPrivateIp(ip: string): boolean {
-  if (isIP(ip) === 4) {
+function ipv4ToNumber(ip: string) {
+  if (isIP(ip) !== 4) return null;
+
+  return ip
+    .split(".")
+    .map(Number)
+    .reduce((value, octet) => ((value << 8) + octet) >>> 0, 0);
+}
+
+function isIpv4CidrMatch(ip: string, cidr: string) {
+  const [range, prefixRaw, extra] = cidr.split("/");
+  if (extra !== undefined || !range || !prefixRaw) return false;
+
+  const prefix = Number(prefixRaw);
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return false;
+
+  const ipNumber = ipv4ToNumber(ip);
+  const rangeNumber = ipv4ToNumber(range);
+  if (ipNumber === null || rangeNumber === null) return false;
+
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  return ((ipNumber & mask) >>> 0) === ((rangeNumber & mask) >>> 0);
+}
+
+function isTrustedProxyIp(ip: string, trustedProxyIps: string[]) {
+  return trustedProxyIps.some((trustedIp) => trustedIp === ip || isIpv4CidrMatch(ip, trustedIp));
+}
+
+export function isPrivateIp(ip: string): boolean {
+  const ipVersion = isIP(ip);
+  if (ipVersion === 4) {
     const [first, second] = ip.split(".").map(Number);
     return (
       first === 0 ||
@@ -326,6 +355,7 @@ function isPrivateIp(ip: string): boolean {
       (first === 192 && second === 168)
     );
   }
+  if (ipVersion !== 6) return false;
 
   const normalized = ip.toLowerCase();
   if (normalized.startsWith("::ffff:")) {
@@ -384,7 +414,7 @@ export function getRequestMeta({
   trustedProxyIps = appConfig.trustedProxyIps,
 }: RequestMetaInput): RequestMeta {
   const directIp = normalizeIp(requestIp);
-  const trustsProxy = directIp !== null && trustedProxyIps.includes(directIp);
+  const trustsProxy = directIp !== null && isTrustedProxyIp(directIp, trustedProxyIps);
   const forwarded = trustsProxy ? readForwardedIp(headers["x-forwarded-for"]) : null;
   const realIp = trustsProxy ? normalizeIp(headers["x-real-ip"]) : null;
 
