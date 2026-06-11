@@ -26,20 +26,29 @@
 
 脚本会自动检查并安装基础依赖和 Docker。若服务器已经安装 Docker，会直接复用。
 
+本文命令默认以普通用户执行并使用 `sudo` 提权；如果已经登录 `root` 用户，可以省略 `sudo`。
+
 ## 首次安装
 
-使用 IP 部署时，将 `LEIBLOG_SITE_URL` 改成你的服务器访问地址：
+先将部署脚本安装为全局命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo env LEIBLOG_SITE_URL=http://217.160.159.141 bash -s -- install
+sudo curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+  -o /usr/local/bin/leiblog
+sudo chmod +x /usr/local/bin/leiblog
+sudo leiblog --help
+```
+
+安装完成后，可以在任意目录直接使用 `leiblog`。使用 IP 部署时，将 `LEIBLOG_SITE_URL` 改成你的服务器访问地址：
+
+```bash
+sudo env LEIBLOG_SITE_URL=http://217.160.159.141 leiblog install
 ```
 
 使用域名部署时：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo env LEIBLOG_SITE_URL=https://example.com bash -s -- install
+sudo env LEIBLOG_SITE_URL=https://example.com leiblog install
 ```
 
 安装成功后终端会输出：
@@ -47,44 +56,59 @@ curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deplo
 - 访问地址
 - 初始化地址：`/admin/setup`
 - `SETUP_TOKEN`
+- 全局命令路径：`/usr/local/bin/leiblog`
 - 环境变量文件路径：`/var/leiblog/.env`
 - 备份目录：`/var/leiblog/backups`
 
 请保存 `SETUP_TOKEN`，首次访问后台初始化页面会用到。
+
+`install` 和 `update` 会自动使用 `cloud-server` 分支中的最新部署脚本刷新 `/usr/local/bin/leiblog`。已经部署过 LeiBlog 的服务器只需执行一次上面的全局命令安装步骤，后续即可使用短命令运维。
+
+如果需要单独重新下载或修复全局命令，也可以执行：
+
+```bash
+sudo leiblog install-cli
+```
+
+如果全局命令已经丢失，使用远程脚本重新安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+  | sudo bash -s -- install-cli
+```
 
 ## 更新部署
 
 常规更新命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- update
+sudo leiblog update
 ```
 
 如果需要显式指定部署源码分支，使用：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo env LEIBLOG_REPO_BRANCH=cloud-server \
-      LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/cloud-server.tar.gz \
-      bash -s -- update
+sudo env LEIBLOG_REPO_BRANCH=cloud-server \
+  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/cloud-server.tar.gz \
+  LEIBLOG_SCRIPT_URL=https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+  leiblog update
 ```
 
 更新会执行以下操作：
 
 1. 下载 `cloud-server` 分支源码
-2. 重新生成运行时 Dockerfile 和 Compose 文件
-3. 重新构建 `api` 和 `web` 镜像
-4. 使用新镜像启动容器
-5. 后端启动时自动执行数据库迁移
+2. 使用源码中的最新部署脚本刷新 `/usr/local/bin/leiblog`
+3. 重新生成运行时 Dockerfile 和 Compose 文件
+4. 重新构建 `api` 和 `web` 镜像
+5. 使用新镜像启动容器
+6. 后端启动时自动执行数据库迁移
 
 ## 验证部署结果
 
 查看容器状态：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- status
+sudo leiblog status
 ```
 
 或直接使用 Docker Compose：
@@ -106,36 +130,31 @@ curl -fsS http://217.160.159.141/ | grep -o 'assets/index-[^"]*\.js'
 启动：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- start
+sudo leiblog start
 ```
 
 停止：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- stop
+sudo leiblog stop
 ```
 
 重启：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- restart
+sudo leiblog restart
 ```
 
 查看所有日志：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- logs
+sudo leiblog logs
 ```
 
 查看指定服务日志：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- logs api
+sudo leiblog logs api
 ```
 
 可选服务名：
@@ -180,8 +199,7 @@ sudo sed -n '1,120p' /var/leiblog/.env
 - 修改 `.env` 后需要重启服务
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- restart
+sudo leiblog restart
 ```
 
 ## 数据目录
@@ -202,8 +220,7 @@ curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deplo
 创建备份：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- backup
+sudo leiblog backup
 ```
 
 备份文件会生成在：
@@ -226,8 +243,7 @@ curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deplo
 使用备份恢复：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- restore /var/leiblog/backups/leiblog-backup-YYYYMMDDHHMMSS.tar.gz
+sudo leiblog restore /var/leiblog/backups/leiblog-backup-YYYYMMDDHHMMSS.tar.gz
 ```
 
 恢复会覆盖当前数据库、上传文件和环境配置。执行前确认备份文件正确。
@@ -285,8 +301,7 @@ CORS_ORIGINS=https://example.com
 修改后执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- update
+sudo leiblog update
 ```
 
 ## 常见问题
@@ -305,7 +320,7 @@ curl -fsS http://217.160.159.141/ | grep -o 'assets/index-[^"]*\.js'
 
 `137` 通常表示构建进程被系统杀掉，常见原因是内存不足。
 
-当前脚本 `0.1.2` 已降低前端构建内存占用。如果仍失败，建议启用 2 GB swap：
+部署脚本已降低前端构建内存占用。如果仍失败，建议启用 2 GB swap：
 
 ```bash
 sudo fallocate -l 2G /swapfile
@@ -340,8 +355,7 @@ sudo docker compose -p leiblog -f /var/leiblog/docker-compose.yml logs --tail=20
 如果 Resend 和 DeepL 测试正常，但 IPGeolocation 测试失败，先更新到最新部署脚本和后端镜像：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- update
+sudo leiblog update
 ```
 
 更新后确认 `.env` 里有可信代理配置：
@@ -363,8 +377,9 @@ sudo ss -ltnp | grep ':80'
 如果不能释放 80 端口，可以用其他端口安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo env LEIBLOG_HTTP_PORT=8080 LEIBLOG_SITE_URL=http://217.160.159.141:8080 bash -s -- install
+sudo env LEIBLOG_HTTP_PORT=8080 \
+  LEIBLOG_SITE_URL=http://217.160.159.141:8080 \
+  leiblog install
 ```
 
 ### 忘记 SETUP_TOKEN
@@ -380,15 +395,13 @@ sudo grep '^SETUP_TOKEN=' /var/leiblog/.env
 仅停止并删除容器，保留数据目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo bash -s -- uninstall
+sudo leiblog uninstall
 ```
 
 删除容器和 `/var/leiblog` 数据目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
-  | sudo env LEIBLOG_FORCE=1 bash -s -- uninstall --purge
+sudo env LEIBLOG_FORCE=1 leiblog uninstall --purge
 ```
 
 `--purge` 会永久删除数据，执行前务必确认已经备份。

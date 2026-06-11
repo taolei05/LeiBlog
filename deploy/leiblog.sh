@@ -2,11 +2,13 @@
 
 set -Eeuo pipefail
 
-LEIBLOG_SCRIPT_VERSION="0.1.2"
+LEIBLOG_SCRIPT_VERSION="0.2.0"
 LEIBLOG_BASE_DIR="${LEIBLOG_BASE_DIR:-/var/leiblog}"
 LEIBLOG_PROJECT_NAME="${LEIBLOG_PROJECT_NAME:-leiblog}"
 LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-cloud-server}"
 LEIBLOG_REPO_ARCHIVE_URL="${LEIBLOG_REPO_ARCHIVE_URL:-https://github.com/taolei05/LeiBlog/archive/refs/heads/${LEIBLOG_REPO_BRANCH}.tar.gz}"
+LEIBLOG_SCRIPT_URL="${LEIBLOG_SCRIPT_URL:-https://raw.githubusercontent.com/taolei05/LeiBlog/${LEIBLOG_REPO_BRANCH}/deploy/leiblog.sh}"
+LEIBLOG_COMMAND_PATH="${LEIBLOG_COMMAND_PATH:-/usr/local/bin/leiblog}"
 LEIBLOG_HTTP_PORT="${LEIBLOG_HTTP_PORT:-80}"
 LEIBLOG_SITE_URL="${LEIBLOG_SITE_URL:-}"
 LEIBLOG_INSTALL_DOCKER="${LEIBLOG_INSTALL_DOCKER:-1}"
@@ -80,6 +82,52 @@ ensure_base_tools() {
     info "安装基础依赖：${missing[*]}"
     install_packages ca-certificates "${missing[@]}"
   fi
+}
+
+install_cli_file() {
+  local source_file="$1"
+  local command_dir
+  command_dir="$(dirname "${LEIBLOG_COMMAND_PATH}")"
+
+  [[ -f "${source_file}" ]] || die "部署脚本不存在：${source_file}"
+  bash -n "${source_file}" || die "部署脚本语法检查失败：${source_file}"
+
+  mkdir -p "${command_dir}" || die "无法创建全局命令目录：${command_dir}"
+  install -m 0755 "${source_file}" "${LEIBLOG_COMMAND_PATH}" ||
+    die "无法安装全局命令：${LEIBLOG_COMMAND_PATH}"
+  info "已安装全局命令：${LEIBLOG_COMMAND_PATH}"
+}
+
+install_cli_command() {
+  if [[ "${LEIBLOG_COMMAND_PATH}" == /usr/local/* ]]; then
+    require_root
+  fi
+
+  ensure_base_tools
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  info "下载 LeiBlog 部署脚本：${LEIBLOG_SCRIPT_URL}"
+  if ! curl -fsSL "${LEIBLOG_SCRIPT_URL}" -o "${tmp_file}"; then
+    rm -f "${tmp_file}"
+    die "下载部署脚本失败"
+  fi
+
+  install_cli_file "${tmp_file}"
+  rm -f "${tmp_file}"
+  echo -e "${green}后续可直接执行:${plain} sudo leiblog install"
+}
+
+refresh_cli_from_source() {
+  local source_file="${SOURCE_DIR}/deploy/leiblog.sh"
+
+  if [[ ! -f "${source_file}" ]]; then
+    warn "源码中未找到部署脚本，跳过全局命令刷新"
+    return
+  fi
+
+  install_cli_file "${source_file}"
 }
 
 ensure_docker() {
@@ -420,6 +468,7 @@ install_leiblog() {
   write_env_if_missing
   ensure_env_defaults
   fetch_source
+  refresh_cli_from_source
   write_runtime_files
   write_compose_file
 
@@ -439,6 +488,7 @@ update_leiblog() {
   [[ -f "${ENV_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
   ensure_env_defaults
   fetch_source
+  refresh_cli_from_source
   write_runtime_files
   write_compose_file
 
@@ -599,6 +649,7 @@ print_install_result() {
   echo -e "访问地址：${yellow}${SITE_URL}${plain}"
   echo -e "初始化地址：${yellow}${SITE_URL}/admin/setup${plain}"
   echo -e "SETUP_TOKEN：${yellow}${SETUP_TOKEN}${plain}"
+  echo -e "全局命令：${LEIBLOG_COMMAND_PATH}"
   echo -e "配置文件：${ENV_FILE}"
   echo -e "备份目录：${BACKUP_DIR}"
 }
@@ -608,16 +659,17 @@ show_usage() {
 LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 
 用法:
-  leiblog.sh install              安装或重新生成部署
-  leiblog.sh update               拉取部署分支最新源码并重建服务
-  leiblog.sh start                启动服务
-  leiblog.sh stop                 停止服务
-  leiblog.sh restart              重启服务
-  leiblog.sh status               查看容器状态
-  leiblog.sh logs [service]       查看日志，可选服务名：web/api/postgres/redis
-  leiblog.sh backup               备份数据库、上传文件和环境配置
-  leiblog.sh restore <file>       从备份恢复
-  leiblog.sh uninstall [--purge]  卸载服务，--purge 会删除数据目录
+  leiblog install-cli           安装或刷新 ${LEIBLOG_COMMAND_PATH} 全局命令
+  leiblog install               安装或重新生成部署，并刷新全局命令
+  leiblog update                拉取部署分支最新源码、刷新全局命令并重建服务
+  leiblog start                 启动服务
+  leiblog stop                  停止服务
+  leiblog restart               重启服务
+  leiblog status                查看容器状态
+  leiblog logs [service]        查看日志，可选服务名：web/api/postgres/redis
+  leiblog backup                备份数据库、上传文件和环境配置
+  leiblog restore <file>        从备份恢复
+  leiblog uninstall [--purge]   卸载服务，--purge 会删除数据目录
 
 常用环境变量:
   LEIBLOG_SITE_URL=https://example.com
@@ -625,14 +677,22 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
   LEIBLOG_BASE_DIR=/var/leiblog
   LEIBLOG_REPO_BRANCH=cloud-server
   LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/cloud-server.tar.gz
+  LEIBLOG_SCRIPT_URL=https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh
+  LEIBLOG_COMMAND_PATH=/usr/local/bin/leiblog
   LEIBLOG_FORCE=1
 
-一键安装示例:
-  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh | bash -s -- install
+安装全局命令:
+  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh | sudo bash -s -- install-cli
 
-指定域名安装:
+安装 LeiBlog:
+  sudo leiblog install
+
+指定域名安装 LeiBlog:
+  sudo env LEIBLOG_SITE_URL=https://example.com leiblog install
+
+兼容的一键安装方式:
   curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \\
-    | LEIBLOG_SITE_URL=https://example.com bash -s -- install
+    | sudo env LEIBLOG_SITE_URL=https://example.com bash -s -- install
 EOF
 }
 
@@ -640,6 +700,9 @@ main() {
   local command_name="${1:-help}"
 
   case "${command_name}" in
+    install-cli)
+      install_cli_command
+      ;;
     install)
       install_leiblog
       ;;
