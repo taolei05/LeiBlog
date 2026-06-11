@@ -8,6 +8,7 @@ import { EmptyPlaceholder } from "../shared/BlogComponents";
 import { CommentThread } from "../shared/CommentThread";
 import type { BlogArticle } from "../shared/blogApi";
 import { fetchPublicArticleBySlug } from "../shared/blogApi";
+import { getArticleTagColorStyle } from "../shared/tagColors";
 
 type ArticleTocNavProps = {
   items: BlogArticle["toc"];
@@ -163,7 +164,13 @@ export function BlogArticleDetailPage() {
             <span>{article.date}</span>
             <span>{article.readTime}</span>
             {article.tags.map((tag) => (
-              <Chip key={tag.slug} size="sm" variant="soft">
+              <Chip
+                className="article-detail__tag"
+                key={tag.slug}
+                size="sm"
+                style={getArticleTagColorStyle(tag.color)}
+                variant="soft"
+              >
                 <Chip.Label>#{tag.name}</Chip.Label>
               </Chip>
             ))}

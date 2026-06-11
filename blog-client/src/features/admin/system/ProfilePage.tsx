@@ -365,6 +365,7 @@ export function ProfilePage() {
       description="只面向当前登录管理员：维护资料、安全信息，查看最近登录痕迹。"
       eyebrow="系统"
       icon="personCircle"
+      metricGridClassName="admin-profile-metric-grid"
       metrics={[
         { label: "当前账号", value: profile?.username ?? (isLoading ? "读取中" : "--") },
         { label: "邮箱", value: profile?.email ?? "未设置" },

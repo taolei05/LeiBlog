@@ -13,6 +13,7 @@ export type AdminDataPageProps = {
   description: string;
   eyebrow: string;
   icon: AppIconName;
+  metricGridClassName?: string;
   metrics: AdminDataPageMetric[];
   title: string;
   wide?: boolean;
@@ -23,6 +24,7 @@ export function AdminDataPage({
   description,
   eyebrow,
   icon,
+  metricGridClassName,
   metrics,
   title,
   wide = false,
@@ -40,7 +42,11 @@ export function AdminDataPage({
         </div>
       </div>
 
-      <div className="admin-metric-grid">
+      <div
+        className={
+          metricGridClassName ? `admin-metric-grid ${metricGridClassName}` : "admin-metric-grid"
+        }
+      >
         {metrics.map((metric) => (
           <Card className="admin-metric-card" key={metric.label}>
             <Card.Header>

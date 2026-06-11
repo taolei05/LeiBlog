@@ -16,6 +16,7 @@ import {
   HeroCoverCarousel,
   useHeroCoverCarousel,
 } from "../shared/HeroCoverCarousel";
+import { getArticleTagColorStyle } from "../shared/tagColors";
 
 const SOCIAL_LABELS: Record<string, string> = {
   bilibili: "Bilibili",
@@ -700,7 +701,11 @@ function HomeTagCard({ tags }: HomeTagCardProps) {
       {tags.length > 0 ? (
         <div className="home-tag-cloud">
           {tags.map((tag) => (
-            <Link key={tag.slug} to={`/tags/${encodeURIComponent(tag.slug)}`}>
+            <Link
+              key={tag.slug}
+              style={getArticleTagColorStyle(tag.color)}
+              to={`/tags/${encodeURIComponent(tag.slug)}`}
+            >
               #{tag.name}
               <span>{tag.count}</span>
             </Link>
