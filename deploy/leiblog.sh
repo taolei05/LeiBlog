@@ -689,10 +689,6 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 
 指定域名安装 LeiBlog:
   sudo env LEIBLOG_SITE_URL=https://example.com leiblog install
-
-兼容的一键安装方式:
-  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \\
-    | sudo env LEIBLOG_SITE_URL=https://example.com bash -s -- install
 EOF
 }
 

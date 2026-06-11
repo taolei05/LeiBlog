@@ -23,6 +23,16 @@ usage="$(bash "${installed_command}" --help)"
 grep -Fq "leiblog install-cli" <<<"${usage}"
 grep -Fq "leiblog update" <<<"${usage}"
 
+if grep -Fq "兼容的一键安装方式" <<<"${usage}"; then
+  echo "legacy one-command install heading is still present" >&2
+  exit 1
+fi
+
+if grep -Fq "sudo env LEIBLOG_SITE_URL=https://example.com bash -s -- install" <<<"${usage}"; then
+  echo "legacy one-command install example is still present" >&2
+  exit 1
+fi
+
 [[ "$(grep -c '^  refresh_cli_from_source$' "${script_path}")" -eq 2 ]]
 
 echo "deploy script tests passed"
