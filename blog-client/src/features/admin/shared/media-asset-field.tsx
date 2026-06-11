@@ -223,19 +223,42 @@ export function MediaAssetField({
           </Button>
         ) : null}
         {canRemoveValue && hasStoredValue ? (
-          <Button
-            onPress={() => {
-              onChange("");
-              onLocalFileChange(null);
-              showOperationToast(`已移除${label}`, "success");
-            }}
-            size="sm"
-            type="button"
-            variant="danger-soft"
-          >
-            <AppIcon name="trash" />
-            移除当前图片
-          </Button>
+          <AlertDialog>
+            <Button size="sm" type="button" variant="danger-soft">
+              <AppIcon name="trash" />
+              移除当前图片
+            </Button>
+            <AlertDialog.Backdrop>
+              <AlertDialog.Container placement="center" size="sm">
+                <AlertDialog.Dialog>
+                  <AlertDialog.CloseTrigger />
+                  <AlertDialog.Header>
+                    <AlertDialog.Icon status="danger" />
+                    <AlertDialog.Heading>确认移除{label}？</AlertDialog.Heading>
+                  </AlertDialog.Header>
+                  <AlertDialog.Body>
+                    <p>将从站点信息中移除当前{label}，保存后前台不再使用它。</p>
+                  </AlertDialog.Body>
+                  <AlertDialog.Footer>
+                    <Button slot="close" variant="tertiary">
+                      取消
+                    </Button>
+                    <Button
+                      onPress={() => {
+                        onChange("");
+                        onLocalFileChange(null);
+                        showOperationToast(`已移除${label}`, "success");
+                      }}
+                      slot="close"
+                      variant="danger-soft"
+                    >
+                      确认移除
+                    </Button>
+                  </AlertDialog.Footer>
+                </AlertDialog.Dialog>
+              </AlertDialog.Container>
+            </AlertDialog.Backdrop>
+          </AlertDialog>
         ) : null}
       </div>
       <p className="media-asset-field__hint">

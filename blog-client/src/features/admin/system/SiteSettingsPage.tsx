@@ -677,6 +677,10 @@ export function SiteSettingsPage() {
   }
 
   function removeIcpRecord(index: number) {
+    const record = filing.icpRecords[index];
+
+    if (!record) return;
+
     setFiling((state) => {
       const icpRecords = state.icpRecords.filter((_, recordIndex) => recordIndex !== index);
 
@@ -685,6 +689,7 @@ export function SiteSettingsPage() {
         icpRecords: icpRecords.length > 0 ? icpRecords : [createEmptyIcpRecord()],
       };
     });
+    showOperationToast(`已移除${record.number.trim() || `第 ${index + 1} 条 ICP 备案`}`, "success");
   }
 
   async function sendRevealCode() {
@@ -1076,6 +1081,7 @@ export function SiteSettingsPage() {
                   <p>可登记多个 ICP 备案。</p>
                 </div>
                 <Button
+                  className="filing-record-panel__add-button"
                   isDisabled={isSaving}
                   onPress={addIcpRecord}
                   size="sm"
@@ -1416,16 +1422,40 @@ function IcpRecordFields({
         </InputGroup>
         <FieldError>备案链接格式不正确</FieldError>
       </TextField>
-      <Button
-        aria-label={`移除第 ${index + 1} 条 ICP 备案`}
-        isDisabled={isRemoveDisabled}
-        isIconOnly
-        onPress={onRemove}
-        type="button"
-        variant="danger-soft"
-      >
-        <AppIcon name="trash" />
-      </Button>
+      <AlertDialog>
+        <Button
+          aria-label={`移除第 ${index + 1} 条 ICP 备案`}
+          className="filing-record-row__remove-button"
+          isDisabled={isRemoveDisabled}
+          type="button"
+          variant="danger-soft"
+        >
+          <AppIcon name="trash" />
+          移除
+        </Button>
+        <AlertDialog.Backdrop>
+          <AlertDialog.Container placement="center" size="sm">
+            <AlertDialog.Dialog>
+              <AlertDialog.CloseTrigger />
+              <AlertDialog.Header>
+                <AlertDialog.Icon status="danger" />
+                <AlertDialog.Heading>确认移除 ICP 备案？</AlertDialog.Heading>
+              </AlertDialog.Header>
+              <AlertDialog.Body>
+                <p>将移除第 {index + 1} 条 ICP 备案，保存后前台页脚不再展示它。</p>
+              </AlertDialog.Body>
+              <AlertDialog.Footer>
+                <Button slot="close" variant="tertiary">
+                  取消
+                </Button>
+                <Button onPress={onRemove} slot="close" variant="danger-soft">
+                  确认移除
+                </Button>
+              </AlertDialog.Footer>
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
     </div>
   );
 }

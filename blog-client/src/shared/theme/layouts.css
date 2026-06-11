@@ -7293,6 +7293,16 @@
   .admin-account-social-row > .button {
     justify-self: end;
   }
+
+  .filing-record-panel__add-button,
+  .filing-record-row__remove-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .filing-record-row > .filing-record-row__remove-button {
+    justify-self: stretch;
+  }
 }
 
 .secret-reveal-help {
