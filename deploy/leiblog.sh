@@ -672,7 +672,7 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
   leiblog uninstall [--purge]   卸载服务，--purge 会删除数据目录
 
 常用环境变量:
-  LEIBLOG_SITE_URL=https://example.com
+  LEIBLOG_SITE_URL=https://域名
   LEIBLOG_HTTP_PORT=80
   LEIBLOG_BASE_DIR=/var/leiblog
   LEIBLOG_REPO_BRANCH=cloud-server
@@ -687,8 +687,11 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 安装 LeiBlog:
   sudo leiblog install
 
+指定 IP 安装 LeiBlog:
+  sudo env LEIBLOG_SITE_URL=http://服务器ip leiblog install
+
 指定域名安装 LeiBlog:
-  sudo env LEIBLOG_SITE_URL=https://example.com leiblog install
+  sudo env LEIBLOG_SITE_URL=https://域名 leiblog install
 EOF
 }
 

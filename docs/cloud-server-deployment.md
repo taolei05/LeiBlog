@@ -42,13 +42,13 @@ sudo leiblog --help
 安装完成后，可以在任意目录直接使用 `leiblog`。使用 IP 部署时，将 `LEIBLOG_SITE_URL` 改成你的服务器访问地址：
 
 ```bash
-sudo env LEIBLOG_SITE_URL=http://217.160.159.141 leiblog install
+sudo env LEIBLOG_SITE_URL=http://服务器ip leiblog install
 ```
 
 使用域名部署时：
 
 ```bash
-sudo env LEIBLOG_SITE_URL=https://example.com leiblog install
+sudo env LEIBLOG_SITE_URL=https://域名 leiblog install
 ```
 
 安装成功后终端会输出：
@@ -120,7 +120,7 @@ sudo docker compose -p leiblog -f /var/leiblog/docker-compose.yml ps
 检查当前前端入口文件：
 
 ```bash
-curl -fsS http://217.160.159.141/ | grep -o 'assets/index-[^"]*\.js'
+curl -fsS http://服务器ip/ | grep -o 'assets/index-[^"]*\.js'
 ```
 
 如果更新后仍然看到旧的 `index-*.js`，通常说明 `web` 镜像没有构建成功，或者浏览器缓存了旧页面。先看构建输出和容器状态，再强制刷新浏览器。
@@ -293,9 +293,9 @@ sudo docker exec -it leiblog-redis-1 redis-cli -a "$(sudo grep '^REDIS_PASSWORD=
 如果使用 HTTPS 域名，`.env` 里的这些值要保持一致：
 
 ```bash
-SITE_URL=https://example.com
-VITE_API_BASE_URL=https://example.com/api
-CORS_ORIGINS=https://example.com
+SITE_URL=https://域名
+VITE_API_BASE_URL=https://域名/api
+CORS_ORIGINS=https://域名
 ```
 
 修改后执行：
@@ -311,7 +311,7 @@ sudo leiblog update
 先检查服务器当前返回的入口文件：
 
 ```bash
-curl -fsS http://217.160.159.141/ | grep -o 'assets/index-[^"]*\.js'
+curl -fsS http://服务器ip/ | grep -o 'assets/index-[^"]*\.js'
 ```
 
 如果仍是旧文件名，说明服务器还在跑旧 web 镜像。重新执行 update，并确认构建没有失败。
@@ -378,7 +378,7 @@ sudo ss -ltnp | grep ':80'
 
 ```bash
 sudo env LEIBLOG_HTTP_PORT=8080 \
-  LEIBLOG_SITE_URL=http://217.160.159.141:8080 \
+  LEIBLOG_SITE_URL=http://服务器ip:8080 \
   leiblog install
 ```
 
