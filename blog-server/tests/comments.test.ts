@@ -26,18 +26,73 @@ const POSTGRES_ADMIN_URL =
 
 const dbName = `lei_blog_comments_test_${Date.now()}`;
 const adminDb = new Bun.SQL(POSTGRES_ADMIN_URL, { max: 1 });
+const pendingSqlQueries = new Set<Promise<unknown>>();
 let testDb: Bun.SQL;
 let currentAdmin: AuthUser;
 let currentUser: AuthUser;
 let articleId = "";
 
+function trackSqlPromise<T>(promise: PromiseLike<T>) {
+  let tracked: Promise<T>;
+  tracked = Promise.resolve(promise).finally(() => {
+    pendingSqlQueries.delete(tracked);
+  });
+  pendingSqlQueries.add(tracked);
+  return tracked;
+}
+
+function createTrackedSqlClient(client: Bun.SQL) {
+  return new Proxy(client, {
+    apply(target, thisArgument, argumentsList) {
+      return trackSqlPromise(
+        Reflect.apply(target, thisArgument, argumentsList) as PromiseLike<unknown>
+      );
+    },
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (property === "unsafe" && typeof value === "function") {
+        return (...args: unknown[]) =>
+          trackSqlPromise(Reflect.apply(value, target, args) as PromiseLike<unknown>);
+      }
+      if (typeof value === "function") {
+        return value.bind(target);
+      }
+      return value;
+    },
+  }) as Bun.SQL;
+}
+
+async function waitForTrackedSqlIdle() {
+  while (pendingSqlQueries.size > 0) {
+    await Promise.allSettled([...pendingSqlQueries]);
+  }
+}
+
+async function waitWithTimeout<T>(
+  promise: Promise<T>,
+  message: string,
+  timeoutMs = 1_000
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 beforeAll(async () => {
   await adminDb.unsafe(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
   await adminDb.unsafe(`CREATE DATABASE ${dbName}`);
 
-  testDb = new Bun.SQL(
-    `postgres://taolei:12345678@localhost:5432/${dbName}`,
-    { max: 1 }
+  testDb = createTrackedSqlClient(
+    new Bun.SQL(`postgres://taolei:12345678@localhost:5432/${dbName}`, { max: 1 })
   );
 
   const migration = readFileSync(
@@ -95,10 +150,11 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await waitForTrackedSqlIdle();
 });
 
 afterAll(async () => {
+  await waitForTrackedSqlIdle();
   await testDb?.close({ timeout: 1 });
   await adminDb.unsafe(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
   await adminDb.close({ timeout: 1 });
@@ -238,8 +294,13 @@ describe("comment services", () => {
     const originalFetch = globalThis.fetch;
     const fetchCalls: string[] = [];
     const errorLogs: unknown[][] = [];
+    let resolveNotificationFailure = () => {};
+    const notificationFailureLogged = new Promise<void>((resolve) => {
+      resolveNotificationFailure = resolve;
+    });
     const emailErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       errorLogs.push(args);
+      resolveNotificationFailure();
     });
 
     await testDb`
@@ -272,7 +333,10 @@ describe("comment services", () => {
       );
       expect(comment.content).toBe("邮件失败仍发布");
 
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      await waitWithTimeout(
+        notificationFailureLogged,
+        "Timed out waiting for scheduled comment notification failure"
+      );
 
       const publicList = await listPublicComments(
         articleId,
@@ -283,14 +347,14 @@ describe("comment services", () => {
       expect(fetchCalls).toContain("https://api.resend.com/emails");
       expect(errorLogs.length).toBeGreaterThan(0);
     } finally {
+      globalThis.fetch = originalFetch;
+      emailErrorSpy.mockRestore();
       await testDb`
         UPDATE site_config
         SET resend_domain = null,
             resend_api_key_encrypted = null
         WHERE id = 1
       `;
-      globalThis.fetch = originalFetch;
-      emailErrorSpy.mockRestore();
     }
   });
 
