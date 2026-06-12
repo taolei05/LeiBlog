@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import { renderCommentNotificationEmailHtml } from "../src/auth/service";
 import { createArticle, createCategory } from "../src/admin/content/service";
@@ -17,6 +17,7 @@ let testDatabase: TestDatabase;
 let testDb: Bun.SQL;
 let currentAdmin: AuthUser;
 let articleId = "";
+let otherArticleId = "";
 
 type CreateUserParameters = {
   email?: string | null;
@@ -105,6 +106,30 @@ beforeAll(async () => {
     testDb
   );
   articleId = article.id;
+  const otherArticle = await createArticle(
+    currentAdmin,
+    {
+      categoryIds: [category.id],
+      contentMdx: "另一篇评论通知正文",
+      slug: "other-comment-notification-article",
+      status: "published",
+      title: "另一篇评论通知文章",
+    },
+    testDb
+  );
+  otherArticleId = otherArticle.id;
+});
+
+beforeEach(async () => {
+  await testDb`DELETE FROM comments`;
+  await testDb`DELETE FROM users WHERE id <> ${currentAdmin.id}`;
+  await testDb`
+    UPDATE site_config
+    SET comments_enabled = true,
+        resend_domain = null,
+        resend_api_key_encrypted = null
+    WHERE id = 1
+  `;
 });
 
 afterAll(async () => {
@@ -221,6 +246,71 @@ describe("comment notification emails", () => {
     expect(replyNotifications[0]?.subject).toContain("评论回复通知");
     expect(replyNotifications[0]?.subject).toContain("评论通知文章");
     expect(notifications.some((notification) => notification.to === "other@example.com")).toBe(false);
+  });
+
+  test("does not notify parent authors from another target or article", async () => {
+    const guestbookParentAuthorId = await createUser({
+      email: "guestbook-parent@example.com",
+      name: "留言板父作者",
+      username: "guestbook-parent-author",
+    });
+    const otherArticleParentAuthorId = await createUser({
+      email: "other-article-parent@example.com",
+      name: "其他文章父作者",
+      username: "other-article-parent-author",
+    });
+    const replyAuthorId = await createUser({
+      email: "dirty-reply-author@example.com",
+      name: "脏数据回复者",
+      username: "dirty-reply-author",
+    });
+    const guestbookParentId = await createComment({
+      article: null,
+      content: "留言板父评论",
+      targetType: "guestbook",
+      userId: guestbookParentAuthorId,
+    });
+    const otherArticleParentId = await createComment({
+      article: otherArticleId,
+      content: "另一篇文章父评论",
+      userId: otherArticleParentAuthorId,
+    });
+    const guestbookParentReplyId = await createComment({
+      content: "文章回复错误指向留言板父评论",
+      parentId: guestbookParentId,
+      userId: replyAuthorId,
+    });
+    const otherArticleParentReplyId = await createComment({
+      content: "文章回复错误指向另一篇文章父评论",
+      parentId: otherArticleParentId,
+      userId: replyAuthorId,
+    });
+
+    const guestbookParentNotifications = await resolveCommentNotifications(
+      guestbookParentReplyId,
+      testDb
+    );
+    const otherArticleParentNotifications = await resolveCommentNotifications(
+      otherArticleParentReplyId,
+      testDb
+    );
+
+    expect(
+      guestbookParentNotifications.some(
+        (notification) => notification.to === "guestbook-parent@example.com"
+      )
+    ).toBe(false);
+    expect(
+      otherArticleParentNotifications.some(
+        (notification) => notification.to === "other-article-parent@example.com"
+      )
+    ).toBe(false);
+    expect(guestbookParentNotifications.some((notification) => notification.kind === "admin")).toBe(
+      true
+    );
+    expect(otherArticleParentNotifications.some((notification) => notification.kind === "admin")).toBe(
+      true
+    );
   });
 
   test("does not send reply notifications for self replies or disabled parent authors", async () => {
@@ -406,7 +496,10 @@ describe("comment notification emails", () => {
     });
     const originalFetch = globalThis.fetch;
     const fetchCalls: string[] = [];
-    const emailErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+    const errorLogs: unknown[][] = [];
+    const emailErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errorLogs.push(args);
+    });
 
     await testDb`
       UPDATE site_config
@@ -437,6 +530,21 @@ describe("comment notification emails", () => {
     expect(fetchCalls).toContain("send-admin-a@example.com");
     expect(fetchCalls).toContain("send-admin-b@example.com");
     expect(fetchCalls.length).toBeGreaterThanOrEqual(2);
+    const firstError = errorLogs[0]?.[0] as
+      | {
+          commentId?: string;
+          error?: unknown;
+          kind?: string;
+          subject?: string;
+          to?: string;
+        }
+      | undefined;
+
+    expect(firstError?.commentId).toBe(commentId);
+    expect(firstError?.to).toBe(fetchCalls[0]);
+    expect(firstError?.kind).toBe("admin");
+    expect(firstError?.subject).toContain("新评论通知");
+    expect(firstError?.error).toBeInstanceOf(Error);
   });
 
   test("send returns false without Resend config and schedule never throws", async () => {
@@ -460,5 +568,33 @@ describe("comment notification emails", () => {
     await expect(sendCommentEmailNotifications(commentId, testDb)).resolves.toBe(false);
     expect(() => scheduleCommentEmailNotifications(commentId, testDb)).not.toThrow();
     await new Promise((resolve) => setTimeout(resolve, 25));
+  });
+
+  test("schedule logs comment context when the async notification task fails", async () => {
+    const commentId = "00000000-0000-0000-0000-000000000001";
+    const expectedError = new Error("scheduled failure");
+    const errorLogs: unknown[][] = [];
+    const emailErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errorLogs.push(args);
+    });
+    const failingClient = (async () => {
+      throw expectedError;
+    }) as unknown as Bun.SQL;
+
+    try {
+      expect(() => scheduleCommentEmailNotifications(commentId, failingClient)).not.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    } finally {
+      emailErrorSpy.mockRestore();
+    }
+
+    const firstError = errorLogs[0]?.[0] as
+      | {
+          commentId?: string;
+          error?: unknown;
+        }
+      | undefined;
+    expect(firstError?.commentId).toBe(commentId);
+    expect(firstError?.error).toBe(expectedError);
   });
 });

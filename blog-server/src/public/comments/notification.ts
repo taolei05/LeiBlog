@@ -13,6 +13,7 @@ export type CommentEmailNotification = {
 };
 
 type CommentNotificationCommentRow = {
+  article_id: string | null;
   article_title: string | null;
   author_id: string;
   author_name: string | null;
@@ -150,7 +151,7 @@ export async function resolveCommentNotifications(
   client: DbClient = db
 ) {
   const [comment] = await client<CommentNotificationCommentRow[]>`
-    SELECT c.target_type, c.parent_id, c.content,
+    SELECT c.target_type, c.article_id, c.parent_id, c.content,
            u.id AS author_id, u.username AS author_username, u.name AS author_name,
            a.title AS article_title
     FROM comments c
@@ -177,15 +178,21 @@ export async function resolveCommentNotifications(
   const replyNotifications: CommentEmailNotification[] = [];
 
   if (comment.parent_id) {
-    const [parentAuthor] = await client<CommentNotificationUserRow[]>`
+    const [parentAuthor] = await client.unsafe<CommentNotificationUserRow[]>(
+      `
       SELECT parent_author.id, parent_author.email
       FROM comments parent_comment
       JOIN users parent_author ON parent_author.id = parent_comment.user_id
-      WHERE parent_comment.id = ${comment.parent_id}
+      WHERE parent_comment.id = $1
+        AND parent_comment.target_type = $2::comment_target_type
+        AND (($2::comment_target_type = 'article' AND parent_comment.article_id = $3::uuid)
+          OR ($2::comment_target_type = 'guestbook' AND parent_comment.article_id IS NULL))
         AND parent_comment.deleted_at IS NULL
         AND parent_author.comment_email_notifications_enabled = true
       LIMIT 1
-    `;
+    `,
+      [comment.parent_id, comment.target_type, comment.article_id]
+    );
     const replyEmail = normalizeNotificationEmail(parentAuthor?.email);
 
     if (parentAuthor && parentAuthor.id !== comment.author_id && replyEmail) {
@@ -222,7 +229,13 @@ export async function sendCommentEmailNotifications(
       });
       sentAnyEmail = sentAnyEmail || sent;
     } catch (error) {
-      console.error(error);
+      console.error({
+        commentId,
+        error,
+        kind: notification.kind,
+        subject: notification.subject,
+        to: notification.to,
+      });
     }
   }
 
@@ -234,6 +247,9 @@ export function scheduleCommentEmailNotifications(
   client: DbClient = db
 ) {
   void sendCommentEmailNotifications(commentId, client).catch((error) => {
-    console.error(error);
+    console.error({
+      commentId,
+      error,
+    });
   });
 }
