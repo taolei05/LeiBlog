@@ -133,6 +133,7 @@ describe("auth and user services", () => {
 
     expect(user.role).toBe("user");
     expect(user.email).toBe("user@example.com");
+    expect(user.commentEmailNotificationsEnabled).toBe(true);
 
     const loggedIn = await verifyLogin(
       { identifier: "reader", password: "12345678" },
@@ -267,6 +268,7 @@ describe("auth and user services", () => {
 
     const profile = await getUserProfile(user.id, testDb);
     expect(profile.lastLoginIp).toBe("127.0.0.1");
+    expect(profile.commentEmailNotificationsEnabled).toBe(true);
   });
 
   test("stores localized IPGeolocation metadata for successful public IP logins", async () => {

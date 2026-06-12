@@ -19,6 +19,7 @@ export const UserProfileSchema = t.Object({
   avatarUrl: t.Nullable(t.String()),
   socialLinks: t.Record(t.String(), t.String()),
   blogUrl: t.Nullable(t.String()),
+  commentEmailNotificationsEnabled: t.Boolean(),
   createdAt: t.String(),
   updatedAt: t.String(),
   lastLoginAt: t.Nullable(t.String()),
@@ -38,6 +39,7 @@ export interface UserProfile {
   avatarUrl: string | null;
   socialLinks: Record<string, string>;
   blogUrl: string | null;
+  commentEmailNotificationsEnabled: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt: string | null;
@@ -57,6 +59,7 @@ export interface UserProfileRow {
   avatar_url: string | null;
   social_links: Record<string, string> | string | null;
   blog_url: string | null;
+  comment_email_notifications_enabled: boolean;
   created_at: Date | string;
   updated_at: Date | string;
   last_login_at: Date | string | null;
@@ -97,6 +100,7 @@ export function toUserProfile(row: UserProfileRow): UserProfile {
     avatarUrl: row.avatar_url,
     socialLinks: parseSocialLinks(row.social_links),
     blogUrl: row.blog_url,
+    commentEmailNotificationsEnabled: row.comment_email_notifications_enabled,
     createdAt: toIsoString(row.created_at) ?? "",
     updatedAt: toIsoString(row.updated_at) ?? "",
     lastLoginAt: toIsoString(row.last_login_at),

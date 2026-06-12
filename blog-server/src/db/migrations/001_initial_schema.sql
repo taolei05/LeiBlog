@@ -92,6 +92,7 @@ CREATE TABLE users (
   avatar_url text,
   social_links jsonb NOT NULL DEFAULT '{}'::jsonb,
   blog_url text,
+  comment_email_notifications_enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_login_at timestamptz,

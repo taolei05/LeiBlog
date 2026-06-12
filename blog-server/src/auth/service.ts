@@ -394,7 +394,8 @@ export function getRequestMeta({
 async function getUserProfileById(userId: string, client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
-           social_links, blog_url, created_at, updated_at, last_login_at,
+           social_links, blog_url, comment_email_notifications_enabled,
+           created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip, last_login_location,
            last_login_device
     FROM users
@@ -548,8 +549,9 @@ export async function verifyLogin(
 
   const [user] = await client<LoginUserRow[]>`
     SELECT id, username, password_hash, email, name, description, tags, role,
-           avatar_url, social_links, blog_url, created_at, updated_at,
-           last_login_at, host(last_login_ip) AS last_login_ip
+           avatar_url, social_links, blog_url, comment_email_notifications_enabled,
+           created_at, updated_at, last_login_at,
+           host(last_login_ip) AS last_login_ip
     FROM users
     WHERE lower(username) = ${identifier}
        OR lower(email) = ${identifier}

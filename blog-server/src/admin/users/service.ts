@@ -78,7 +78,8 @@ function sortClause(sortBy?: UserListInput["sortBy"], sortOrder?: UserListInput[
 async function getUserById(userId: string, client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
-           social_links, blog_url, created_at, updated_at, last_login_at,
+           social_links, blog_url, comment_email_notifications_enabled,
+           created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip, last_login_location
     FROM users
     WHERE id = ${userId}
@@ -132,7 +133,8 @@ export async function listUsers(
   const rows = await client.unsafe<UserProfileRow[]>(
     `
       SELECT id, username, email, name, description, tags, role, avatar_url,
-             social_links, blog_url, created_at, updated_at, last_login_at,
+             social_links, blog_url, comment_email_notifications_enabled,
+             created_at, updated_at, last_login_at,
              host(last_login_ip) AS last_login_ip, last_login_location
       FROM users
       WHERE ($1::text IS NULL OR lower(username) LIKE $1 OR lower(coalesce(email, '')) LIKE $1 OR lower(coalesce(name, '')) LIKE $1)
