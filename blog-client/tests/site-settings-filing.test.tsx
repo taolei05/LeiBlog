@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -5,7 +7,11 @@ import mediaAssetFieldSource from "../src/features/admin/shared/media-asset-fiel
 import { MediaAssetField } from "../src/features/admin/shared/media-asset-field";
 import { SiteSettingsPage } from "../src/features/admin/system/SiteSettingsPage";
 import siteSettingsPageSource from "../src/features/admin/system/SiteSettingsPage.tsx?raw";
-import layoutsCss from "../src/shared/theme/layouts.css?raw";
+
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
+);
 
 describe("SiteSettingsPage filing settings", () => {
   it("renders ICP filing controls with a social-link style editor", () => {

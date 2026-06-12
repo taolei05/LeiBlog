@@ -16,6 +16,7 @@ import { CategoriesPage } from "../features/admin/content/CategoriesPage";
 import { CommentsPage } from "../features/admin/content/CommentsPage";
 import { ContributorsPage } from "../features/admin/content/ContributorsPage";
 import { MediaPage } from "../features/admin/content/MediaPage";
+import { NavigationPage } from "../features/admin/content/NavigationPage";
 import { TagsPage } from "../features/admin/content/TagsPage";
 import { AdminLoginPage } from "../features/admin/auth/AdminLoginPage";
 import { AdminDashboardPage } from "../features/admin/dashboard/AdminDashboardPage";
@@ -40,6 +41,7 @@ import {
   TagsPage as BlogTagsPage,
 } from "../features/blog/articles/CollectionPages";
 import { BlogHomePage } from "../features/blog/home/HomePage";
+import { NavigationPage as PublicNavigationPage } from "../features/blog/navigation/NavigationPage";
 import { AboutAuthorPage, AboutSitePage, GuestbookPage } from "../features/blog/site/SitePages";
 import { RequireAdminAccess, RequireSetupComplete } from "../shared/routing/adminGuards";
 
@@ -86,6 +88,7 @@ export function AppRouter() {
           <Route path="about-site" element={<AboutSitePage />} />
           <Route path="about-author" element={<AboutAuthorPage />} />
           <Route path="guestbook" element={<GuestbookPage />} />
+          <Route path="navigation" element={<PublicNavigationPage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
@@ -123,6 +126,7 @@ export function AppRouter() {
             element={<ContributorArticlesPage />}
           />
           <Route path="admin/content/media" element={<MediaPage />} />
+          <Route path="admin/content/navigation" element={<NavigationPage />} />
           <Route path="admin/system/users" element={<UsersPage />} />
           <Route path="admin/system/profile" element={<ProfilePage />} />
           <Route path="admin/system/settings" element={<ThemeSettingsPage />} />

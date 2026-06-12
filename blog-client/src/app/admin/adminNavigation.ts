@@ -65,6 +65,13 @@ export const adminNavigationGroups: Array<{
         section: "内容管理",
       },
       {
+        description: "导航分组、网站链接和图标排序。",
+        icon: "map",
+        label: "导航页管理",
+        path: "/admin/content/navigation",
+        section: "内容管理",
+      },
+      {
         description: "媒体文件、链接复制和预览操作。",
         icon: "images",
         label: "媒体库",

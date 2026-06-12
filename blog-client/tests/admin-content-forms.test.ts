@@ -5,6 +5,7 @@ import {
   toFormState,
 } from "../src/features/admin/content/article-edit-helpers";
 import { toCommentRow } from "../src/features/admin/content/CommentsPage";
+import { adminNavigationGroups } from "../src/app/admin/adminNavigation";
 
 describe("admin article form relations", () => {
   it("hydrates a single category and tag relations into form state", () => {
@@ -66,5 +67,16 @@ describe("admin comment rows", () => {
     });
 
     expect(row.article).toBe("阅读札记");
+  });
+});
+
+describe("admin content navigation", () => {
+  it("places navigation management directly after contributors", () => {
+    const contentItems =
+      adminNavigationGroups.find((group) => group.label === "内容管理")?.items ?? [];
+    const contributorIndex = contentItems.findIndex((item) => item.label === "贡献者管理");
+
+    expect(contentItems[contributorIndex + 1]?.label).toBe("导航页管理");
+    expect(contentItems[contributorIndex + 1]?.path).toBe("/admin/content/navigation");
   });
 });

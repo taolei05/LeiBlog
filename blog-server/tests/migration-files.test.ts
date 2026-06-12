@@ -11,10 +11,20 @@ const migration = readFileSync(
   join(migrationsDir, "001_initial_schema.sql"),
   "utf8"
 );
+const navigationMigration = readFileSync(
+  join(migrationsDir, "002_add_navigation_page.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
-  test("keeps production initialization consolidated into one migration", () => {
-    expect(migrationFiles).toEqual(["001_initial_schema.sql"]);
+  test("keeps a consolidated baseline and an incremental navigation migration", () => {
+    expect(migrationFiles).toEqual([
+      "001_initial_schema.sql",
+      "002_add_navigation_page.sql",
+    ]);
+    expect(navigationMigration).toContain("CREATE TABLE IF NOT EXISTS navigation_groups");
+    expect(navigationMigration).toContain("CREATE TABLE IF NOT EXISTS navigation_items");
+    expect(navigationMigration).toContain("website-icons");
   });
 
   test("creates the required core tables", () => {

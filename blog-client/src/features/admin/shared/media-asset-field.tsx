@@ -91,6 +91,7 @@ export function MediaAssetField({
     if (folderSlug === "avatars") return "头像";
     if (folderSlug === "comments") return "评论";
     if (folderSlug === "site") return "站点";
+    if (folderSlug === "website-icons") return "网址图标";
     return "媒体库";
   }, [folderSlug]);
   const localImageEditorKind = useMemo<LocalImageEditorKind | null>(() => {
@@ -358,6 +359,7 @@ export function MultiMediaAssetField({
     if (folderSlug === "avatars") return "头像";
     if (folderSlug === "comments") return "评论";
     if (folderSlug === "site") return "站点";
+    if (folderSlug === "website-icons") return "网址图标";
     return "媒体库";
   }, [folderSlug]);
 

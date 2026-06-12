@@ -85,15 +85,16 @@ function cleanOptional(value: string | null | undefined) {
 
 function cleanHttpUrl(value: string) {
   const trimmed = cleanRequired(value, "网址不能为空");
+  let url: URL;
 
   try {
-    const url = new URL(trimmed);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw validationError("网址仅支持 http 或 https");
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message === "网址仅支持 http 或 https") throw error;
+    url = new URL(trimmed);
+  } catch {
     throw validationError("网址格式无效");
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw validationError("网址仅支持 http 或 https");
   }
 
   return trimmed;

@@ -29,7 +29,10 @@ import { showOperationToast } from "../../shared/toast/operation-toast";
 import { BlogFooter } from "./BlogFooter";
 import { InteractiveCursor } from "./InteractiveCursor";
 
-const primaryNavItems = [{ to: "/", label: "主页", icon: "home" }] as const;
+const primaryNavItems = [
+  { to: "/", label: "主页", icon: "home" },
+  { to: "/navigation", label: "导航页", icon: "map" },
+] as const;
 
 const articleNavItems = [
   { to: "/articles", label: "全部文章", icon: "reader" },

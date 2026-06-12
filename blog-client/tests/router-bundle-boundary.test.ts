@@ -10,4 +10,8 @@ describe("router bundle boundary", () => {
     expect(routerSource).toContain('import("prismjs")');
     expect(routerSource).toContain('import("../features/admin/content/ArticleEditPage")');
   });
+
+  it("wires the navigation management route", () => {
+    expect(routerSource).toContain('path="admin/content/navigation"');
+  });
 });
