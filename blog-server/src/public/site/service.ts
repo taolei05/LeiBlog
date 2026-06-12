@@ -130,7 +130,8 @@ export async function getPublicSiteFiling(client: DbClient = db) {
 export async function getPublicSiteAuthor(client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
-           social_links, blog_url, created_at, updated_at, last_login_at,
+           social_links, blog_url, comment_email_notifications_enabled,
+           created_at, updated_at, last_login_at,
            last_login_ip, last_login_location, last_login_device
     FROM users
     WHERE role = 'admin'

@@ -1,11 +1,12 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 
 import {
   getSystemSiteInfo,
   updateSystemSiteInfo,
 } from "../src/admin/system/service";
-import { getPublicSiteInfo } from "../src/public/site/service";
+import { getPublicSiteAuthor, getPublicSiteInfo } from "../src/public/site/service";
 import type { AuthUser } from "../src/shared/auth";
+import * as userTypes from "../src/shared/types/user";
 import { createMigratedTestDatabase, type TestDatabase } from "./helpers/database";
 
 let testDatabase: TestDatabase;
@@ -75,5 +76,26 @@ describe("site info settings", () => {
       "/uploads/site/cover-a.jpg",
       "/uploads/site/cover-b.jpg",
     ]);
+  });
+
+  test("loads the comment email preference for the public site author profile", async () => {
+    await testDb`
+      INSERT INTO users (username, password_hash, email, role)
+      VALUES ('public-author', 'password-hash', 'public-author@example.com', 'admin')
+    `;
+
+    let mappedPreference: boolean | undefined;
+    const originalToUserProfile = userTypes.toUserProfile;
+    const profileSpy = spyOn(userTypes, "toUserProfile").mockImplementation((row) => {
+      mappedPreference = row.comment_email_notifications_enabled;
+      return originalToUserProfile(row);
+    });
+
+    try {
+      await getPublicSiteAuthor(testDb);
+      expect(mappedPreference).toBe(true);
+    } finally {
+      profileSpy.mockRestore();
+    }
   });
 });
