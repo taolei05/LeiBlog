@@ -6,12 +6,14 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
+  deleteMediaFolder,
   deleteMedia,
   getMediaById,
   getMediaDownload,
   getMediaLink,
   getMediaPreview,
   listMedia,
+  listMediaFolders,
   renameMedia,
   uploadMedia,
 } from "../src/admin/media/service";
@@ -173,5 +175,22 @@ describe("admin media service", () => {
         { client: testDb, config }
       )
     ).rejects.toThrow("需要管理员权限");
+  });
+
+  test("creates and protects the website icon folder", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      UPLOADS_DIR: uploadRoot,
+      UPLOADS_URL_PREFIX: "/uploads",
+      UPLOAD_MAX_FILE_SIZE_BYTES: "1024",
+    });
+    const folders = await listMediaFolders(currentAdmin, { client: testDb, config });
+    const websiteIcons = folders.items.find((folder) => folder.slug === "website-icons");
+
+    expect(websiteIcons?.systemKey).toBe("website-icons");
+    expect(websiteIcons?.isProtected).toBe(true);
+    await expect(
+      deleteMediaFolder(currentAdmin, websiteIcons!.id, { client: testDb, config })
+    ).rejects.toThrow("系统媒体文件夹禁止删除");
   });
 });

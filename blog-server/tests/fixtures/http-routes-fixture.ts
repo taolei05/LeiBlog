@@ -146,6 +146,15 @@ async function seedRouteData() {
     INSERT INTO comments (article_id, user_id, content, status)
     VALUES (${article.id}, ${user.id}, '第一条公开评论', 'approved')
   `;
+  const [navigationGroup] = await db<{ id: string }[]>`
+    INSERT INTO navigation_groups (name, sort_order)
+    VALUES ('路由导航', 0)
+    RETURNING id
+  `;
+  await db`
+    INSERT INTO navigation_items (group_id, name, url, note, sort_order)
+    VALUES (${navigationGroup.id}, '路由网站', 'https://routes.example.com', '路由测试网站', 0)
+  `;
 
   return {
     article,
@@ -197,6 +206,15 @@ async function main() {
     200
   );
   assert(comments.total === 1, "公共评论列表应按文章 ID 返回评论");
+
+  const publicNavigation = await expectJson<{
+    groups: Array<{ items: Array<{ name: string }>; name: string }>;
+  }>(
+    await app.handle(new Request("http://localhost/api/public/navigation")),
+    200
+  );
+  assert(publicNavigation.groups[0]?.name === "路由导航", "公共导航路由应返回导航分组");
+  assert(publicNavigation.groups[0]?.items[0]?.name === "路由网站", "公共导航路由应返回网站");
 
   const adminAuth = await login(app, "route-admin", "admin-password");
   assert(adminAuth.user.id === seeded.adminId, "管理员登录用户不正确");
@@ -372,6 +390,25 @@ async function main() {
     })),
     403
   );
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/admin/navigation")),
+    401
+  );
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/admin/navigation", {
+      headers: jsonHeaders(userAuth.token),
+    })),
+    403
+  );
+  const adminNavigation = await expectJson<{
+    groups: Array<{ name: string }>;
+  }>(
+    await app.handle(new Request("http://localhost/api/admin/navigation", {
+      headers: jsonHeaders(adminAuth.token),
+    })),
+    200
+  );
+  assert(adminNavigation.groups[0]?.name === "路由导航", "管理员导航路由应返回导航分组");
 
   const adminArticles = await expectJson<ListBody<ArticleBody>>(
     await app.handle(new Request("http://localhost/api/admin/content/articles", {

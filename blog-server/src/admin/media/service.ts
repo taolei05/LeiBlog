@@ -13,7 +13,12 @@ import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/sl
 
 type MediaType = "image" | "video" | "document";
 type SortOrder = "asc" | "desc";
-type MediaSystemFolderKey = "article-covers" | "avatars" | "comments" | "site";
+type MediaSystemFolderKey =
+  | "article-covers"
+  | "avatars"
+  | "comments"
+  | "site"
+  | "website-icons";
 
 export interface MediaListQuery {
   createdFrom?: string;
@@ -104,6 +109,12 @@ const DEFAULT_MEDIA_FOLDERS = [
     name: "站点",
     slug: "site",
     systemKey: "site",
+  },
+  {
+    description: "导航页网站图标只能存储到这里。",
+    name: "网址图标",
+    slug: "website-icons",
+    systemKey: "website-icons",
   },
 ] satisfies Array<{
   description: string;

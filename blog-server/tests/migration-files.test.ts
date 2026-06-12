@@ -30,6 +30,8 @@ describe("initial database migration", () => {
       "email_change_requests",
       "media_assets",
       "media_folders",
+      "navigation_groups",
+      "navigation_items",
       "setup_state",
     ]) {
       expect(migration).toContain(`CREATE TABLE ${table}`);
@@ -58,6 +60,16 @@ describe("initial database migration", () => {
     expect(migration).toContain("avatars");
     expect(migration).toContain("comments");
     expect(migration).toContain("site");
+    expect(migration).toContain("website-icons");
+  });
+
+  test("creates ordered navigation groups and items", () => {
+    expect(migration).toContain("CREATE UNIQUE INDEX navigation_groups_name_unique");
+    expect(migration).toContain("CREATE INDEX navigation_groups_sort_order_idx");
+    expect(migration).toContain("CREATE INDEX navigation_items_group_sort_order_idx");
+    expect(migration).toContain("REFERENCES navigation_groups(id) ON DELETE RESTRICT");
+    expect(migration).toContain("CREATE TRIGGER navigation_groups_set_updated_at");
+    expect(migration).toContain("CREATE TRIGGER navigation_items_set_updated_at");
   });
 
   test("limits articles to one linked category", () => {
