@@ -26,6 +26,10 @@ export interface UpdateMeInput {
   blogUrl?: string | null;
 }
 
+export interface UpdateMyPreferencesInput {
+  commentEmailNotificationsEnabled: boolean;
+}
+
 export interface EmailChangeInput {
   email: string;
 }
@@ -106,6 +110,21 @@ export async function updateMe(
           ELSE social_links
         END,
         blog_url = CASE WHEN ${input.blogUrl !== undefined} THEN ${blogUrl} ELSE blog_url END,
+        updated_at = now()
+    WHERE id = ${userId}
+  `;
+
+  return getUserProfile(userId, client);
+}
+
+export async function updateMyPreferences(
+  userId: string,
+  input: UpdateMyPreferencesInput,
+  client: DbClient = db
+) {
+  await client`
+    UPDATE users
+    SET comment_email_notifications_enabled = ${input.commentEmailNotificationsEnabled},
         updated_at = now()
     WHERE id = ${userId}
   `;

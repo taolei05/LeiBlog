@@ -16,6 +16,10 @@ export const UpdateMeBody = t.Object({
   blogUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
 });
 
+export const UpdateMyPreferencesBody = t.Object({
+  commentEmailNotificationsEnabled: t.Boolean(),
+});
+
 export const UploadAvatarBody = t.Object({
   file: t.File(),
 });

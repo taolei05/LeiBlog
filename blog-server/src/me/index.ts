@@ -9,6 +9,7 @@ import {
   MeResponse,
   OkResponse,
   UpdateMeBody,
+  UpdateMyPreferencesBody,
   UploadAvatarBody,
   UploadAvatarResponse,
 } from "./model";
@@ -18,6 +19,7 @@ import {
   getUserProfile,
   requestEmailChangeCode,
   updateMe,
+  updateMyPreferences,
   uploadMyAvatar,
 } from "./service";
 import { authContext } from "../shared/auth/plugin";
@@ -44,6 +46,15 @@ export const meModule = new Elysia({ prefix: "/api/me" })
     user: await updateMe(currentUser, body),
   }), {
     body: UpdateMeBody,
+    response: {
+      200: MeResponse,
+    },
+  })
+  .patch("/preferences", async ({ currentUser, body }) => ({
+    ok: true,
+    user: await updateMyPreferences(currentUser.id, body),
+  }), {
+    body: UpdateMyPreferencesBody,
     response: {
       200: MeResponse,
     },

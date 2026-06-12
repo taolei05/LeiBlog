@@ -29,6 +29,7 @@ import {
   getUserProfile,
   requestEmailChangeCode,
   updateMe,
+  updateMyPreferences,
 } from "../src/me/service";
 
 const POSTGRES_ADMIN_URL =
@@ -270,13 +271,21 @@ describe("auth and user services", () => {
     expect(profile.lastLoginIp).toBe("127.0.0.1");
     expect(profile.commentEmailNotificationsEnabled).toBe(true);
 
-    await testDb`
-      UPDATE users
-      SET comment_email_notifications_enabled = false
-      WHERE id = ${user.id}
-    `;
+    const notificationsDisabled = await updateMyPreferences(
+      user.id,
+      { commentEmailNotificationsEnabled: false },
+      testDb
+    );
+    expect(notificationsDisabled.commentEmailNotificationsEnabled).toBe(false);
+
     const notificationsDisabledProfile = await getUserProfile(user.id, testDb);
     expect(notificationsDisabledProfile.commentEmailNotificationsEnabled).toBe(false);
+
+    await updateMyPreferences(
+      user.id,
+      { commentEmailNotificationsEnabled: true },
+      testDb
+    );
   });
 
   test("stores localized IPGeolocation metadata for successful public IP logins", async () => {
