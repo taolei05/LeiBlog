@@ -269,6 +269,14 @@ describe("auth and user services", () => {
     const profile = await getUserProfile(user.id, testDb);
     expect(profile.lastLoginIp).toBe("127.0.0.1");
     expect(profile.commentEmailNotificationsEnabled).toBe(true);
+
+    await testDb`
+      UPDATE users
+      SET comment_email_notifications_enabled = false
+      WHERE id = ${user.id}
+    `;
+    const notificationsDisabledProfile = await getUserProfile(user.id, testDb);
+    expect(notificationsDisabledProfile.commentEmailNotificationsEnabled).toBe(false);
   });
 
   test("stores localized IPGeolocation metadata for successful public IP logins", async () => {

@@ -12,29 +12,31 @@ const databaseUrl =
 const migrationsDir = fileURLToPath(new URL("./migrations", import.meta.url));
 const sql = new Bun.SQL(databaseUrl, { max: 1 });
 const CONSOLIDATED_INITIAL_MIGRATION = "001_initial_schema.sql";
-const LEGACY_FINAL_MIGRATION = "011_remove_demo_role.sql";
 
 function checksum(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function isLegacySchemaAlreadyConsolidated({
-  applied,
-  existingHash,
+export function decideAppliedMigration({
+  appliedChecksum,
+  currentChecksum,
   file,
-  hash,
 }: {
-  applied: Map<string, string>;
-  existingHash: string | undefined;
+  appliedChecksum: string | undefined;
+  currentChecksum: string;
   file: string;
-  hash: string;
 }) {
-  return (
-    file === CONSOLIDATED_INITIAL_MIGRATION &&
-    existingHash !== undefined &&
-    existingHash !== hash &&
-    applied.has(LEGACY_FINAL_MIGRATION)
-  );
+  if (appliedChecksum === currentChecksum) return "skip";
+
+  if (file === CONSOLIDATED_INITIAL_MIGRATION && appliedChecksum !== undefined) {
+    return "skip-consolidated-baseline";
+  }
+
+  if (appliedChecksum !== undefined) {
+    throw new Error(`Migration checksum changed after apply: ${file}`);
+  }
+
+  return "apply";
 }
 
 async function main() {
@@ -63,19 +65,20 @@ async function main() {
     const content = await readFile(join(migrationsDir, file), "utf8");
     const hash = checksum(content);
     const existingHash = applied.get(file);
+    const decision = decideAppliedMigration({
+      appliedChecksum: existingHash,
+      currentChecksum: hash,
+      file,
+    });
 
-    if (existingHash === hash) {
+    if (decision === "skip") {
       console.log(`skip ${file}`);
       continue;
     }
 
-    if (isLegacySchemaAlreadyConsolidated({ applied, existingHash, file, hash })) {
-      console.log(`skip ${file} (legacy migrations already applied)`);
+    if (decision === "skip-consolidated-baseline") {
+      console.log(`skip ${file} (consolidated baseline already applied)`);
       continue;
-    }
-
-    if (existingHash && existingHash !== hash) {
-      throw new Error(`Migration checksum changed after apply: ${file}`);
     }
 
     await sql.begin(async (tx) => {
@@ -94,8 +97,10 @@ async function main() {
   }
 }
 
-try {
-  await main();
-} finally {
-  await sql.end();
+if (import.meta.main) {
+  try {
+    await main();
+  } finally {
+    await sql.end();
+  }
 }
