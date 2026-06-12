@@ -248,6 +248,27 @@ export function renderNoticeEmailHtml({
   });
 }
 
+type RenderCommentNotificationEmailHtmlParameters = {
+  content: string;
+  description: string;
+  title: string;
+};
+
+export function renderCommentNotificationEmailHtml({
+  content,
+  description,
+  title,
+}: RenderCommentNotificationEmailHtmlParameters) {
+  return renderLeiBlogEmailHtml({
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
+      <div style="margin:18px 0 0;padding:16px 18px;border:1px solid #e4e4e7;border-radius:18px;background:#fafafa;color:#27272a;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word;">${escapeHtml(content)}</div>
+    `,
+    preheader: description,
+    title,
+  });
+}
+
 async function getResendConfig(client: DbClient) {
   const [config] = await client<ResendConfigRow[]>`
     SELECT resend_domain, resend_api_key_encrypted
