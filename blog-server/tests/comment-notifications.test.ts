@@ -178,7 +178,8 @@ describe("comment notification emails", () => {
 
     expect(adminNotifications.map((notification) => notification.to)).toEqual(["admin@example.com"]);
     expect(adminNotifications[0]?.description).toBe("张三在《评论通知文章》文章评论了：");
-    expect(adminNotifications[0]?.subject).toBe("新评论通知");
+    expect(adminNotifications[0]?.subject).toContain("新评论通知");
+    expect(adminNotifications[0]?.subject).toContain("评论通知文章");
   });
 
   test("resolves only the direct parent author for reply notifications", async () => {
@@ -217,7 +218,8 @@ describe("comment notification emails", () => {
 
     expect(replyNotifications.map((notification) => notification.to)).toEqual(["parent@example.com"]);
     expect(replyNotifications[0]?.description).toBe("赵六在《评论通知文章》文章中回复了你的评论：");
-    expect(replyNotifications[0]?.subject).toBe("评论回复通知");
+    expect(replyNotifications[0]?.subject).toContain("评论回复通知");
+    expect(replyNotifications[0]?.subject).toContain("评论通知文章");
     expect(notifications.some((notification) => notification.to === "other@example.com")).toBe(false);
   });
 
@@ -330,12 +332,19 @@ describe("comment notification emails", () => {
     const replyNotifications = await resolveCommentNotifications(replyId, testDb);
 
     expect(guestbookNotifications[0]?.description).toBe("guest-reply在留言板评论了：");
-    expect(guestbookNotifications[0]?.subject).toBe("新评论通知");
+    expect(guestbookNotifications[0]?.subject).toContain("新评论通知");
+    expect(guestbookNotifications[0]?.subject).toContain("留言板");
     expect(replyNotifications.find((notification) => notification.kind === "admin")?.description).toBe(
       "guest-reply在留言板回复了评论："
     );
+    expect(replyNotifications.find((notification) => notification.kind === "admin")?.subject).toContain(
+      "留言板"
+    );
     expect(replyNotifications.find((notification) => notification.kind === "reply")?.description).toBe(
       "guest-reply在留言板中回复了你的评论："
+    );
+    expect(replyNotifications.find((notification) => notification.kind === "reply")?.subject).toContain(
+      "留言板"
     );
   });
 

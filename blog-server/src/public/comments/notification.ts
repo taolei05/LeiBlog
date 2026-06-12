@@ -77,6 +77,23 @@ function createNotificationDescription({
   return `${authorDisplayName}在留言板${action}：`;
 }
 
+type CreateNotificationSubjectParameters = {
+  articleTitle: string | null;
+  kind: CommentNotificationKind;
+  targetType: "article" | "guestbook";
+};
+
+function createNotificationSubject({
+  articleTitle,
+  kind,
+  targetType,
+}: CreateNotificationSubjectParameters) {
+  const notificationType = kind === "admin" ? "新评论通知" : "评论回复通知";
+  const targetName = targetType === "article" ? articleTitle ?? "未知文章" : "留言板";
+
+  return `${notificationType}：${targetName}`;
+}
+
 type CreateCommentNotificationParameters = {
   comment: CommentNotificationCommentRow;
   kind: CommentNotificationKind;
@@ -98,7 +115,11 @@ function createCommentNotification({
       targetType: comment.target_type,
     }),
     kind,
-    subject: kind === "admin" ? "新评论通知" : "评论回复通知",
+    subject: createNotificationSubject({
+      articleTitle: comment.article_title,
+      kind,
+      targetType: comment.target_type,
+    }),
     to,
   };
 }
