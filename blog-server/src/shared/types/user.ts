@@ -1,6 +1,7 @@
 import { t } from "elysia";
 
 import type { UserRole } from "../auth";
+import { describeLocation } from "../location";
 
 export const UserRoleSchema = t.Union([
   t.Literal("admin"),
@@ -82,16 +83,6 @@ function readJsonText(value: unknown, key: string) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const field = (value as Record<string, unknown>)[key];
   return typeof field === "string" && field.trim() ? field.trim() : null;
-}
-
-function describeLocation(value: unknown) {
-  const location = readJsonText(value, "location");
-  if (location) return location;
-
-  const city = readJsonText(value, "city");
-  const country = readJsonText(value, "country_name") ?? readJsonText(value, "country");
-  const parts = [country, city].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 export function toUserProfile(row: UserProfileRow): UserProfile {

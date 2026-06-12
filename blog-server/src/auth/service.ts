@@ -15,6 +15,7 @@ import { decryptSecret } from "../shared/crypto";
 import type { DbClient } from "../shared/db";
 import { db, withTransaction } from "../shared/db";
 import { conflict, unauthorized, validationError } from "../shared/errors";
+import { resolveLocalizedIpLocation } from "../shared/location";
 import { addDays, addMinutes } from "../shared/time";
 import type { UserProfileRow } from "../shared/types/user";
 import { toUserProfile } from "../shared/types/user";
@@ -71,10 +72,6 @@ interface EmailCodePurpose {
 interface ResendConfigRow {
   resend_domain: string | null;
   resend_api_key_encrypted: StoredEncryptedSecret | null;
-}
-
-interface IpGeolocationConfigRow {
-  ipgeolocation_api_key_encrypted: StoredEncryptedSecret | null;
 }
 
 interface AuthServiceOptions {
@@ -372,40 +369,10 @@ export function isPrivateIp(ip: string): boolean {
   );
 }
 
-async function getIpGeolocationApiKey(client: DbClient) {
-  const [config] = await client<IpGeolocationConfigRow[]>`
-    SELECT ipgeolocation_api_key_encrypted
-    FROM site_config
-    WHERE id = 1
-  `;
-
-  return decryptSecret(config?.ipgeolocation_api_key_encrypted);
-}
-
 export async function resolveLoginLocation(meta: RequestMeta, client: DbClient) {
   if (!meta.ip || isPrivateIp(meta.ip)) return null;
 
-  const apiKey = await getIpGeolocationApiKey(client);
-  if (!apiKey) return null;
-
-  const apiUrl = new URL("https://api.ipgeolocation.io/ipgeo");
-  apiUrl.searchParams.set("apiKey", apiKey);
-  apiUrl.searchParams.set("ip", meta.ip);
-  apiUrl.searchParams.set("lang", "cn");
-
-  try {
-    const response = await fetch(apiUrl, {
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) return null;
-
-    const location: unknown = await response.json();
-    return location && typeof location === "object" && !Array.isArray(location)
-      ? location
-      : null;
-  } catch {
-    return null;
-  }
+  return resolveLocalizedIpLocation(meta.ip, client);
 }
 
 export function getRequestMeta({

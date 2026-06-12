@@ -269,7 +269,7 @@ describe("auth and user services", () => {
     expect(profile.lastLoginIp).toBe("127.0.0.1");
   });
 
-  test("stores IPGeolocation metadata for successful public IP logins", async () => {
+  test("stores localized IPGeolocation metadata for successful public IP logins", async () => {
     const [user] = await testDb<{ id: string }[]>`
       INSERT INTO users (username, password_hash, email, role)
       VALUES (
@@ -280,26 +280,39 @@ describe("auth and user services", () => {
       )
       RETURNING id
     `;
-    const encryptedApiKey = encryptSecret("geo-secret");
+    const encryptedDeepLApiKey = encryptSecret("deepl-secret");
+    const encryptedIpGeolocationApiKey = encryptSecret("geo-secret");
 
     await testDb`
-      INSERT INTO site_config (id, ipgeolocation_api_key_encrypted)
-      VALUES (1, ${JSON.stringify(encryptedApiKey)}::jsonb)
+      INSERT INTO site_config (
+        id, deepl_api_key_encrypted, ipgeolocation_api_key_encrypted
+      )
+      VALUES (
+        1,
+        ${JSON.stringify(encryptedDeepLApiKey)}::jsonb,
+        ${JSON.stringify(encryptedIpGeolocationApiKey)}::jsonb
+      )
     `;
 
     const originalFetch = globalThis.fetch;
-    const locationFetch = async (..._args: Parameters<typeof fetch>) =>
-      new Response(
-        JSON.stringify({
-          country_name: "中国",
-          city: "上海",
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+    const locationFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("https://api.ipgeolocation.io/ipgeo")) {
+        return Response.json({
+          country_name: "United States",
+          city: "San Jose",
+        });
+      }
+      if (url.includes("api-free.deepl.com") || url.includes("api.deepl.com")) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          target_lang: "ZH-HANS",
+          text: ["United States San Jose"],
+        });
+        return Response.json({ translations: [{ text: "美国 圣何塞" }] });
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    };
     globalThis.fetch = Object.assign(locationFetch, {
       preconnect: originalFetch.preconnect,
     });
@@ -311,22 +324,44 @@ describe("auth and user services", () => {
         { client: testDb }
       );
 
-      expect(profile.lastLoginLocation).toBe("中国 上海");
+      expect(profile.lastLoginLocation).toBe("美国 圣何塞");
       expect(profile.lastLoginDevice).toBe("geo-browser");
+
+      const users = await listUsers(
+        {
+          id: user.id,
+          username: "geo-reader",
+          email: "geo-reader@example.com",
+          name: null,
+          role: "admin",
+          avatarUrl: null,
+        },
+        {},
+        testDb
+      );
+      expect(users.items.find((item) => item.id === user.id)?.lastLoginLocation).toBe(
+        "美国 圣何塞"
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
 
-    const [stored] = await testDb<{ city: string | null; country_name: string | null }[]>`
+    const [stored] = await testDb<{
+      city: string | null;
+      country_name: string | null;
+      location: string | null;
+    }[]>`
       SELECT last_login_location->>'city' AS city,
-             last_login_location->>'country_name' AS country_name
+             last_login_location->>'country_name' AS country_name,
+             last_login_location->>'location' AS location
       FROM users
       WHERE id = ${user.id}
     `;
 
     expect(stored).toEqual({
-      city: "上海",
-      country_name: "中国",
+      city: "San Jose",
+      country_name: "United States",
+      location: "美国 圣何塞",
     });
   });
 

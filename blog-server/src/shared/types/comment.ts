@@ -1,6 +1,7 @@
 import { t } from "elysia";
 
 import { UserRoleSchema } from "./user";
+import { describeLocation } from "../location";
 
 export const CommentStatusSchema = t.Union([
   t.Literal("pending"),
@@ -69,22 +70,6 @@ function toIso(value: Date | string | null) {
   return new Date(value).toISOString();
 }
 
-function readJsonText(value: unknown, key: string) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "string" && field.trim() ? field.trim() : null;
-}
-
-export function describeCommentLocation(value: unknown) {
-  const location = readJsonText(value, "location");
-  if (location) return location;
-
-  const city = readJsonText(value, "city");
-  const country = readJsonText(value, "country_name") ?? readJsonText(value, "country");
-  const parts = [country, city].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : null;
-}
-
 export function toCommentItem(row: CommentRow) {
   return {
     id: row.id,
@@ -98,7 +83,7 @@ export function toCommentItem(row: CommentRow) {
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
     deletedAt: toIso(row.deleted_at),
-    location: describeCommentLocation(row.comment_location),
+    location: describeLocation(row.comment_location),
     author: {
       id: row.user_id,
       username: row.username,

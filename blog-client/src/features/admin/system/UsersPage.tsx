@@ -27,6 +27,7 @@ type UserRow = DataTableRow & {
   description: string;
   email: string;
   lastLogin: string;
+  lastLoginLocation: string;
   name: string;
   role: "admin" | "user";
   username: string;
@@ -41,6 +42,7 @@ type AdminUserItem = {
   email: string | null;
   id: string;
   lastLoginAt: string | null;
+  lastLoginLocation: string | null;
   name: string | null;
   role: UserRow["role"];
   tags: string[];
@@ -142,6 +144,12 @@ const userColumns: DataTableColumn<UserRow>[] = [
     value: (row) => roleLabel[row.role],
   },
   {
+    header: "登录地点",
+    id: "lastLoginLocation",
+    sortable: true,
+    value: (row) => row.lastLoginLocation,
+  },
+  {
     header: "最近登录",
     id: "lastLogin",
     sortable: true,
@@ -169,6 +177,7 @@ function toUserRow(item: AdminUserItem): UserRow {
     email: item.email ?? "未设置邮箱",
     id: item.id,
     lastLogin: item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString("zh-CN") : "从未登录",
+    lastLoginLocation: item.lastLoginLocation ?? "暂无记录",
     name: item.name ?? item.username,
     role: item.role,
     tags: item.tags,
@@ -511,7 +520,7 @@ export function UsersPage() {
         filters={userFilters}
         rowActions={userRowActions}
         rows={userRows}
-        searchPlaceholder="搜索用户名、昵称、邮箱"
+        searchPlaceholder="搜索用户名、昵称、邮箱、登录地点"
         toolbarActions={userToolbarActions}
         emptyText="暂无用户记录"
       />

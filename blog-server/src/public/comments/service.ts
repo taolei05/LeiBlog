@@ -1,14 +1,8 @@
 import type { AuthUser } from "../../shared/auth";
 import { clearArticleCacheById } from "../../shared/cache/content";
-import type { StoredEncryptedSecret } from "../../shared/crypto";
-import { decryptSecret } from "../../shared/crypto";
 import { db, withTransaction, type DbClient } from "../../shared/db";
 import { forbidden, notFound, validationError } from "../../shared/errors";
-import {
-  describeCommentLocation,
-  toCommentItem,
-  type CommentRow,
-} from "../../shared/types/comment";
+import { toCommentItem, type CommentRow } from "../../shared/types/comment";
 import { resolveLoginLocation, type RequestMeta } from "../../auth/service";
 
 export interface PublicCommentQuery {
@@ -31,54 +25,6 @@ type CommentTarget =
       articleId: null;
       targetType: "guestbook";
     };
-
-interface DeepLConfigRow {
-  deepl_api_key_encrypted: StoredEncryptedSecret | null;
-}
-
-async function translateCommentLocation(location: unknown, client: DbClient) {
-  const sourceText = describeCommentLocation(location);
-  if (!sourceText) return location;
-
-  try {
-    const [config] = await client<DeepLConfigRow[]>`
-      SELECT deepl_api_key_encrypted
-      FROM site_config
-      WHERE id = 1
-    `;
-    const apiKey = decryptSecret(config?.deepl_api_key_encrypted);
-    if (!apiKey) return location;
-
-    const endpoint = apiKey.endsWith(":fx")
-      ? "https://api-free.deepl.com/v2/translate"
-      : "https://api.deepl.com/v2/translate";
-    const response = await fetch(endpoint, {
-      body: JSON.stringify({
-        target_lang: "ZH-HANS",
-        text: [sourceText],
-      }),
-      headers: {
-        Authorization: `DeepL-Auth-Key ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(3000),
-    });
-    if (!response.ok) return location;
-
-    const payload = (await response.json()) as {
-      translations?: Array<{ text?: string }>;
-    };
-    const translatedText = payload.translations?.[0]?.text?.trim();
-    if (!translatedText) return location;
-
-    return location && typeof location === "object" && !Array.isArray(location)
-      ? { ...location, location: translatedText }
-      : { location: translatedText };
-  } catch {
-    return location;
-  }
-}
 
 function toPage(input: PublicCommentQuery) {
   const page = input.page ?? 1;
@@ -226,8 +172,7 @@ async function createCommentForTarget(
       await ensurePublishedArticle(target.articleId, tx);
     }
     const parentId = await ensureParentComment(target, input.parentId, tx);
-    const rawLocation = meta ? await resolveLoginLocation(meta, tx) : null;
-    const location = await translateCommentLocation(rawLocation, tx);
+    const location = meta ? await resolveLoginLocation(meta, tx) : null;
     const device = meta?.userAgent ? { userAgent: meta.userAgent } : null;
 
     const [created] = await tx<{ id: string }[]>`

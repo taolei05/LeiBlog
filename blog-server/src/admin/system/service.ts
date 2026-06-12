@@ -14,6 +14,7 @@ import { decryptSecret, encryptSecret } from "../../shared/crypto";
 import type { DbClient } from "../../shared/db";
 import { db } from "../../shared/db";
 import { validationError } from "../../shared/errors";
+import { describeLocation } from "../../shared/location";
 import type { IcpFilingRecordInput } from "../../shared/site-filing";
 import { cleanIcpFilingRecords, readStoredIcpFilingRecords } from "../../shared/site-filing";
 
@@ -192,16 +193,6 @@ function readJsonText(value: unknown, key: string) {
 
 function describeDevice(value: unknown) {
   return readJsonText(value, "userAgent") ?? "未知设备";
-}
-
-function describeLocation(value: unknown) {
-  const location = readJsonText(value, "location");
-  if (location) return location;
-
-  const city = readJsonText(value, "city");
-  const country = readJsonText(value, "country_name") ?? readJsonText(value, "country");
-  const parts = [country, city].filter(Boolean);
-  return parts.length > 0 ? parts.join(" ") : "未知地点";
 }
 
 async function getSiteConfigRow(client: DbClient) {
@@ -612,7 +603,7 @@ export async function testIpGeolocationIntegration(
     login: {
       device: describeDevice(row?.last_login_device),
       ip: row?.last_login_ip ?? "本地或未知 IP",
-      location: describeLocation(row?.last_login_location ?? apiLocation),
+      location: describeLocation(row?.last_login_location ?? apiLocation) ?? "未知地点",
     },
   };
 }

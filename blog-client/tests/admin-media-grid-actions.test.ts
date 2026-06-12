@@ -35,4 +35,9 @@ describe("admin user actions", () => {
     expect(usersPageSource).not.toContain('key: "status"');
     expect(usersPageSource).not.toContain('status: "active"');
   });
+
+  it("shows the localized login location in the user table", () => {
+    expect(usersPageSource).toContain('header: "登录地点"');
+    expect(usersPageSource).toContain("lastLoginLocation: item.lastLoginLocation ??");
+  });
 });
