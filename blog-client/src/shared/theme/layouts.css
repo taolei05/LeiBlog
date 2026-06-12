@@ -7295,6 +7295,29 @@
   gap: 0.5rem;
 }
 
+.account-preference-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.account-preference-row {
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: var(--field-radius);
+  background: var(--surface-secondary);
+  padding: 0.875rem;
+}
+
+.account-preference-row strong,
+.account-preference-row span {
+  display: block;
+}
+
+.account-preference-row span {
+  color: var(--muted);
+}
+
 .admin-account-login-grid {
   display: grid;
   margin: 0;

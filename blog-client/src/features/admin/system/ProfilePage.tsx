@@ -8,6 +8,7 @@ import {
   Form,
   InputGroup,
   Label,
+  Switch,
   TextField,
 } from "@heroui/react";
 import type { FormEvent, ReactNode } from "react";
@@ -32,6 +33,7 @@ import { MediaAssetField } from "../shared/media-asset-field";
 type AdminProfile = {
   avatarUrl: string | null;
   blogUrl: string | null;
+  commentEmailNotificationsEnabled: boolean;
   createdAt: string;
   description: string;
   email: string | null;
@@ -185,6 +187,7 @@ export function ProfilePage() {
   const [pendingSave, setPendingSave] = useState<AdminAccountSaveKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
 
   useEffect(() => {
@@ -346,6 +349,37 @@ export function ProfilePage() {
       showOperationToast(error instanceof Error ? error.message : "安全设置保存失败", "danger");
     } finally {
       setIsSavingSecurity(false);
+    }
+  }
+
+  async function saveCommentEmailNotificationPreference(nextValue: boolean) {
+    const previousProfile = profile;
+
+    if (!previousProfile) {
+      showOperationToast("管理员资料仍在读取，请稍后再试", "warning");
+      return;
+    }
+
+    setProfile({ ...previousProfile, commentEmailNotificationsEnabled: nextValue });
+
+    try {
+      setIsSavingPreferences(true);
+      const response = await adminFetch<{ user: AdminProfile }>("/me/preferences", {
+        body: { commentEmailNotificationsEnabled: nextValue },
+        method: "PATCH",
+      });
+
+      setProfile(response.user);
+      syncAdminSession(response.user);
+      showOperationToast("评论邮件通知偏好已保存", "success");
+    } catch (error) {
+      setProfile(previousProfile);
+      showOperationToast(
+        error instanceof Error ? error.message : "评论邮件通知偏好保存失败",
+        "danger",
+      );
+    } finally {
+      setIsSavingPreferences(false);
     }
   }
 
@@ -608,10 +642,26 @@ export function ProfilePage() {
           </dl>
         </AdminAccountAccordionItem>
 
-        <AdminAccountAccordionItem icon="sparkles" id="preferences" title="偏好">
+        <AdminAccountAccordionItem icon="sparkles" id="preferences" title="偏好设置">
           <div className="admin-account-section-copy">
             <h3>偏好设置</h3>
             <p className="admin-account-preference-note">主题与编辑体验偏好会在这里继续扩展。</p>
+          </div>
+          <div className="account-preference-list">
+            <Switch
+              className="account-preference-row"
+              isDisabled={isLoading || isSavingPreferences || profile === null}
+              isSelected={profile?.commentEmailNotificationsEnabled ?? true}
+              onChange={(nextValue) => void saveCommentEmailNotificationPreference(nextValue)}
+            >
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              <Switch.Content>
+                <strong>评论邮件通知</strong>
+                <span>接收全站文章和留言板的新评论、新回复邮件。</span>
+              </Switch.Content>
+            </Switch>
           </div>
         </AdminAccountAccordionItem>
       </Accordion>
