@@ -758,7 +758,8 @@
   position: sticky;
   top: 0;
   display: flex;
-  height: 100svh;
+  min-height: 100svh;
+  align-self: start;
   flex-direction: column;
   gap: 1.5rem;
   border-right: 1px solid var(--separator);
@@ -7120,6 +7121,22 @@
   max-width: min(100%, 44rem);
 }
 
+.api-key-field-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.api-key-get-link {
+  flex: 0 0 auto;
+  color: var(--cursor-accent);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .site-settings-card__hint {
   margin: 0;
   color: var(--muted);
@@ -7953,7 +7970,8 @@
 
 .admin-shell__sidebar {
   top: var(--space-page);
-  height: calc(100svh - (var(--space-page) * 2));
+  min-height: calc(100svh - (var(--space-page) * 2));
+  height: auto;
   margin: var(--space-page) 0 var(--space-page) var(--space-page);
   border-right: 1px solid var(--cursor-border-soft);
 }
@@ -9152,7 +9170,9 @@
     z-index: 30;
     width: 60vw;
     height: 100svh;
+    min-height: 0;
     margin: 0;
+    overflow-y: auto;
     border-radius: 0 1rem 1rem 0;
     transform: translateX(-105%);
     transition: transform var(--duration-normal) var(--ease-out);

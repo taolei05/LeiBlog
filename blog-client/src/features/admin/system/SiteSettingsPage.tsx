@@ -23,6 +23,7 @@ import { AppIcon } from "../../../shared/icons";
 import { PasswordInputGroup } from "../../../shared/password-input-group";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
+import { ADMIN_API_KEY_URLS, ApiKeyGetLink } from "../shared/api-key-links";
 import { MediaAssetField, MultiMediaAssetField } from "../shared/media-asset-field";
 
 type SiteInfoState = {
@@ -1013,6 +1014,7 @@ export function SiteSettingsPage() {
             <SecretSettingField
               canReveal={keyFlags.hasResendApiKey}
               configured={keyFlags.hasResendApiKey}
+              getUrl={ADMIN_API_KEY_URLS.resend}
               label="Resend API Key"
               onChange={(value) => setSiteConfig((state) => ({ ...state, resendApiKey: value }))}
               onReveal={() => openRevealModal("resendApiKey")}
@@ -1025,11 +1027,12 @@ export function SiteSettingsPage() {
             <SecretSettingField
               canReveal={keyFlags.hasDeepLApiKey}
               configured={keyFlags.hasDeepLApiKey}
+              getUrl={ADMIN_API_KEY_URLS.deepl}
               label="DeepL API Key"
               onChange={(value) => setSiteConfig((state) => ({ ...state, deeplApiKey: value }))}
               onReveal={() => openRevealModal("deeplApiKey")}
               onTest={() => openTestModal({ kind: "deepl" })}
-              description="用于自动翻译标题并生成 slug。"
+              description="用于翻译评论地点，并自动翻译标题生成 slug。"
               placeholder="留空则保留当前密钥"
               testLabel="测试"
               value={siteConfig.deeplApiKey}
@@ -1037,6 +1040,7 @@ export function SiteSettingsPage() {
             <SecretSettingField
               canReveal={keyFlags.hasIpgeolocationApiKey}
               configured={keyFlags.hasIpgeolocationApiKey}
+              getUrl={ADMIN_API_KEY_URLS.ipgeolocation}
               label="IPGeolocation API Key"
               onChange={(value) =>
                 setSiteConfig((state) => ({ ...state, ipgeolocationApiKey: value }))
@@ -1516,6 +1520,7 @@ type SecretSettingFieldProps = {
   configured: boolean;
   description?: string;
   fieldError?: string;
+  getUrl?: string;
   inputType?: "password" | "text";
   label: string;
   onChange: (value: string) => void;
@@ -1533,6 +1538,7 @@ function SecretSettingField({
   configured,
   description,
   fieldError,
+  getUrl,
   inputType = "password",
   label,
   onChange,
@@ -1595,7 +1601,10 @@ function SecretSettingField({
 
   return (
     <TextField className="secret-setting-field" fullWidth>
-      <Label>{label}</Label>
+      <div className="api-key-field-heading">
+        <Label>{label}</Label>
+        {getUrl ? <ApiKeyGetLink href={getUrl} /> : null}
+      </div>
       <div className="secret-setting-row">
         <InputGroup fullWidth variant="secondary">
           <InputGroup.Prefix>

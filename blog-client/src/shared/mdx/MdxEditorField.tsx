@@ -31,7 +31,11 @@ import {
 } from "@mdxeditor/editor";
 import { useEffect, useRef } from "react";
 
-import { getAdminApiUrl, readStoredAdminSession } from "../../features/admin/shared/admin-api";
+import {
+  expireAdminSessionForResponse,
+  getAdminApiUrl,
+  readStoredAdminSession,
+} from "../../features/admin/shared/admin-api";
 import { resolveApiAssetUrl } from "../api/api-base-url";
 import { mdxJsxComponentDescriptors } from "./mdxWhitelist";
 
@@ -159,6 +163,7 @@ export const uploadMdxImageToMedia: ImageUploadHandler = async (file) => {
   });
 
   if (!response.ok) {
+    expireAdminSessionForResponse(response, true);
     throw new Error("图片上传失败");
   }
 

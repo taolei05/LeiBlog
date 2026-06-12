@@ -16,6 +16,13 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { getAdminApiBaseUrl, resolveApiAssetUrl } from "../../../shared/api/api-base-url";
+import {
+  BLOG_SESSION_CHANGE_EVENT,
+  BLOG_SESSION_STORAGE_KEY,
+  clearStoredBlogSession,
+  expireBlogSessionForResponse,
+  notifyBlogSessionChange,
+} from "../../../shared/auth/blog-session";
 import { AppIcon } from "../../../shared/icons";
 import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
 import { PasswordInputGroup } from "../../../shared/password-input-group";
@@ -129,8 +136,6 @@ type UserProfilePageProps = {
 };
 
 const AUTH_API_BASE_URL = getAdminApiBaseUrl();
-const BLOG_SESSION_KEY = "leiblog:blog-session";
-const BLOG_SESSION_CHANGE_EVENT = "leiblog:blog-session-change";
 const REGISTER_CODE_RESEND_COOLDOWN_MS = 60_000;
 const REGISTER_CODE_RESEND_STORAGE_KEY = "leiblog:blog:register-code-resend-available-at";
 const EMAIL_CHANGE_CODE_RESEND_STORAGE_KEY = "leiblog:blog:email-change-code-resend-available-at";
@@ -234,7 +239,7 @@ function readBlogSession() {
   if (!storage) return null;
 
   try {
-    const storedValue = storage.getItem(BLOG_SESSION_KEY);
+    const storedValue = storage.getItem(BLOG_SESSION_STORAGE_KEY);
     if (!storedValue) return null;
     return parseBlogSession(JSON.parse(storedValue));
   } catch {
@@ -242,20 +247,13 @@ function readBlogSession() {
   }
 }
 
-function notifyBlogSessionChange() {
-  if (typeof window === "undefined") return;
-
-  window.dispatchEvent(new Event(BLOG_SESSION_CHANGE_EVENT));
-}
-
 function writeBlogSession(session: BlogSession) {
-  getBrowserStorage()?.setItem(BLOG_SESSION_KEY, JSON.stringify(session));
+  getBrowserStorage()?.setItem(BLOG_SESSION_STORAGE_KEY, JSON.stringify(session));
   notifyBlogSessionChange();
 }
 
 function clearBlogSession() {
-  getBrowserStorage()?.removeItem(BLOG_SESSION_KEY);
-  notifyBlogSessionChange();
+  clearStoredBlogSession();
 }
 
 function readProfilePanelMode(value: string | null): ProfilePanelMode | null {
@@ -303,6 +301,7 @@ async function authJsonRequest<T>(
   const payload = await readResponseJson(response);
 
   if (!response.ok) {
+    expireBlogSessionForResponse(response, Boolean(options.token));
     throw new Error(getApiErrorMessage(payload, `请求失败：${response.status}`));
   }
 
@@ -327,6 +326,7 @@ async function authFormRequest<T>(
   const payload = await readResponseJson(response);
 
   if (!response.ok) {
+    expireBlogSessionForResponse(response, true);
     throw new Error(getApiErrorMessage(payload, `请求失败：${response.status}`));
   }
 

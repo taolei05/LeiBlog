@@ -1,6 +1,7 @@
 import { getAdminApiBaseUrl } from "../../../shared/api/api-base-url";
 
 export const ADMIN_SESSION_STORAGE_KEY = "leiblog:admin-session";
+export const ADMIN_SESSION_CHANGE_EVENT = "leiblog:admin-session-change";
 
 export type AdminRole = "admin" | "user";
 
@@ -222,6 +223,7 @@ export function writeAdminSession(session: AdminSession) {
   if (typeof window === "undefined") return;
 
   window.localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
+  window.dispatchEvent(new Event(ADMIN_SESSION_CHANGE_EVENT));
 }
 
 export function clearAdminSession() {
@@ -230,6 +232,14 @@ export function clearAdminSession() {
   window.localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
   window.localStorage.removeItem("leiblog:admin-authenticated");
   window.localStorage.removeItem("leiblog:admin-role");
+  window.dispatchEvent(new Event(ADMIN_SESSION_CHANGE_EVENT));
+}
+
+export function expireAdminSessionForResponse(response: Response, authenticatedRequest: boolean) {
+  if (!authenticatedRequest || response.status !== 401) return false;
+
+  clearAdminSession();
+  return true;
 }
 
 function buildHeaders(body: RequestOptions["body"], requireAuth: boolean, setupToken?: string) {
@@ -270,6 +280,7 @@ export async function adminFetch<T>(path: string, options: RequestOptions = {}) 
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    expireAdminSessionForResponse(response, options.requireAuth ?? true);
     throw new Error(readErrorMessage(payload));
   }
 
@@ -283,6 +294,7 @@ export async function downloadAdminFile(path: string, fileName: string) {
   });
 
   if (!response.ok) {
+    expireAdminSessionForResponse(response, true);
     throw new Error("文件下载失败");
   }
 

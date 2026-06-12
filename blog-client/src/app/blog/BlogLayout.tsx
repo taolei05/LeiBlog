@@ -10,6 +10,11 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { getAdminApiBaseUrl, resolveApiAssetUrl } from "../../shared/api/api-base-url";
+import {
+  BLOG_SESSION_CHANGE_EVENT,
+  BLOG_SESSION_STORAGE_KEY,
+  clearStoredBlogSession,
+} from "../../shared/auth/blog-session";
 import { AppIcon } from "../../shared/icons/AppIcon";
 import {
   applyFavicon,
@@ -39,8 +44,6 @@ const siteNavItems = [
   { to: "/guestbook", label: "留言板", icon: "chatbubbles" },
 ] as const;
 
-const BLOG_SESSION_KEY = "leiblog:blog-session";
-const BLOG_SESSION_CHANGE_EVENT = "leiblog:blog-session-change";
 const AUTH_API_BASE_URL = getAdminApiBaseUrl();
 
 type BlogNavItem = {
@@ -319,7 +322,7 @@ function readCurrentBlogNavSession() {
   if (typeof window === "undefined") return null;
 
   try {
-    const storedValue = window.localStorage.getItem(BLOG_SESSION_KEY);
+    const storedValue = window.localStorage.getItem(BLOG_SESSION_STORAGE_KEY);
     if (!storedValue) return null;
 
     const session = JSON.parse(storedValue) as unknown;
@@ -342,10 +345,7 @@ type BlogAccountDropdownProps = {
 };
 
 function clearBlogSession() {
-  if (typeof window === "undefined") return;
-
-  window.localStorage.removeItem(BLOG_SESSION_KEY);
-  window.dispatchEvent(new Event(BLOG_SESSION_CHANGE_EVENT));
+  clearStoredBlogSession();
 }
 
 async function logoutBlogSession(token: string) {

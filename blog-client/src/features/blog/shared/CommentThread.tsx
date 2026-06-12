@@ -22,6 +22,10 @@ import { PhotoProvider, PhotoView } from "react-photo-view";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
+import {
+  BLOG_SESSION_CHANGE_EVENT,
+  BLOG_SESSION_STORAGE_KEY,
+} from "../../../shared/auth/blog-session";
 import { AppIcon } from "../../../shared/icons";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import type { BlogComment } from "./blogApi";
@@ -70,8 +74,6 @@ type CommentContentPart =
       value: string;
     };
 
-const BLOG_SESSION_KEY = "leiblog:blog-session";
-const BLOG_SESSION_CHANGE_EVENT = "leiblog:blog-session-change";
 const imageMarkdownPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -113,7 +115,7 @@ function readCurrentCommentSession() {
   if (typeof window === "undefined") return null;
 
   try {
-    const storedValue = window.localStorage.getItem(BLOG_SESSION_KEY);
+    const storedValue = window.localStorage.getItem(BLOG_SESSION_STORAGE_KEY);
     if (!storedValue) return null;
 
     const session = JSON.parse(storedValue) as unknown;

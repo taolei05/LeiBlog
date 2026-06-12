@@ -17,6 +17,7 @@ import {
 } from "../src/public/comments/service";
 import { deleteMyComment, updateMyComment } from "../src/me/comments/service";
 import { hashPassword, type AuthUser } from "../src/shared/auth";
+import { encryptSecret } from "../src/shared/crypto";
 
 const POSTGRES_ADMIN_URL =
   process.env.TEST_POSTGRES_ADMIN_URL ??
@@ -226,5 +227,68 @@ describe("comment services", () => {
     await expect(
       reviewComment({ ...currentAdmin, role: "user" }, comment.id, "rejected", testDb)
     ).rejects.toThrow("需要管理员权限");
+  });
+
+  test("translates new comment locations to simplified Chinese and falls back on failure", async () => {
+    const originalFetch = globalThis.fetch;
+    const encryptedDeepLApiKey = encryptSecret("deepl-secret");
+    const encryptedIpGeolocationApiKey = encryptSecret("ip-secret");
+    let shouldFailTranslation = false;
+
+    await testDb`
+      UPDATE site_config
+      SET deepl_api_key_encrypted = ${JSON.stringify(encryptedDeepLApiKey)}::jsonb,
+          ipgeolocation_api_key_encrypted = ${JSON.stringify(encryptedIpGeolocationApiKey)}::jsonb
+      WHERE id = 1
+    `;
+
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://api.ipgeolocation.io/ipgeo")) {
+          return Response.json({
+            city: "San Jose",
+            country_name: "United States",
+          });
+        }
+
+        if (url.includes("api-free.deepl.com") || url.includes("api.deepl.com")) {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            target_lang: "ZH-HANS",
+            text: ["United States San Jose"],
+          });
+
+          return shouldFailTranslation
+            ? new Response(null, { status: 503 })
+            : Response.json({ translations: [{ text: "美国 圣何塞" }] });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      },
+      originalFetch,
+    );
+
+    try {
+      const translated = await createPublicComment(
+        currentUser,
+        articleId,
+        { content: "中文地点评论" },
+        testDb,
+        { ip: "8.8.8.8", userAgent: "test-agent" },
+      );
+      expect(translated.location).toBe("美国 圣何塞");
+
+      shouldFailTranslation = true;
+      const fallback = await createPublicComment(
+        currentUser,
+        articleId,
+        { content: "翻译失败仍提交" },
+        testDb,
+        { ip: "8.8.4.4", userAgent: "test-agent" },
+      );
+      expect(fallback.location).toBe("United States San Jose");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

@@ -32,6 +32,7 @@ import {
   isSetupSubmitStepError,
   uploadSetupAsset,
 } from "../shared/admin-api";
+import { ADMIN_API_KEY_URLS, ApiKeyGetLink } from "../shared/api-key-links";
 
 const setupSteps = [
   {
@@ -655,13 +656,15 @@ export function SetupPage() {
                 />
                 <SetupTextField
                   description="用于发送注册、找回密码和安全验证码邮件。"
+                  getUrl={ADMIN_API_KEY_URLS.resend}
                   label="Resend API key"
                   onChange={updateField("resendApiKey")}
                   type="password"
                   value={formState.resendApiKey}
                 />
                 <SetupTextField
-                  description="用于自动翻译标题并生成 slug。"
+                  description="用于翻译评论地点，并自动翻译标题生成 slug。"
+                  getUrl={ADMIN_API_KEY_URLS.deepl}
                   label="DeepL API key"
                   onChange={updateField("deeplApiKey")}
                   type="password"
@@ -669,6 +672,7 @@ export function SetupPage() {
                 />
                 <SetupTextField
                   description="用于识别登录 IP、地点和设备信息。"
+                  getUrl={ADMIN_API_KEY_URLS.ipgeolocation}
                   label="IPGeolocation API key"
                   onChange={updateField("ipGeolocationApiKey")}
                   type="password"
@@ -1065,6 +1069,7 @@ type SetupTextFieldProps = {
   className?: string;
   description?: string;
   fieldError?: string;
+  getUrl?: string;
   isRequired?: boolean;
   label: string;
   localImageEditorKind?: LocalImageEditorKind;
@@ -1081,6 +1086,7 @@ function SetupTextField({
   className,
   description,
   fieldError,
+  getUrl,
   isRequired,
   label,
   localImageEditorKind,
@@ -1128,7 +1134,10 @@ function SetupTextField({
 
   return (
     <TextField className={className} fullWidth isRequired={isRequired}>
-      <Label>{label}</Label>
+      <div className="api-key-field-heading">
+        <Label>{label}</Label>
+        {getUrl ? <ApiKeyGetLink href={getUrl} /> : null}
+      </div>
       {hasTrailingControl ? (
         <div className="setup-field-control-row">
           {input}

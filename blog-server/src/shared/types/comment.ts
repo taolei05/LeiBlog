@@ -75,7 +75,7 @@ function readJsonText(value: unknown, key: string) {
   return typeof field === "string" && field.trim() ? field.trim() : null;
 }
 
-function describeLocation(value: unknown) {
+export function describeCommentLocation(value: unknown) {
   const location = readJsonText(value, "location");
   if (location) return location;
 
@@ -98,7 +98,7 @@ export function toCommentItem(row: CommentRow) {
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
     deletedAt: toIso(row.deleted_at),
-    location: describeLocation(row.comment_location),
+    location: describeCommentLocation(row.comment_location),
     author: {
       id: row.user_id,
       username: row.username,

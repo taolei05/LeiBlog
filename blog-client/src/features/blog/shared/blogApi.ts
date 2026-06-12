@@ -1,5 +1,6 @@
 import type { AppIconName } from "../../../shared/icons";
 import { getPublicApiBaseUrl, resolveApiAssetUrl } from "../../../shared/api/api-base-url";
+import { expireBlogSessionForResponse } from "../../../shared/auth/blog-session";
 
 export type BlogTaxonomy = {
   color?: string | null;
@@ -297,6 +298,7 @@ async function publicJsonRequest(
   const payload = await readResponsePayload(response);
 
   if (!response.ok) {
+    expireBlogSessionForResponse(response, true);
     throw new Error(getApiErrorMessage(payload, `接口请求失败：${response.status}`));
   }
 
@@ -321,6 +323,7 @@ async function publicFormRequest(
   const payload = await readResponsePayload(response);
 
   if (!response.ok) {
+    expireBlogSessionForResponse(response, true);
     throw new Error(getApiErrorMessage(payload, `接口请求失败：${response.status}`));
   }
 

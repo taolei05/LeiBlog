@@ -4,6 +4,7 @@ import { Navigate, useLocation } from "react-router-dom";
 
 import type { AdminRole, AdminSession, SetupStatus } from "../../features/admin/shared/admin-api";
 import {
+  ADMIN_SESSION_CHANGE_EVENT,
   clearAdminSession,
   getSetupStatus,
   readStoredAdminSession,
@@ -128,7 +129,21 @@ function useSetupStatusState() {
 }
 
 export function useAdminSession(): AdminSessionView {
-  const [session] = useState(readStoredAdminSession);
+  const [session, setSession] = useState(readStoredAdminSession);
+
+  useEffect(() => {
+    function syncAdminSession() {
+      setSession(readStoredAdminSession());
+    }
+
+    window.addEventListener(ADMIN_SESSION_CHANGE_EVENT, syncAdminSession);
+    window.addEventListener("storage", syncAdminSession);
+
+    return () => {
+      window.removeEventListener(ADMIN_SESSION_CHANGE_EVENT, syncAdminSession);
+      window.removeEventListener("storage", syncAdminSession);
+    };
+  }, []);
 
   return useMemo(() => toSessionView(session), [session]);
 }
