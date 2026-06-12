@@ -2,7 +2,6 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { createApp } from "../src/app";
 import {
   createMigratedTestDatabase,
   type TestDatabase,
@@ -19,24 +18,7 @@ afterAll(async () => {
 });
 
 describe("http route integration", () => {
-  test("requires authentication for the current user preferences route", async () => {
-    const app = await createApp({ enableStatic: false });
-    const response = await app.handle(
-      new Request("http://localhost/api/me/preferences", {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          commentEmailNotificationsEnabled: false,
-        }),
-      })
-    );
-
-    expect(response.status).toBe(401);
-  });
-
-  test("serves public routes and enforces auth/role boundaries", async () => {
+  test("serves public routes, updates me preferences, and enforces auth/role boundaries", async () => {
     const serverDir = join(import.meta.dir, "..");
     const proc = Bun.spawn({
       cmd: [process.execPath, "tests/fixtures/http-routes-fixture.ts"],

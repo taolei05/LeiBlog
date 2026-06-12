@@ -28,8 +28,65 @@ interface ArticleBody {
   commentCount: number;
 }
 
+interface MeBody {
+  ok: boolean;
+  user: {
+    id: string;
+    username: string;
+    email: string | null;
+    name: string | null;
+    description: string;
+    tags: string[];
+    role: "admin" | "user";
+    avatarUrl: string | null;
+    socialLinks: Record<string, string>;
+    blogUrl: string | null;
+    commentEmailNotificationsEnabled: boolean;
+    createdAt: string;
+    updatedAt: string;
+    lastLoginAt: string | null;
+    lastLoginIp: string | null;
+    lastLoginLocation: string | null;
+    lastLoginDevice: string | null;
+  };
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertNullableString(value: unknown, message: string) {
+  assert(value === null || typeof value === "string", message);
+}
+
+function assertUserProfileShape(user: MeBody["user"]) {
+  assert(typeof user.id === "string" && user.id, "用户资料应包含 id");
+  assert(typeof user.username === "string" && user.username, "用户资料应包含 username");
+  assertNullableString(user.email, "用户资料应包含 email");
+  assertNullableString(user.name, "用户资料应包含 name");
+  assert(typeof user.description === "string", "用户资料应包含 description");
+  assert(
+    Array.isArray(user.tags) && user.tags.every((tag) => typeof tag === "string"),
+    "用户资料应包含 tags"
+  );
+  assert(user.role === "admin" || user.role === "user", "用户资料应包含 role");
+  assertNullableString(user.avatarUrl, "用户资料应包含 avatarUrl");
+  assert(isRecord(user.socialLinks), "用户资料应包含 socialLinks");
+  assertNullableString(user.blogUrl, "用户资料应包含 blogUrl");
+  assert(
+    typeof user.commentEmailNotificationsEnabled === "boolean",
+    "用户资料应包含 commentEmailNotificationsEnabled"
+  );
+  assert(typeof user.createdAt === "string", "用户资料应包含 createdAt");
+  assert(typeof user.updatedAt === "string", "用户资料应包含 updatedAt");
+  assertNullableString(user.lastLoginAt, "用户资料应包含 lastLoginAt");
+  assertNullableString(user.lastLoginIp, "用户资料应包含 lastLoginIp");
+  assertNullableString(user.lastLoginLocation, "用户资料应包含 lastLoginLocation");
+  assertNullableString(user.lastLoginDevice, "用户资料应包含 lastLoginDevice");
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -220,6 +277,61 @@ async function main() {
   assert(adminAuth.user.id === seeded.adminId, "管理员登录用户不正确");
   const userAuth = await login(app, "route-user", "user-password");
   assert(userAuth.user.id === seeded.userId, "普通用户登录用户不正确");
+
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/me/preferences", {
+      method: "PATCH",
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        commentEmailNotificationsEnabled: false,
+      }),
+    })),
+    401
+  );
+
+  const preferences = await expectJson<MeBody>(
+    await app.handle(new Request("http://localhost/api/me/preferences", {
+      method: "PATCH",
+      headers: jsonHeaders(userAuth.token),
+      body: JSON.stringify({
+        commentEmailNotificationsEnabled: false,
+      }),
+    })),
+    200
+  );
+  assert(preferences.ok === true, "偏好更新响应应成功");
+  assert(preferences.user.id === seeded.userId, "偏好更新应返回当前 token 用户");
+  assert(
+    preferences.user.commentEmailNotificationsEnabled === false,
+    "偏好更新响应应返回已关闭邮件通知"
+  );
+  assertUserProfileShape(preferences.user);
+
+  const [currentUserPreferences] = await db<{ enabled: boolean }[]>`
+    SELECT comment_email_notifications_enabled AS enabled
+    FROM users
+    WHERE id = ${seeded.userId}
+  `;
+  const [otherUserPreferences] = await db<{ enabled: boolean }[]>`
+    SELECT comment_email_notifications_enabled AS enabled
+    FROM users
+    WHERE id = ${seeded.adminId}
+  `;
+  assert(currentUserPreferences?.enabled === false, "当前用户偏好应持久化为 false");
+  assert(otherUserPreferences?.enabled === true, "其他用户偏好应保持 true");
+
+  const invalidPreferences = await expectJson<{ code: string }>(
+    await app.handle(new Request("http://localhost/api/me/preferences", {
+      method: "PATCH",
+      headers: jsonHeaders(userAuth.token),
+      body: JSON.stringify({
+        commentEmailNotificationsEnabled: "false",
+      }),
+    })),
+    422
+  );
+  assert(invalidPreferences.code === "VALIDATION_ERROR", "非布尔偏好值应返回参数错误");
+
   await expectJson(
     await app.handle(new Request("http://localhost/api/admin/setup/unknown-session", {
       method: "POST",
