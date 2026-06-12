@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
 
 import {
   deleteCommentByAdmin,
@@ -16,7 +16,8 @@ import {
   listPublicComments,
 } from "../src/public/comments/service";
 import { deleteMyComment, updateMyComment } from "../src/me/comments/service";
-import { hashPassword, type AuthUser } from "../src/shared/auth";
+import type { AuthUser } from "../src/shared/auth";
+import { hashPassword } from "../src/shared/auth";
 import { encryptSecret } from "../src/shared/crypto";
 
 const POSTGRES_ADMIN_URL =
@@ -91,6 +92,10 @@ beforeAll(async () => {
     testDb
   );
   articleId = article.id;
+});
+
+afterEach(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 25));
 });
 
 afterAll(async () => {
@@ -227,6 +232,66 @@ describe("comment services", () => {
     await expect(
       reviewComment({ ...currentAdmin, role: "user" }, comment.id, "rejected", testDb)
     ).rejects.toThrow("需要管理员权限");
+  });
+
+  test("creates comments when scheduled email notifications fail", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchCalls: string[] = [];
+    const errorLogs: unknown[][] = [];
+    const emailErrorSpy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errorLogs.push(args);
+    });
+
+    await testDb`
+      UPDATE site_config
+      SET resend_domain = 'mail.example.com',
+          resend_api_key_encrypted = ${JSON.stringify(encryptSecret("resend-secret"))}::jsonb
+      WHERE id = 1
+    `;
+
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL) => {
+        const url = String(input);
+        fetchCalls.push(url);
+
+        if (url === "https://api.resend.com/emails") {
+          return new Response("{}", { status: 503 });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      },
+      originalFetch
+    );
+
+    try {
+      const comment = await createPublicComment(
+        currentUser,
+        articleId,
+        { content: "邮件失败仍发布" },
+        testDb
+      );
+      expect(comment.content).toBe("邮件失败仍发布");
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      const publicList = await listPublicComments(
+        articleId,
+        { page: 1, pageSize: 50 },
+        testDb
+      );
+      expect(publicList.items.some((item) => item.id === comment.id)).toBe(true);
+      expect(fetchCalls).toContain("https://api.resend.com/emails");
+      expect(errorLogs.length).toBeGreaterThan(0);
+    } finally {
+      await testDb`
+        UPDATE site_config
+        SET resend_domain = null,
+            resend_api_key_encrypted = null
+        WHERE id = 1
+      `;
+      globalThis.fetch = originalFetch;
+      emailErrorSpy.mockRestore();
+    }
   });
 
   test("translates new comment locations to simplified Chinese and falls back on failure", async () => {

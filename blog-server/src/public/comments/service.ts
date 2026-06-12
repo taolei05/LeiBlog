@@ -1,9 +1,13 @@
 import type { AuthUser } from "../../shared/auth";
 import { clearArticleCacheById } from "../../shared/cache/content";
-import { db, withTransaction, type DbClient } from "../../shared/db";
+import type { DbClient } from "../../shared/db";
+import { db, withTransaction } from "../../shared/db";
 import { forbidden, notFound, validationError } from "../../shared/errors";
-import { toCommentItem, type CommentRow } from "../../shared/types/comment";
-import { resolveLoginLocation, type RequestMeta } from "../../auth/service";
+import type { CommentRow } from "../../shared/types/comment";
+import { toCommentItem } from "../../shared/types/comment";
+import type { RequestMeta } from "../../auth/service";
+import { resolveLoginLocation } from "../../auth/service";
+import { scheduleCommentEmailNotifications } from "./notification";
 
 export interface PublicCommentQuery {
   page?: number;
@@ -194,6 +198,7 @@ async function createCommentForTarget(
   if (target.articleId) {
     await clearArticleCacheById(target.articleId, client);
   }
+  scheduleCommentEmailNotifications(comment.id, client);
   return comment;
 }
 
