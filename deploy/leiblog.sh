@@ -325,7 +325,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git \
+  && apt-get install -y --no-install-recommends ca-certificates git \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock ./
