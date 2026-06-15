@@ -59,6 +59,7 @@ const setupSteps = [
 
 type SetupFormState = {
   adminAvatar: string;
+  commentEmailNotificationsEnabled: boolean;
   adminDescription: string;
   adminEmail: string;
   adminName: string;
@@ -120,6 +121,7 @@ const setupSubmitStepIndexes: Record<SetupSubmitStepKey, number> = {
 
 const initialFormState: SetupFormState = {
   adminAvatar: "",
+  commentEmailNotificationsEnabled: true,
   adminDescription: "",
   adminEmail: "",
   adminName: "",
@@ -368,6 +370,7 @@ export function SetupPage() {
       const nextSession = await completeInitialSetup({
         admin: {
           avatarUrl: setupState.adminAvatar || undefined,
+          commentEmailNotificationsEnabled: setupState.commentEmailNotificationsEnabled,
           description: setupState.adminDescription,
           email: setupState.adminEmail || undefined,
           name: setupState.adminName || undefined,
@@ -533,6 +536,24 @@ export function SetupPage() {
                   onChange={updateField("adminDescription")}
                   value={formState.adminDescription}
                 />
+                <Switch
+                  className="form-grid__wide"
+                  isSelected={formState.commentEmailNotificationsEnabled}
+                  onChange={(isSelected) =>
+                    setFormState((state) => ({
+                      ...state,
+                      commentEmailNotificationsEnabled: isSelected,
+                    }))
+                  }
+                >
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <Switch.Content>
+                    <strong>评论邮件通知</strong>
+                    <span>接收全站文章和留言板的新评论、新回复邮件。</span>
+                  </Switch.Content>
+                </Switch>
               </div>
             ) : null}
 

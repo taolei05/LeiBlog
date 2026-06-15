@@ -26,6 +26,7 @@ export interface SetupServiceOptions {
 export interface SetupAdminInput {
   username: string;
   password: string;
+  commentEmailNotificationsEnabled?: boolean;
   email?: string;
   name?: string;
   tags?: string[];
@@ -235,7 +236,8 @@ export async function configureAdmin(
 
     await tx`
       INSERT INTO users (
-        username, password_hash, email, name, tags, description, avatar_url, role
+        username, password_hash, email, name, tags, description, avatar_url,
+        role, comment_email_notifications_enabled
       )
       VALUES (
         ${input.username.trim()},
@@ -245,7 +247,8 @@ export async function configureAdmin(
         ${tx.array(tags, "TEXT")},
         ${input.description?.trim() ?? ""},
         ${cleanOptional(input.avatarUrl)},
-        'admin'
+        'admin',
+        ${input.commentEmailNotificationsEnabled ?? true}
       )
     `;
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import setupPageSource from "../src/features/admin/setup/SetupPage.tsx?raw";
 import {
   getCompletedSetupRedirectPath,
   toSetupFilingPayload,
@@ -29,5 +30,15 @@ describe("setup payload helpers", () => {
 
   it("redirects completed setup visits to the admin login page", () => {
     expect(getCompletedSetupRedirectPath()).toBe("/admin/login");
+  });
+
+  it("includes the admin comment email notification preference in setup step 1", () => {
+    expect(setupPageSource).toContain("commentEmailNotificationsEnabled: boolean;");
+    expect(setupPageSource).toContain("commentEmailNotificationsEnabled: true,");
+    expect(setupPageSource).toContain(
+      "commentEmailNotificationsEnabled: setupState.commentEmailNotificationsEnabled,",
+    );
+    expect(setupPageSource).toContain("<strong>评论邮件通知</strong>");
+    expect(setupPageSource).toContain("接收全站文章和留言板的新评论、新回复邮件。");
   });
 });

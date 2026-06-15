@@ -122,6 +122,7 @@ describe("admin setup service", () => {
         tags: ["作者", "作者", "管理员"],
         description: "LeiBlog 管理员",
         avatarUrl: "https://example.com/avatar.png",
+        commentEmailNotificationsEnabled: false,
       },
       { client: setupDb }
     );
@@ -137,17 +138,19 @@ describe("admin setup service", () => {
     ).rejects.toThrow("管理员配置已完成");
 
     const [admin] = await setupDb<{
+      comment_email_notifications_enabled: boolean;
       username: string;
       password_hash: string;
       tags: string[];
       role: string;
     }[]>`
-      SELECT username, password_hash, tags, role
+      SELECT username, password_hash, tags, role, comment_email_notifications_enabled
       FROM users
       WHERE role = 'admin'
     `;
     expect(admin.username).toBe("admin");
     expect(admin.password_hash).not.toBe("12345678");
+    expect(admin.comment_email_notifications_enabled).toBe(false);
     expect(admin.tags).toEqual(["作者", "管理员"]);
     expect(await verifyPassword("12345678", admin.password_hash)).toBe(true);
 
