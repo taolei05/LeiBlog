@@ -52,3 +52,4 @@ yarn.lock
 
 # Backups created while converting nested repositories into one root repository
 .git-backups/
+/.codegraph/
