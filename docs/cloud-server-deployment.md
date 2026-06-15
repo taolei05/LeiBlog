@@ -42,7 +42,7 @@ sudo leiblog --help
 安装完成后，可以在任意目录直接使用 `leiblog`。使用 IP 部署时，将 `LEIBLOG_SITE_URL` 改成你的服务器访问地址：
 
 ```bash
-sudo env LEIBLOG_SITE_URL=http://服务器ip leiblog install
+sudo env LEIBLOG_SITE_URL=http://217.160.159.141/ leiblog install
 ```
 
 使用域名部署时：
