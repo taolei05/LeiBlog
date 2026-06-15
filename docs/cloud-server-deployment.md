@@ -1,6 +1,6 @@
 # LeiBlog 云服务器部署文档
 
-本文档记录 LeiBlog 在云服务器上的生产部署、更新、运维和排障流程。当前生产部署脚本和源码默认使用 `cloud-server` 分支。
+本文档记录 LeiBlog 在云服务器上的生产部署、更新、运维和排障流程。当前生产部署脚本和源码默认使用 `main` 分支。
 
 ## 部署架构
 
@@ -33,7 +33,7 @@
 先将部署脚本安装为全局命令：
 
 ```bash
-sudo curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+sudo curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh \
   -o /usr/local/bin/leiblog
 sudo chmod +x /usr/local/bin/leiblog
 sudo leiblog --help
@@ -62,7 +62,7 @@ sudo env LEIBLOG_SITE_URL=https://域名 leiblog install
 
 请保存 `SETUP_TOKEN`，首次访问后台初始化页面会用到。
 
-`install` 和 `update` 会自动使用 `cloud-server` 分支中的最新部署脚本刷新 `/usr/local/bin/leiblog`。已经部署过 LeiBlog 的服务器只需执行一次上面的全局命令安装步骤，后续即可使用短命令运维。
+`install` 和 `update` 会自动使用 `main` 分支中的最新部署脚本刷新 `/usr/local/bin/leiblog`。已经部署过 LeiBlog 的服务器只需执行一次上面的全局命令安装步骤，后续即可使用短命令运维。
 
 如果需要单独重新下载或修复全局命令，也可以执行：
 
@@ -73,7 +73,7 @@ sudo leiblog install-cli
 如果全局命令已经丢失，使用远程脚本重新安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh \
   | sudo bash -s -- install-cli
 ```
 
@@ -85,18 +85,18 @@ curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deplo
 sudo leiblog update
 ```
 
-如果需要显式指定部署源码分支，使用：
+如果需要临时指定其它部署源码分支，使用：
 
 ```bash
-sudo env LEIBLOG_REPO_BRANCH=cloud-server \
-  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/cloud-server.tar.gz \
-  LEIBLOG_SCRIPT_URL=https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh \
+sudo env LEIBLOG_REPO_BRANCH=<branch-name> \
+  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/<branch-name>.tar.gz \
+  LEIBLOG_SCRIPT_URL=https://raw.githubusercontent.com/taolei05/LeiBlog/<branch-name>/deploy/leiblog.sh \
   leiblog update
 ```
 
 更新会执行以下操作：
 
-1. 下载 `cloud-server` 分支源码
+1. 下载当前部署分支源码（默认 `main`）
 2. 使用源码中的最新部署脚本刷新 `/usr/local/bin/leiblog`
 3. 重新生成运行时 Dockerfile 和 Compose 文件
 4. 重新构建 `api` 和 `web` 镜像

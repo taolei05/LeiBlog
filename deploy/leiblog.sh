@@ -5,7 +5,7 @@ set -Eeuo pipefail
 LEIBLOG_SCRIPT_VERSION="0.2.0"
 LEIBLOG_BASE_DIR="${LEIBLOG_BASE_DIR:-/var/leiblog}"
 LEIBLOG_PROJECT_NAME="${LEIBLOG_PROJECT_NAME:-leiblog}"
-LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-cloud-server}"
+LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-main}"
 LEIBLOG_REPO_ARCHIVE_URL="${LEIBLOG_REPO_ARCHIVE_URL:-https://github.com/taolei05/LeiBlog/archive/refs/heads/${LEIBLOG_REPO_BRANCH}.tar.gz}"
 LEIBLOG_SCRIPT_URL="${LEIBLOG_SCRIPT_URL:-https://raw.githubusercontent.com/taolei05/LeiBlog/${LEIBLOG_REPO_BRANCH}/deploy/leiblog.sh}"
 LEIBLOG_COMMAND_PATH="${LEIBLOG_COMMAND_PATH:-/usr/local/bin/leiblog}"
@@ -748,14 +748,14 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
   LEIBLOG_SITE_URL=https://域名
   LEIBLOG_HTTP_PORT=80
   LEIBLOG_BASE_DIR=/var/leiblog
-  LEIBLOG_REPO_BRANCH=cloud-server
-  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/cloud-server.tar.gz
-  LEIBLOG_SCRIPT_URL=https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh
+  LEIBLOG_REPO_BRANCH=main
+  LEIBLOG_REPO_ARCHIVE_URL=https://github.com/taolei05/LeiBlog/archive/refs/heads/main.tar.gz
+  LEIBLOG_SCRIPT_URL=https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh
   LEIBLOG_COMMAND_PATH=/usr/local/bin/leiblog
   LEIBLOG_FORCE=1
 
 安装全局命令:
-  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/cloud-server/deploy/leiblog.sh | sudo bash -s -- install-cli
+  curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh | sudo bash -s -- install-cli
 
 安装 LeiBlog:
   sudo leiblog install
