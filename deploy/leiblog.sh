@@ -169,7 +169,14 @@ trim_trailing_slash() {
   echo "${value%/}"
 }
 
-detect_public_site_url() {
+trim_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  echo "${value}"
+}
+
+detect_public_ip() {
   local ip
   ip="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
 
@@ -181,7 +188,71 @@ detect_public_site_url() {
     ip="127.0.0.1"
   fi
 
-  echo "http://${ip}"
+  echo "${ip}"
+}
+
+detect_public_site_url() {
+  echo "http://$(detect_public_ip)"
+}
+
+validate_domain_name() {
+  local domain
+  domain="$(trim_whitespace "$1")"
+
+  [[ -n "${domain}" ]] || die "域名不能为空"
+  [[ "${domain}" != *"://"* ]] || die "请输入纯域名，不要包含 http:// 或 https://"
+  [[ "${domain}" != */* ]] || die "域名不能包含路径"
+  [[ "${domain}" != *":"* ]] || die "域名不能包含端口"
+  [[ "${domain}" != *" "* ]] || die "域名不能包含空格"
+  [[ "${domain}" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]] ||
+    die "域名格式不正确：${domain}"
+}
+
+resolve_domain_a_records() {
+  local domain="$1"
+
+  if command_exists getent; then
+    getent ahostsv4 "${domain}" 2>/dev/null | awk '{print $1}' | sort -u
+    return
+  fi
+
+  if command_exists dig; then
+    dig +short A "${domain}" 2>/dev/null | awk '/^[0-9.]+$/ { print $1 }' | sort -u
+    return
+  fi
+
+  if command_exists nslookup; then
+    nslookup "${domain}" 2>/dev/null | awk '/^Address: / { print $2 }' | awk '/^[0-9.]+$/ { print $1 }' | sort -u
+  fi
+}
+
+build_site_url_from_domain() {
+  local domain="$1"
+  local current_site_url="${2:-}"
+  local scheme="http"
+  local remainder host_and_port maybe_port port_suffix=""
+
+  case "${current_site_url}" in
+    https://*)
+      scheme="https"
+      remainder="${current_site_url#https://}"
+      ;;
+    http://*)
+      scheme="http"
+      remainder="${current_site_url#http://}"
+      ;;
+    *)
+      remainder="${current_site_url}"
+      ;;
+  esac
+
+  host_and_port="${remainder%%/*}"
+  maybe_port="${host_and_port##*:}"
+  if [[ "${maybe_port}" =~ ^[0-9]+$ ]] && [[ "${maybe_port}" != "${host_and_port}" ]]; then
+    port_suffix=":${maybe_port}"
+  fi
+
+  echo "${scheme}://${domain}${port_suffix}"
 }
 
 resolve_site_url() {
@@ -272,6 +343,91 @@ load_env_file() {
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
   set +a
+}
+
+upsert_env_value() {
+  local key="$1"
+  local value="$2"
+  local tmp_file
+
+  tmp_file="$(mktemp)"
+  awk -v key="${key}" -v value="${value}" '
+    BEGIN { updated=0 }
+    index($0, key "=") == 1 {
+      print key "=" value
+      updated=1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print key "=" value
+      }
+    }
+  ' "${ENV_FILE}" >"${tmp_file}"
+  mv "${tmp_file}" "${ENV_FILE}"
+}
+
+update_site_url_in_env() {
+  local site_url="$1"
+
+  [[ -f "${ENV_FILE}" ]] || die "未找到环境变量文件：${ENV_FILE}"
+
+  upsert_env_value "SITE_URL" "${site_url}"
+  upsert_env_value "VITE_API_BASE_URL" "${site_url}/api"
+  upsert_env_value "CORS_ORIGINS" "${site_url}"
+  chmod 600 "${ENV_FILE}"
+}
+
+show_domain_resolution_hint() {
+  local domain="$1"
+  local public_ip="$2"
+  local resolved_ips
+
+  resolved_ips="$(resolve_domain_a_records "${domain}")"
+  if [[ -z "${resolved_ips}" ]]; then
+    warn "暂未查询到 ${domain} 的 A 记录"
+    return
+  fi
+
+  echo -e "当前 A 记录：${yellow}$(echo "${resolved_ips}" | awk 'BEGIN { first=1 } { if (!first) printf ", "; printf "%s", $0; first=0 } END { print "" }')${plain}"
+  if echo "${resolved_ips}" | grep -Fxq "${public_ip}"; then
+    info "域名解析匹配当前服务器公网 IP"
+    return
+  fi
+
+  warn "当前解析未直接指向本机公网 IP；如果你使用了 Cloudflare 代理或其它 CDN/代理，这可能是正常现象"
+}
+
+prompt_domain_name() {
+  local domain input
+
+  [[ -t 0 ]] || die "域名设置需要交互终端"
+  read -r -p "请输入域名（例如 blog.example.com）: " input
+  domain="$(trim_whitespace "${input}")"
+  validate_domain_name "${domain}"
+  echo "${domain}"
+}
+
+configure_domain_settings() {
+  [[ -f "${ENV_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
+  load_env_file
+
+  local current_site_url public_ip domain new_site_url
+  current_site_url="$(trim_trailing_slash "${SITE_URL:-}")"
+  public_ip="$(detect_public_ip)"
+
+  echo -e "当前站点地址：${yellow}${current_site_url:-未设置}${plain}"
+  echo -e "服务器公网 IP：${yellow}${public_ip}${plain}"
+  echo -e "A 记录应指向服务器公网 IP：${yellow}${public_ip}${plain}"
+
+  domain="$(prompt_domain_name)"
+  show_domain_resolution_hint "${domain}" "${public_ip}"
+
+  new_site_url="$(build_site_url_from_domain "${domain}" "${current_site_url}")"
+  info "写入站点地址：${new_site_url}"
+  update_site_url_in_env "${new_site_url}"
+  ensure_env_defaults
 }
 
 fetch_source() {
@@ -478,13 +634,50 @@ install_leiblog() {
   print_install_result
 }
 
+domain_leiblog() {
+  require_root
+  ensure_base_tools
+  ensure_docker
+  ensure_compose
+  prepare_directories
+  [[ -f "${COMPOSE_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
+  [[ -d "${SOURCE_DIR}/blog-server" ]] || die "未找到源码目录，请先执行 update 后重试"
+
+  configure_domain_settings
+  write_runtime_files
+  write_compose_file
+
+  info "重建并应用域名配置"
+  compose up -d --build --remove-orphans api web
+
+  print_install_result
+}
+
 update_leiblog() {
+  local update_domain=0
+
+  shift || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --domain)
+        update_domain=1
+        ;;
+      *)
+        die "未知 update 参数：$1"
+        ;;
+    esac
+    shift
+  done
+
   require_root
   ensure_base_tools
   ensure_docker
   ensure_compose
   prepare_directories
   [[ -f "${ENV_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
+  if [[ "${update_domain}" == "1" ]]; then
+    configure_domain_settings
+  fi
   ensure_env_defaults
   fetch_source
   refresh_cli_from_source
@@ -662,7 +855,8 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 用法:
   leiblog install-cli           安装或刷新 ${LEIBLOG_COMMAND_PATH} 全局命令
   leiblog install               安装或重新生成部署，并刷新全局命令
-  leiblog update                拉取部署分支最新源码、刷新全局命令并重建服务
+  leiblog update [--domain]     拉取部署分支最新源码、刷新全局命令并重建服务
+  leiblog domain                设置或修改站点域名，并重建服务
   leiblog start                 启动服务
   leiblog stop                  停止服务
   leiblog restart               重启服务
@@ -700,7 +894,10 @@ main() {
       install_leiblog
       ;;
     update)
-      update_leiblog
+      update_leiblog "$@"
+      ;;
+    domain)
+      domain_leiblog
       ;;
     start)
       start_leiblog
