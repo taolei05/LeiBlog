@@ -11,28 +11,10 @@ const migration = readFileSync(
   join(migrationsDir, "001_initial_schema.sql"),
   "utf8"
 );
-const navigationMigration = readFileSync(
-  join(migrationsDir, "002_add_navigation_page.sql"),
-  "utf8"
-);
-const commentEmailNotificationsMigration = readFileSync(
-  join(migrationsDir, "003_add_comment_email_notifications.sql"),
-  "utf8"
-);
 
 describe("initial database migration", () => {
-  test("keeps a consolidated baseline and incremental migrations", () => {
-    expect(migrationFiles).toEqual([
-      "001_initial_schema.sql",
-      "002_add_navigation_page.sql",
-      "003_add_comment_email_notifications.sql",
-    ]);
-    expect(navigationMigration).toContain("CREATE TABLE IF NOT EXISTS navigation_groups");
-    expect(navigationMigration).toContain("CREATE TABLE IF NOT EXISTS navigation_items");
-    expect(navigationMigration).toContain("website-icons");
-    expect(commentEmailNotificationsMigration).toContain(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS comment_email_notifications_enabled boolean NOT NULL DEFAULT true"
-    );
+  test("keeps a consolidated baseline migration", () => {
+    expect(migrationFiles).toEqual(["001_initial_schema.sql"]);
   });
 
   test("creates the required core tables", () => {

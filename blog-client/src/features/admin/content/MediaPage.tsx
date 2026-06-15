@@ -255,6 +255,7 @@ export function MediaPage() {
     activeFolderSlug === "all"
       ? mediaRows
       : mediaRows.filter((row) => row.folderSlug === activeFolderSlug);
+  const isActiveFolderEmpty = activeFolder !== null && visibleMediaRows.length === 0;
   const selectedMediaRows = mediaRows.filter((row) => selectedMediaIds.has(row.id));
   const selectedVisibleCount = visibleMediaRows.filter((row) =>
     selectedMediaIds.has(row.id),
@@ -727,6 +728,15 @@ export function MediaPage() {
             ) : null}
           </div>
           <div className="media-grid-view">
+            {isActiveFolderEmpty ? (
+              <Card className="media-folder-empty-card">
+                <span className="media-thumb media-thumb--document">
+                  <AppIcon name="folderOpen" />
+                </span>
+                <strong>{`「${activeFolder.name}」文件夹暂无文件`}</strong>
+                <p>点击上方上传按钮，可以将文件添加到当前文件夹。</p>
+              </Card>
+            ) : null}
             {visibleMediaRows.map((row) => {
               const isSelected = selectedMediaIds.has(row.id);
 

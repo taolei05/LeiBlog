@@ -16,7 +16,7 @@ import type { DbClient } from "../shared/db";
 import { db, withTransaction } from "../shared/db";
 import { conflict, unauthorized, validationError } from "../shared/errors";
 import { resolveLocalizedIpLocation } from "../shared/location";
-import { addDays, addMinutes } from "../shared/time";
+import { addDays, addMinutes, now, SHANGHAI_TIME_ZONE } from "../shared/time";
 import type { UserProfileRow } from "../shared/types/user";
 import { toUserProfile } from "../shared/types/user";
 
@@ -74,11 +74,23 @@ interface ResendConfigRow {
   resend_api_key_encrypted: StoredEncryptedSecret | null;
 }
 
+interface EmailBrandingRow {
+  logo_dark_url: string | null;
+  logo_light_url: string | null;
+  site_name: string;
+}
+
 interface AuthServiceOptions {
   client?: DbClient;
   emailHtml?: (code: string, validMinutes: number) => string;
   emailSubject?: string;
   emailText?: (code: string, validMinutes: number) => string;
+}
+
+export interface EmailBranding {
+  logoUrl: string | null;
+  siteInitial: string;
+  siteName: string;
 }
 
 const SESSION_DAYS = 7;
@@ -106,15 +118,103 @@ function renderTextLines(text: string) {
     .join("");
 }
 
+function normalizeSiteName(siteName: string | null | undefined) {
+  const trimmed = siteName?.trim();
+  return trimmed || "LeiBlog";
+}
+
+function getEmailBrandInitial(siteName: string) {
+  return siteName.trim().slice(0, 1).toUpperCase() || "L";
+}
+
+function isShanghaiDaytime(date: Date = now()) {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: SHANGHAI_TIME_ZONE,
+      hour: "2-digit",
+      hour12: false,
+    }).format(date)
+  );
+
+  return hour >= 6 && hour < 18;
+}
+
+function getEmailAssetBaseUrl() {
+  const preferredOrigin = appConfig.corsOrigins[0]?.trim();
+  if (preferredOrigin) return preferredOrigin.replace(/\/+$/, "");
+
+  const host = appConfig.host === "0.0.0.0" ? "localhost" : appConfig.host;
+  return `http://${host}:${appConfig.port}`;
+}
+
+function toAbsoluteEmailAssetUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    return new URL(trimmed, `${getEmailAssetBaseUrl()}/`).toString();
+  }
+}
+
+export function resolveEmailBranding(
+  input:
+    | {
+        logoDarkUrl?: string | null;
+        logoLightUrl?: string | null;
+        siteName?: string | null;
+      }
+    | null
+    | undefined,
+  date: Date = now()
+): EmailBranding {
+  const siteName = normalizeSiteName(input?.siteName);
+  const logoUrl = isShanghaiDaytime(date)
+    ? toAbsoluteEmailAssetUrl(input?.logoLightUrl ?? input?.logoDarkUrl)
+    : toAbsoluteEmailAssetUrl(input?.logoDarkUrl ?? input?.logoLightUrl);
+
+  return {
+    logoUrl,
+    siteInitial: getEmailBrandInitial(siteName),
+    siteName,
+  };
+}
+
+export async function getEmailBranding(client: DbClient, date: Date = now()) {
+  const [row] = await client<EmailBrandingRow[]>`
+    SELECT site_name, logo_dark_url, logo_light_url
+    FROM site_info
+    WHERE id = 1
+  `;
+
+  return resolveEmailBranding(
+    row
+      ? {
+          logoDarkUrl: row.logo_dark_url,
+          logoLightUrl: row.logo_light_url,
+          siteName: row.site_name,
+        }
+      : null,
+    date
+  );
+}
+
 export function renderLeiBlogEmailHtml({
   bodyHtml,
+  branding = resolveEmailBranding(null),
   preheader,
   title,
 }: {
   bodyHtml: string;
+  branding?: EmailBranding;
   preheader: string;
   title: string;
 }) {
+  const brandMark = branding.logoUrl
+    ? `<img alt="${escapeHtml(branding.siteName)} logo" src="${escapeHtml(branding.logoUrl)}" style="display:block;width:100%;height:100%;object-fit:contain;" />`
+    : escapeHtml(branding.siteInitial);
+
   return `<!doctype html>
 <html lang="zh-CN">
   <head>
@@ -133,8 +233,10 @@ export function renderLeiBlogEmailHtml({
               <td style="padding:22px 22px 16px;background:linear-gradient(135deg,#fff 0%,#fdf2f8 46%,#eff6ff 100%);border-bottom:1px solid #ececf0;">
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:separate;">
                   <tr>
-                    <td style="width:34px;height:34px;border:1px solid #111827;border-radius:10px;background:#fff;color:#111827;font-size:16px;font-weight:800;line-height:34px;text-align:center;">L</td>
-                    <td style="padding-left:9px;color:#111827;font-size:16px;font-weight:800;line-height:1.2;">LeiBlog</td>
+                    <td style="width:34px;height:34px;padding:0;">
+                      <div style="width:34px;height:34px;overflow:hidden;border:1px solid #111827;border-radius:10px;background:#fff;color:#111827;font-size:16px;font-weight:800;line-height:34px;text-align:center;">${brandMark}</div>
+                    </td>
+                    <td style="padding-left:9px;color:#111827;font-size:16px;font-weight:800;line-height:1.2;">${escapeHtml(branding.siteName)}</td>
                   </tr>
                 </table>
                 <p style="margin:0 0 8px;color:#ec4899;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;line-height:1.4;">Security Mail</p>
@@ -145,7 +247,7 @@ export function renderLeiBlogEmailHtml({
               <td style="padding:22px 22px 24px;">
                 ${bodyHtml}
                 <div style="margin-top:22px;padding-top:16px;border-top:1px solid #ececf0;">
-                  <p style="margin:0;color:#71717a;font-size:12px;line-height:1.7;">这封邮件由 LeiBlog 自动发送。如果不是你本人操作，可以忽略此邮件。</p>
+                  <p style="margin:0;color:#71717a;font-size:12px;line-height:1.7;">这封邮件由 ${escapeHtml(branding.siteName)} 自动发送。如果不是你本人操作，可以忽略此邮件。</p>
                 </div>
               </td>
             </tr>
@@ -158,25 +260,30 @@ export function renderLeiBlogEmailHtml({
 }
 
 export function renderPlainEmailHtml({
+  branding,
   subject,
   text,
 }: {
+  branding?: EmailBranding;
   subject: string;
   text: string;
 }) {
   return renderLeiBlogEmailHtml({
     bodyHtml: renderTextLines(text),
+    branding,
     preheader: text,
     title: subject,
   });
 }
 
 export function renderVerificationCodeEmailHtml({
+  branding,
   code,
   description,
   title,
   validMinutes,
 }: {
+  branding?: EmailBranding;
   code: string;
   description: string;
   title: string;
@@ -201,17 +308,20 @@ export function renderVerificationCodeEmailHtml({
       </div>
       <p style="margin:0;color:#71717a;font-size:13px;line-height:1.65;">验证码 ${validMinutes} 分钟内有效，请不要转发或泄露给他人。</p>
     `,
+    branding,
     preheader: `${description} 验证码 ${validMinutes} 分钟内有效。`,
     title,
   });
 }
 
 function renderTokenEmailHtml({
+  branding,
   description,
   title,
   token,
   validMinutes,
 }: {
+  branding?: EmailBranding;
   description: string;
   title: string;
   token: string;
@@ -226,15 +336,18 @@ function renderTokenEmailHtml({
       </div>
       <p style="margin:0;color:#71717a;font-size:14px;line-height:1.7;">Token ${validMinutes} 分钟内有效，请在有效期内完成密码重置。</p>
     `,
+    branding,
     preheader: `${description} Token ${validMinutes} 分钟内有效。`,
     title,
   });
 }
 
 export function renderNoticeEmailHtml({
+  branding,
   description,
   title,
 }: {
+  branding?: EmailBranding;
   description: string;
   title: string;
 }) {
@@ -243,18 +356,21 @@ export function renderNoticeEmailHtml({
       <p style="margin:0 0 18px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
       <div style="margin:20px 0 0;padding:16px 18px;border:1px solid #bbf7d0;border-radius:18px;background:#f0fdf4;color:#166534;font-size:14px;font-weight:800;">配置检测已完成</div>
     `,
+    branding,
     preheader: description,
     title,
   });
 }
 
 type RenderCommentNotificationEmailHtmlParameters = {
+  branding?: EmailBranding;
   content: string;
   description: string;
   title: string;
 };
 
 export function renderCommentNotificationEmailHtml({
+  branding,
   content,
   description,
   title,
@@ -264,6 +380,7 @@ export function renderCommentNotificationEmailHtml({
       <p style="margin:0 0 14px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
       <div style="margin:18px 0 0;padding:16px 18px;border:1px solid #e4e4e7;border-radius:18px;background:#fafafa;color:#27272a;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word;">${escapeHtml(content)}</div>
     `,
+    branding,
     preheader: description,
     title,
   });
@@ -289,10 +406,11 @@ async function getResendConfig(client: DbClient) {
 
 export async function sendResendEmail(
   client: DbClient,
-  input: { html?: string; subject: string; text: string; to: string }
+  input: { branding?: EmailBranding; html?: string; subject: string; text: string; to: string }
 ) {
   const config = await getResendConfig(client);
   if (!config) return false;
+  const branding = input.branding ?? (await getEmailBranding(client));
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -301,8 +419,10 @@ export async function sendResendEmail(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: `LeiBlog <no-reply@${config.domain}>`,
-      html: input.html ?? renderPlainEmailHtml({ subject: input.subject, text: input.text }),
+      from: `${branding.siteName} <no-reply@${config.domain}>`,
+      html:
+        input.html ??
+        renderPlainEmailHtml({ branding, subject: input.subject, text: input.text }),
       to: [input.to],
       subject: input.subject,
       text: input.text,
@@ -464,6 +584,7 @@ export async function createEmailCode(
   const email = normalizeEmail(input.email);
   const code = createNumericCode();
   const expiresAt = addMinutes(new Date(), EMAIL_CODE_MINUTES);
+  const branding = await getEmailBranding(client);
 
   await client`
     INSERT INTO email_verification_codes (email, code_hash, purpose, expires_at)
@@ -494,6 +615,7 @@ export async function createEmailCode(
   const html =
     options.emailHtml?.(code, EMAIL_CODE_MINUTES) ??
     renderVerificationCodeEmailHtml({
+      branding,
       code,
       description: fallbackDescription,
       title: subject,
@@ -501,6 +623,7 @@ export async function createEmailCode(
     });
 
   const sent = await sendResendEmail(client, {
+    branding,
     to: email,
     html,
     subject,
@@ -674,6 +797,7 @@ export async function createPasswordResetToken(
   `;
 
   if (user) {
+    const branding = await getEmailBranding(client);
     await client`
       INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
       VALUES (
@@ -684,8 +808,10 @@ export async function createPasswordResetToken(
     `;
 
     const sent = await sendResendEmail(client, {
+      branding,
       to: normalizedEmail,
       html: renderTokenEmailHtml({
+        branding,
         description: "你正在请求重置 LeiBlog 账号密码。复制下面的重置 Token 继续完成操作。",
         title: "LeiBlog 密码重置",
         token,

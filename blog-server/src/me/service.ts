@@ -3,7 +3,11 @@ import type { DbClient } from "../shared/db";
 import type { UserProfileRow } from "../shared/types/user";
 
 import { uploadUserAvatar } from "../admin/media/service";
-import { renderVerificationCodeEmailHtml, sendResendEmail } from "../auth/service";
+import {
+  getEmailBranding,
+  renderVerificationCodeEmailHtml,
+  sendResendEmail,
+} from "../auth/service";
 import {
   createNumericCode,
   hashPassword,
@@ -163,6 +167,7 @@ export async function requestEmailChangeCode(
   client: DbClient = db
 ) {
   const email = normalizeEmail(input.email);
+  const branding = await getEmailBranding(client);
   await ensureEmailAvailable(email, userId, client);
 
   const code = createNumericCode();
@@ -179,8 +184,10 @@ export async function requestEmailChangeCode(
   `;
 
   const sent = await sendResendEmail(client, {
+    branding,
     to: email,
     html: renderVerificationCodeEmailHtml({
+      branding,
       code,
       description: "请使用下面的验证码确认新的邮箱地址。",
       title: "LeiBlog 邮箱变更验证码",

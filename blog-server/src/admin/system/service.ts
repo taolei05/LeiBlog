@@ -3,6 +3,7 @@ import type { AuthUser } from "../../shared/auth";
 import {
   consumeEmailCode,
   createEmailCode,
+  getEmailBranding,
   isPrivateIp,
   renderNoticeEmailHtml,
   renderVerificationCodeEmailHtml,
@@ -210,6 +211,7 @@ async function getSiteConfigRow(client: DbClient) {
 async function sendResendTestEmail({
   apiKey,
   domain,
+  fromName = "LeiBlog",
   to,
   subject,
   text,
@@ -217,6 +219,7 @@ async function sendResendTestEmail({
 }: {
   apiKey: string;
   domain: string;
+  fromName?: string;
   html: string;
   subject: string;
   text: string;
@@ -224,7 +227,7 @@ async function sendResendTestEmail({
 }) {
   const response = await fetch("https://api.resend.com/emails", {
     body: JSON.stringify({
-      from: `LeiBlog <no-reply@${domain}>`,
+      from: `${fromName} <no-reply@${domain}>`,
       html,
       subject,
       text,
@@ -537,10 +540,13 @@ export async function testResendIntegration(
   if (!apiKey) throw validationError("Resend API Key 未配置");
 
   const label = input.kind === "domain" ? "Resend 域名" : "Resend API Key";
+  const branding = await getEmailBranding(client);
   await sendResendTestEmail({
     apiKey,
     domain,
+    fromName: branding.siteName,
     html: renderNoticeEmailHtml({
+      branding,
       description: `${label}配置成功。系统已经使用当前配置向管理员邮箱发送了这封测试邮件。`,
       title: `LeiBlog ${label}配置成功`,
     }),

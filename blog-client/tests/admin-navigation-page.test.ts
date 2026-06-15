@@ -16,8 +16,13 @@ describe("admin navigation page", () => {
     expect(navigationPageSource).toContain('folderSlug="website-icons"');
     expect(navigationPageSource).toContain("draggable");
     expect(navigationPageSource).toContain("reorderByDrop");
+    expect(navigationPageSource).toContain("openMoveItem(item)");
+    expect(navigationPageSource).toContain('submitLabel="移动网站"');
+    expect(navigationPageSource).toContain("网站已移动到");
+    expect(navigationPageSource).toContain("请选择其它分组");
+    expect(navigationPageSource).toContain("至少需要两个分组才能移动网站");
+    expect(navigationPageSource).toContain('<AppIcon name="swapVertical" />');
     expect(navigationPageSource).not.toContain("moveOrderedItem");
-    expect(navigationPageSource).not.toContain("swapVertical");
     expect(navigationPageSource).not.toContain("上移");
     expect(navigationPageSource).not.toContain("下移");
     expect(navigationPageSource).toContain('className="navigation-admin-row__icon"');
@@ -67,6 +72,10 @@ describe("admin navigation page", () => {
 
   .navigation-admin-row__actions > .button {
     width: 100%;
+  }
+
+  .navigation-admin-row--item .navigation-admin-row__actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }`);
   });

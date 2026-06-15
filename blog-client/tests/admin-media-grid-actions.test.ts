@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import mediaPageSource from "../src/features/admin/content/MediaPage.tsx?raw";
 import usersPageSource from "../src/features/admin/system/UsersPage.tsx?raw";
+
+const layoutsCss = readFileSync(
+  new URL("../src/shared/theme/layouts.css", import.meta.url),
+  "utf8",
+);
 
 describe("admin media grid actions", () => {
   it("keeps only the grid view with selection, download, and delete actions", () => {
@@ -11,6 +18,17 @@ describe("admin media grid actions", () => {
     expect(mediaPageSource).toContain("批量删除");
     expect(mediaPageSource).toContain("下载${row.fileName}");
     expect(mediaPageSource).toContain("删除${row.fileName}");
+  });
+
+  it("shows a clear empty state when the selected folder has no files", () => {
+    expect(mediaPageSource).toContain("const isActiveFolderEmpty =");
+    expect(mediaPageSource).toContain('className="media-folder-empty-card"');
+    expect(mediaPageSource).toContain("文件夹暂无文件");
+    expect(mediaPageSource).toContain("点击上方上传按钮，可以将文件添加到当前文件夹。");
+    expect(layoutsCss).toContain(`.media-folder-empty-card {
+  display: grid;
+  min-height: 12rem;
+  grid-column: 1 / -1;`);
   });
 });
 

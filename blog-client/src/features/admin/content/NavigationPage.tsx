@@ -38,6 +38,7 @@ type NavigationGroup = {
 
 type GroupModalState = { group?: NavigationGroup; mode: "create" | "edit" };
 type ItemModalState = { item?: NavigationItem; mode: "create" | "edit" };
+type MoveItemModalState = { item: NavigationItem; targetGroupId: string };
 type DeleteTarget =
   | { group: NavigationGroup; kind: "group" }
   | { item: NavigationItem; kind: "item" };
@@ -62,6 +63,7 @@ export function NavigationPage() {
   const [groupModal, setGroupModal] = useState<GroupModalState | null>(null);
   const [groupName, setGroupName] = useState("");
   const [itemModal, setItemModal] = useState<ItemModalState | null>(null);
+  const [moveItemModal, setMoveItemModal] = useState<MoveItemModalState | null>(null);
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [iconLocalFile, setIconLocalFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -289,6 +291,52 @@ export function NavigationPage() {
     setItemModal({ item, mode: "edit" });
   }
 
+  function openMoveItem(item: NavigationItem) {
+    const targetGroup = groups.find((group) => group.id !== item.groupId);
+    if (!targetGroup) {
+      setNotice("至少需要两个分组才能移动网站", "warning");
+      return;
+    }
+
+    setMoveItemModal({ item, targetGroupId: targetGroup.id });
+  }
+
+  async function moveItem() {
+    if (!moveItemModal) return;
+    if (moveItemModal.targetGroupId === moveItemModal.item.groupId) {
+      setNotice("请选择其它分组", "warning");
+      return;
+    }
+
+    const targetGroup = groups.find((group) => group.id === moveItemModal.targetGroupId);
+    if (!targetGroup) {
+      setNotice("目标分组不存在", "warning");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await adminFetch(`/admin/navigation/items/${moveItemModal.item.id}`, {
+        body: {
+          groupId: moveItemModal.targetGroupId,
+          iconUrl: moveItemModal.item.iconUrl,
+          name: moveItemModal.item.name,
+          note: moveItemModal.item.note,
+          url: moveItemModal.item.url,
+        },
+        method: "PATCH",
+      });
+      setMoveItemModal(null);
+      await loadNavigation();
+      setSelectedGroupId(targetGroup.id);
+      setNotice(`网站已移动到「${targetGroup.name}」`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "网站移动失败", "danger");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <AdminDataPage
       description="维护公开导航页的分组、网站、说明与图标；拖拽排序后会立即保存。"
@@ -361,6 +409,31 @@ export function NavigationPage() {
           onChange={setGroupName}
           placeholder="例如：常用工具"
           value={groupName}
+        />
+      </AdminFormModal>
+      <AdminFormModal
+        confirmDescription="网站会移动到所选分组末尾，公开导航页会立即更新。"
+        description="选择目标分组后，这个网站会从当前分组移走并追加到目标分组末尾。"
+        icon="swapVertical"
+        isOpen={moveItemModal !== null}
+        isSubmitting={isSaving}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setMoveItemModal(null);
+        }}
+        onSubmit={moveItem}
+        submitLabel="移动网站"
+        title={moveItemModal ? `移动「${moveItemModal.item.name}」` : "移动网站"}
+      >
+        <AdminSelectGroupField
+          icon="folderOpen"
+          label="目标分组"
+          onChange={(targetGroupId) =>
+            setMoveItemModal((current) => (current ? { ...current, targetGroupId } : current))
+          }
+          options={groups
+            .filter((group) => group.id !== moveItemModal?.item.groupId)
+            .map((group) => ({ label: group.name, value: group.id }))}
+          value={moveItemModal?.targetGroupId ?? ""}
         />
       </AdminFormModal>
       <AdminFormModal
@@ -538,6 +611,15 @@ export function NavigationPage() {
                   </span>
                 </div>
                 <div className="navigation-admin-row__actions">
+                  <Button
+                    isDisabled={groups.length < 2}
+                    onPress={() => openMoveItem(item)}
+                    size="sm"
+                    variant="tertiary"
+                  >
+                    <AppIcon name="swapVertical" />
+                    移动
+                  </Button>
                   <Button onPress={() => openEditItem(item)} size="sm" variant="tertiary">
                     <AppIcon name="pencil" />
                     编辑

@@ -357,6 +357,10 @@ html:has(.navigation-page) {
   .navigation-admin-row__actions > .button {
     width: 100%;
   }
+
+  .navigation-admin-row--item .navigation-admin-row__actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {

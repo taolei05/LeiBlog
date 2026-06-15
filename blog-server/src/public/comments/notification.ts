@@ -1,4 +1,8 @@
-import { renderCommentNotificationEmailHtml, sendResendEmail } from "../../auth/service";
+import {
+  getEmailBranding,
+  renderCommentNotificationEmailHtml,
+  sendResendEmail,
+} from "../../auth/service";
 import type { DbClient } from "../../shared/db";
 import { db } from "../../shared/db";
 
@@ -213,12 +217,15 @@ export async function sendCommentEmailNotifications(
   client: DbClient = db
 ) {
   const notifications = await resolveCommentNotifications(commentId, client);
+  const branding = await getEmailBranding(client);
   let sentAnyEmail = false;
 
   for (const notification of notifications) {
     try {
       const sent = await sendResendEmail(client, {
+        branding,
         html: renderCommentNotificationEmailHtml({
+          branding,
           content: notification.content,
           description: notification.description,
           title: notification.subject,

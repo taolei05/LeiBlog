@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
-import { renderCommentNotificationEmailHtml } from "../src/auth/service";
+import { renderCommentNotificationEmailHtml, resolveEmailBranding } from "../src/auth/service";
 import { createArticle, createCategory } from "../src/admin/content/service";
 import {
   mergeCommentNotificationRecipients,
@@ -157,6 +157,50 @@ describe("comment notification emails", () => {
     expect(html).not.toContain('<script>alert("x")</script>');
     expect(html).toContain("white-space:pre-wrap");
     expect(html).toContain("word-break:break-word");
+  });
+
+  test("uses the configured site logo by Shanghai day and night, and falls back to the site initial", () => {
+    const dayBranding = resolveEmailBranding(
+      {
+        logoDarkUrl: "/uploads/site/logo-dark.png",
+        logoLightUrl: "/uploads/site/logo-light.png",
+        siteName: "Trace Blog",
+      },
+      new Date("2026-06-15T04:00:00.000Z")
+    );
+    const nightBranding = resolveEmailBranding(
+      {
+        logoDarkUrl: "/uploads/site/logo-dark.png",
+        logoLightUrl: "/uploads/site/logo-light.png",
+        siteName: "Trace Blog",
+      },
+      new Date("2026-06-15T14:00:00.000Z")
+    );
+    const fallbackBranding = resolveEmailBranding({ siteName: "Trace Blog" });
+
+    const dayHtml = renderCommentNotificationEmailHtml({
+      branding: dayBranding,
+      content: "白天测试",
+      description: "白天说明",
+      title: "白天标题",
+    });
+    const nightHtml = renderCommentNotificationEmailHtml({
+      branding: nightBranding,
+      content: "夜间测试",
+      description: "夜间说明",
+      title: "夜间标题",
+    });
+    const fallbackHtml = renderCommentNotificationEmailHtml({
+      branding: fallbackBranding,
+      content: "托底测试",
+      description: "托底说明",
+      title: "托底标题",
+    });
+
+    expect(dayHtml).toContain('src="http://localhost:3000/uploads/site/logo-light.png"');
+    expect(nightHtml).toContain('src="http://localhost:3000/uploads/site/logo-dark.png"');
+    expect(fallbackHtml).toContain(">T</div>");
+    expect(fallbackHtml).toContain("Trace Blog");
   });
 
   test("resolves enabled admins with valid deduplicated email addresses", async () => {
@@ -507,11 +551,23 @@ describe("comment notification emails", () => {
           resend_api_key_encrypted = ${JSON.stringify(encryptSecret("resend-secret"))}::jsonb
       WHERE id = 1
     `;
+    await testDb`
+      INSERT INTO site_info (id, site_name, description, established_at, logo_light_url)
+      VALUES (1, 'Moon Blog', '', now(), '/uploads/site/mail-logo.png')
+      ON CONFLICT (id) DO UPDATE
+      SET site_name = EXCLUDED.site_name,
+          description = EXCLUDED.description,
+          established_at = EXCLUDED.established_at,
+          logo_light_url = EXCLUDED.logo_light_url
+    `;
 
     globalThis.fetch = Object.assign(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as { to: string[] };
+        const body = JSON.parse(String(init?.body)) as { from: string; html: string; to: string[] };
         fetchCalls.push(body.to[0] ?? "");
+        expect(body.from).toBe("Moon Blog <no-reply@mail.example.com>");
+        expect(body.html).toContain("Moon Blog");
+        expect(body.html).toContain("http://localhost:3000/uploads/site/mail-logo.png");
 
         return new Response("{}", {
           status: fetchCalls.length === 1 ? 500 : 200,

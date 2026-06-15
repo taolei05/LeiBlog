@@ -35,7 +35,12 @@ import { BlogPageHeader } from "../shared/BlogComponents";
 type AuthDialogMode = "login" | "register";
 type BlogUserRole = "admin" | "user";
 type ProfilePanelMode = "email" | "password" | "preferences" | "profile" | "theme";
-type ProfileConfirmAction = "change-email" | "change-password" | "logout" | "save-profile";
+type ProfileConfirmAction =
+  | "change-email"
+  | "change-password"
+  | "logout"
+  | "save-preferences"
+  | "save-profile";
 
 type BlogAuthUser = {
   avatarUrl: string | null;
@@ -175,6 +180,12 @@ const profileConfirmCopy: Record<
     description: "确认后会保存昵称、头像、博客链接、标签和个人描述，并同步到评论区身份展示。",
     status: "warning",
     title: "确认保存资料？",
+  },
+  "save-preferences": {
+    confirmLabel: "确认保存",
+    description: "保存后，评论回复邮件通知开关会按当前选择生效。",
+    status: "warning",
+    title: "确认保存偏好设置？",
   },
 };
 
@@ -1072,6 +1083,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const [commentEmailNotificationsDraft, setCommentEmailNotificationsDraft] = useState(true);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [pendingProfileAction, setPendingProfileAction] = useState<ProfileConfirmAction | null>(
@@ -1161,7 +1173,8 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
 
     setProfileForm(createProfileFormState(user));
     setEmailForm(createEmailChangeFormState(user));
-  }, [user?.id]);
+    setCommentEmailNotificationsDraft(user.commentEmailNotificationsEnabled);
+  }, [user?.commentEmailNotificationsEnabled, user?.id]);
 
   useEffect(() => {
     if (!sessionToken) return undefined;
@@ -1176,6 +1189,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
 
         setProfileForm(createProfileFormState(nextUser));
         setEmailForm(createEmailChangeFormState(nextUser));
+        setCommentEmailNotificationsDraft(nextUser.commentEmailNotificationsEnabled);
         setSession((current) => {
           if (!current || current.token !== token) return current;
 
@@ -1384,28 +1398,23 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
     }, 0);
   }
 
-  async function saveCommentEmailNotificationPreference(nextValue: boolean) {
+  async function saveCommentEmailNotificationPreference() {
     const previousSession = session;
 
     if (!previousSession || !user) return;
 
     const requestToken = previousSession.token;
-    const previousValue = previousSession.user.commentEmailNotificationsEnabled;
-    updateSessionForToken(requestToken, (current) => ({
-      ...current,
-      user: { ...current.user, commentEmailNotificationsEnabled: nextValue },
-    }));
     setIsSavingPreferences(true);
 
     try {
-      const nextUser = await updateCurrentBlogUserPreferences(requestToken, nextValue);
+      const nextUser = await updateCurrentBlogUserPreferences(
+        requestToken,
+        commentEmailNotificationsDraft,
+      );
       updateSessionForToken(requestToken, (current) => ({ ...current, user: nextUser }));
+      setCommentEmailNotificationsDraft(nextUser.commentEmailNotificationsEnabled);
       showOperationToast("评论回复邮件通知偏好已保存", "success");
     } catch (error) {
-      updateSessionForToken(requestToken, (current) => ({
-        ...current,
-        user: { ...current.user, commentEmailNotificationsEnabled: previousValue },
-      }));
       showOperationToast(
         error instanceof Error
           ? `评论回复邮件通知偏好保存失败：${error.message}`
@@ -1720,6 +1729,9 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
         return;
       case "save-profile":
         void saveProfile();
+        return;
+      case "save-preferences":
+        void saveCommentEmailNotificationPreference();
         return;
       default: {
         const exhaustiveAction: never = action;
@@ -2073,14 +2085,11 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
               </Accordion.Heading>
               <Accordion.Panel>
                 <Accordion.Body>
-                  <div className="account-preference-list">
+                  <div className="account-preference-list settings-form">
                     <Switch
-                      className="account-preference-row"
                       isDisabled={isSavingPreferences}
-                      isSelected={user.commentEmailNotificationsEnabled}
-                      onChange={(nextValue) =>
-                        void saveCommentEmailNotificationPreference(nextValue)
-                      }
+                      isSelected={commentEmailNotificationsDraft}
+                      onChange={setCommentEmailNotificationsDraft}
                     >
                       <Switch.Control>
                         <Switch.Thumb />
@@ -2090,6 +2099,15 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                         <span>自己的评论收到直接回复时，通过邮箱通知我。</span>
                       </Switch.Content>
                     </Switch>
+                    <Button
+                      className="settings-form__submit"
+                      isDisabled={isSavingPreferences}
+                      onPress={() => setPendingProfileAction("save-preferences")}
+                      type="button"
+                    >
+                      <AppIcon name="save" />
+                      {isSavingPreferences ? "保存中" : "保存偏好设置"}
+                    </Button>
                   </div>
                 </Accordion.Body>
               </Accordion.Panel>

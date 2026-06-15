@@ -70,7 +70,7 @@ type SocialLinkDraft = {
   url: string;
 };
 
-type AdminAccountSaveKind = "profile" | "security";
+type AdminAccountSaveKind = "preferences" | "profile" | "security";
 
 const saveConfirmationCopy: Record<
   AdminAccountSaveKind,
@@ -80,6 +80,11 @@ const saveConfirmationCopy: Record<
     title: string;
   }
 > = {
+  preferences: {
+    confirmLabel: "确认保存",
+    description: "保存后，评论邮件通知开关会按当前选择生效。",
+    title: "确认保存偏好设置？",
+  },
   profile: {
     confirmLabel: "确认保存",
     description: "保存后，昵称、头像、描述、标签、博客链接和社交链接会立即更新。",
@@ -189,6 +194,7 @@ export function ProfilePage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
+  const [commentEmailNotificationsDraft, setCommentEmailNotificationsDraft] = useState(true);
 
   useEffect(() => {
     let isActive = true;
@@ -202,6 +208,7 @@ export function ProfilePage() {
         setProfileForm(toProfileForm(response.user));
         setSocialLinks(toSocialLinkDrafts(response.user.socialLinks));
         setEmail(response.user.email ?? "");
+        setCommentEmailNotificationsDraft(response.user.commentEmailNotificationsEnabled);
       } catch (error) {
         if (!isActive) return;
         showOperationToast(error instanceof Error ? error.message : "管理员资料读取失败", "danger");
@@ -352,28 +359,24 @@ export function ProfilePage() {
     }
   }
 
-  async function saveCommentEmailNotificationPreference(nextValue: boolean) {
-    const previousProfile = profile;
-
-    if (!previousProfile) {
+  async function saveCommentEmailNotificationPreference() {
+    if (!profile) {
       showOperationToast("管理员资料仍在读取，请稍后再试", "warning");
       return;
     }
 
-    setProfile({ ...previousProfile, commentEmailNotificationsEnabled: nextValue });
-
     try {
       setIsSavingPreferences(true);
       const response = await adminFetch<{ user: AdminProfile }>("/me/preferences", {
-        body: { commentEmailNotificationsEnabled: nextValue },
+        body: { commentEmailNotificationsEnabled: commentEmailNotificationsDraft },
         method: "PATCH",
       });
 
       setProfile(response.user);
+      setCommentEmailNotificationsDraft(response.user.commentEmailNotificationsEnabled);
       syncAdminSession(response.user);
       showOperationToast("评论邮件通知偏好已保存", "success");
     } catch (error) {
-      setProfile(previousProfile);
       showOperationToast(
         error instanceof Error ? error.message : "评论邮件通知偏好保存失败",
         "danger",
@@ -384,13 +387,41 @@ export function ProfilePage() {
   }
 
   function confirmPendingSave() {
-    if (pendingSave === "profile") {
-      void saveProfile();
-      return;
-    }
+    const action = pendingSave;
+    if (!action) return;
 
-    if (pendingSave === "security") {
-      void saveSecuritySettings();
+    switch (action) {
+      case "preferences":
+        void saveCommentEmailNotificationPreference();
+        return;
+      case "profile":
+        void saveProfile();
+        return;
+      case "security":
+        void saveSecuritySettings();
+        return;
+      default: {
+        const exhaustiveAction: never = action;
+        return exhaustiveAction;
+      }
+    }
+  }
+
+  function isPendingSaveDisabled() {
+    const action = pendingSave;
+    if (!action) return false;
+
+    switch (action) {
+      case "preferences":
+        return isSavingPreferences;
+      case "profile":
+        return isSavingProfile;
+      case "security":
+        return isSavingSecurity;
+      default: {
+        const exhaustiveAction: never = action;
+        return Boolean(exhaustiveAction);
+      }
     }
   }
 
@@ -647,12 +678,11 @@ export function ProfilePage() {
             <h3>偏好设置</h3>
             <p className="admin-account-preference-note">主题与编辑体验偏好会在这里继续扩展。</p>
           </div>
-          <div className="account-preference-list">
+          <div className="account-preference-list settings-form">
             <Switch
-              className="account-preference-row"
               isDisabled={isLoading || isSavingPreferences || profile === null}
-              isSelected={profile?.commentEmailNotificationsEnabled ?? true}
-              onChange={(nextValue) => void saveCommentEmailNotificationPreference(nextValue)}
+              isSelected={commentEmailNotificationsDraft}
+              onChange={setCommentEmailNotificationsDraft}
             >
               <Switch.Control>
                 <Switch.Thumb />
@@ -662,6 +692,15 @@ export function ProfilePage() {
                 <span>接收全站文章和留言板的新评论、新回复邮件。</span>
               </Switch.Content>
             </Switch>
+            <Button
+              className="settings-form__submit"
+              isDisabled={isLoading || isSavingPreferences || profile === null}
+              onPress={() => setPendingSave("preferences")}
+              type="button"
+            >
+              <AppIcon name="save" />
+              {isSavingPreferences ? "保存中" : "保存偏好设置"}
+            </Button>
           </div>
         </AdminAccountAccordionItem>
       </Accordion>
@@ -692,7 +731,7 @@ export function ProfilePage() {
                     取消
                   </Button>
                   <Button
-                    isDisabled={pendingSave === "profile" ? isSavingProfile : isSavingSecurity}
+                    isDisabled={isPendingSaveDisabled()}
                     onPress={confirmPendingSave}
                     slot="close"
                     variant="primary"
