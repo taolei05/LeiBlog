@@ -7,6 +7,7 @@ import {
   InputOTP,
   Label,
   Modal,
+  Switch,
   TextArea,
   TextField,
 } from "@heroui/react";
@@ -33,12 +34,13 @@ import { BlogPageHeader } from "../shared/BlogComponents";
 
 type AuthDialogMode = "login" | "register";
 type BlogUserRole = "admin" | "user";
-type ProfilePanelMode = "email" | "password" | "profile" | "theme";
+type ProfilePanelMode = "email" | "password" | "preferences" | "profile" | "theme";
 type ProfileConfirmAction = "change-email" | "change-password" | "logout" | "save-profile";
 
 type BlogAuthUser = {
   avatarUrl: string | null;
   blogUrl: string | null;
+  commentEmailNotificationsEnabled: boolean;
   createdAt: string;
   description: string;
   email: string | null;
@@ -193,6 +195,10 @@ function readRole(value: unknown): BlogUserRole {
   return value === "admin" || value === "user" ? value : "user";
 }
 
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
 function readStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
@@ -208,6 +214,7 @@ function parseBlogUser(value: unknown): BlogAuthUser | null {
   return {
     avatarUrl: readNullableString(value.avatarUrl),
     blogUrl: readNullableString(value.blogUrl),
+    commentEmailNotificationsEnabled: readBoolean(value.commentEmailNotificationsEnabled, true),
     createdAt: readString(value.createdAt),
     description: readString(value.description),
     email: readNullableString(value.email),
@@ -257,7 +264,13 @@ function clearBlogSession() {
 }
 
 function readProfilePanelMode(value: string | null): ProfilePanelMode | null {
-  if (value === "email" || value === "password" || value === "profile" || value === "theme") {
+  if (
+    value === "email" ||
+    value === "password" ||
+    value === "preferences" ||
+    value === "profile" ||
+    value === "theme"
+  ) {
     return value;
   }
 
@@ -428,6 +441,16 @@ async function updateCurrentBlogUserProfile(
 ) {
   const payload = await authJsonRequest<unknown>("/me/", {
     body: input,
+    method: "PATCH",
+    token,
+  });
+
+  return parseMeResponse(payload);
+}
+
+async function updateCurrentBlogUserPreferences(token: string, nextValue: boolean) {
+  const payload = await authJsonRequest<unknown>("/me/preferences", {
+    body: { commentEmailNotificationsEnabled: nextValue },
     method: "PATCH",
     token,
   });
@@ -1048,6 +1071,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
   });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [pendingProfileAction, setPendingProfileAction] = useState<ProfileConfirmAction | null>(
@@ -1346,6 +1370,51 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
 
       return nextSession;
     });
+  }
+
+  function updateSessionForToken(
+    expectedToken: string,
+    createNextSession: (current: BlogSession) => BlogSession,
+  ) {
+    window.setTimeout(() => {
+      const storedSession = readBlogSession();
+      if (!storedSession || storedSession.token !== expectedToken) return;
+
+      writeBlogSession(createNextSession(storedSession));
+    }, 0);
+  }
+
+  async function saveCommentEmailNotificationPreference(nextValue: boolean) {
+    const previousSession = session;
+
+    if (!previousSession || !user) return;
+
+    const requestToken = previousSession.token;
+    const previousValue = previousSession.user.commentEmailNotificationsEnabled;
+    updateSessionForToken(requestToken, (current) => ({
+      ...current,
+      user: { ...current.user, commentEmailNotificationsEnabled: nextValue },
+    }));
+    setIsSavingPreferences(true);
+
+    try {
+      const nextUser = await updateCurrentBlogUserPreferences(requestToken, nextValue);
+      updateSessionForToken(requestToken, (current) => ({ ...current, user: nextUser }));
+      showOperationToast("评论回复邮件通知偏好已保存", "success");
+    } catch (error) {
+      updateSessionForToken(requestToken, (current) => ({
+        ...current,
+        user: { ...current.user, commentEmailNotificationsEnabled: previousValue },
+      }));
+      showOperationToast(
+        error instanceof Error
+          ? `评论回复邮件通知偏好保存失败：${error.message}`
+          : "评论回复邮件通知偏好保存失败",
+        "danger",
+      );
+    } finally {
+      setIsSavingPreferences(false);
+    }
   }
 
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
@@ -1987,6 +2056,41 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                       </Button>
                     </div>
                   </form>
+                </Accordion.Body>
+              </Accordion.Panel>
+            </Accordion.Item>
+
+            <Accordion.Item
+              className="site-settings-card front-profile-accordion-card"
+              id="preferences"
+            >
+              <Accordion.Heading>
+                <Accordion.Trigger>
+                  <AppIcon name="sparkles" />
+                  偏好设置
+                  <Accordion.Indicator />
+                </Accordion.Trigger>
+              </Accordion.Heading>
+              <Accordion.Panel>
+                <Accordion.Body>
+                  <div className="account-preference-list">
+                    <Switch
+                      className="account-preference-row"
+                      isDisabled={isSavingPreferences}
+                      isSelected={user.commentEmailNotificationsEnabled}
+                      onChange={(nextValue) =>
+                        void saveCommentEmailNotificationPreference(nextValue)
+                      }
+                    >
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <Switch.Content>
+                        <strong>评论回复邮件通知</strong>
+                        <span>自己的评论收到直接回复时，通过邮箱通知我。</span>
+                      </Switch.Content>
+                    </Switch>
+                  </div>
                 </Accordion.Body>
               </Accordion.Panel>
             </Accordion.Item>
