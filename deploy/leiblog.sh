@@ -10,7 +10,7 @@ LEIBLOG_REPO_ARCHIVE_URL="${LEIBLOG_REPO_ARCHIVE_URL:-https://github.com/taolei0
 LEIBLOG_SCRIPT_URL="${LEIBLOG_SCRIPT_URL:-https://raw.githubusercontent.com/taolei05/LeiBlog/${LEIBLOG_REPO_BRANCH}/deploy/leiblog.sh}"
 LEIBLOG_COMMAND_PATH="${LEIBLOG_COMMAND_PATH:-/usr/local/bin/leiblog}"
 LEIBLOG_HTTP_PORT="${LEIBLOG_HTTP_PORT:-80}"
-LEIBLOG_SITE_URL="${LEIBLOG_SITE_URL:-}"
+LEIBLOG_SITE_URL=""
 LEIBLOG_INSTALL_DOCKER="${LEIBLOG_INSTALL_DOCKER:-1}"
 
 COMPOSE_FILE="${LEIBLOG_BASE_DIR}/docker-compose.yml"
@@ -169,27 +169,6 @@ trim_trailing_slash() {
   echo "${value%/}"
 }
 
-normalize_site_url() {
-  local value="$1"
-
-  case "${value}" in
-    http//*) value="http://${value#http//}" ;;
-    https//*) value="https://${value#https//}" ;;
-  esac
-
-  while true; do
-    case "${value}" in
-      http://http://*) value="http://${value#http://http://}" ;;
-      http://https://*) value="https://${value#http://https://}" ;;
-      https://http://*) value="http://${value#https://http://}" ;;
-      https://https://*) value="https://${value#https://https://}" ;;
-      *) break ;;
-    esac
-  done
-
-  echo "${value}"
-}
-
 detect_public_site_url() {
   local ip
   ip="$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
@@ -209,16 +188,13 @@ resolve_site_url() {
   local default_url input
   default_url="$(detect_public_site_url)"
 
-  if [[ -z "${LEIBLOG_SITE_URL}" && -t 0 ]]; then
+  if [[ -t 0 ]]; then
     read -r -p "请输入站点访问地址 [${default_url}]: " input
     LEIBLOG_SITE_URL="${input:-${default_url}}"
-  fi
-
-  if [[ -z "${LEIBLOG_SITE_URL}" ]]; then
+  else
     LEIBLOG_SITE_URL="${default_url}"
   fi
 
-  LEIBLOG_SITE_URL="$(normalize_site_url "${LEIBLOG_SITE_URL}")"
   LEIBLOG_SITE_URL="$(trim_trailing_slash "${LEIBLOG_SITE_URL}")"
 
   case "${LEIBLOG_SITE_URL}" in
@@ -281,54 +257,6 @@ EOF
 
 ensure_env_defaults() {
   [[ -f "${ENV_FILE}" ]] || return
-
-  local current_site_url normalized_site_url current_api_base_url current_cors_origins normalized_cors_origins tmp_file
-  current_site_url="$(grep '^SITE_URL=' "${ENV_FILE}" | head -n 1 | cut -d= -f2- || true)"
-
-  if [[ -n "${current_site_url}" ]]; then
-    normalized_site_url="$(normalize_site_url "$(trim_trailing_slash "${current_site_url}")")"
-
-    if [[ "${normalized_site_url}" != "${current_site_url}" ]]; then
-      info "修正环境变量：SITE_URL=${normalized_site_url}"
-      tmp_file="$(mktemp)"
-      awk -v site_url="${normalized_site_url}" '
-        BEGIN { updated=0 }
-        /^SITE_URL=/ { print "SITE_URL=" site_url; updated=1; next }
-        { print }
-        END { if (!updated) print "SITE_URL=" site_url }
-      ' "${ENV_FILE}" >"${tmp_file}"
-      mv "${tmp_file}" "${ENV_FILE}"
-    fi
-
-    current_api_base_url="$(grep '^VITE_API_BASE_URL=' "${ENV_FILE}" | head -n 1 | cut -d= -f2- || true)"
-    if [[ "${current_api_base_url}" != "${normalized_site_url}/api" ]]; then
-      info "修正环境变量：VITE_API_BASE_URL=${normalized_site_url}/api"
-      tmp_file="$(mktemp)"
-      awk -v api_base_url="${normalized_site_url}/api" '
-        BEGIN { updated=0 }
-        /^VITE_API_BASE_URL=/ { print "VITE_API_BASE_URL=" api_base_url; updated=1; next }
-        { print }
-        END { if (!updated) print "VITE_API_BASE_URL=" api_base_url }
-      ' "${ENV_FILE}" >"${tmp_file}"
-      mv "${tmp_file}" "${ENV_FILE}"
-    fi
-
-    current_cors_origins="$(grep '^CORS_ORIGINS=' "${ENV_FILE}" | head -n 1 | cut -d= -f2- || true)"
-    if [[ -n "${current_cors_origins}" && "${current_cors_origins}" != *","* ]]; then
-      normalized_cors_origins="$(normalize_site_url "$(trim_trailing_slash "${current_cors_origins}")")"
-      if [[ "${normalized_cors_origins}" != "${current_cors_origins}" ]]; then
-        info "修正环境变量：CORS_ORIGINS=${normalized_cors_origins}"
-        tmp_file="$(mktemp)"
-        awk -v cors_origins="${normalized_cors_origins}" '
-          BEGIN { updated=0 }
-          /^CORS_ORIGINS=/ { print "CORS_ORIGINS=" cors_origins; updated=1; next }
-          { print }
-          END { if (!updated) print "CORS_ORIGINS=" cors_origins }
-        ' "${ENV_FILE}" >"${tmp_file}"
-        mv "${tmp_file}" "${ENV_FILE}"
-      fi
-    fi
-  fi
 
   if ! grep -q '^TRUSTED_PROXY_IPS=' "${ENV_FILE}"; then
     info "补充环境变量：TRUSTED_PROXY_IPS=172.16.0.0/12"
@@ -715,12 +643,12 @@ uninstall_leiblog() {
 
 print_install_result() {
   load_env_file
-  local normalized_site_url
-  normalized_site_url="$(normalize_site_url "$(trim_trailing_slash "${SITE_URL}")")"
+  local site_url
+  site_url="$(trim_trailing_slash "${SITE_URL}")"
   echo
   echo -e "${green}LeiBlog 已启动${plain}"
-  echo -e "访问地址：${yellow}${normalized_site_url}${plain}"
-  echo -e "初始化地址：${yellow}${normalized_site_url}/admin/setup${plain}"
+  echo -e "访问地址：${yellow}${site_url}${plain}"
+  echo -e "初始化地址：${yellow}${site_url}/admin/setup${plain}"
   echo -e "SETUP_TOKEN：${yellow}${SETUP_TOKEN}${plain}"
   echo -e "全局命令：${LEIBLOG_COMMAND_PATH}"
   echo -e "配置文件：${ENV_FILE}"
@@ -745,7 +673,6 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
   leiblog uninstall [--purge]   卸载服务，--purge 会删除数据目录
 
 常用环境变量:
-  LEIBLOG_SITE_URL=https://域名
   LEIBLOG_HTTP_PORT=80
   LEIBLOG_BASE_DIR=/var/leiblog
   LEIBLOG_REPO_BRANCH=main
@@ -759,12 +686,6 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 
 安装 LeiBlog:
   sudo leiblog install
-
-指定 IP 安装 LeiBlog:
-  sudo env LEIBLOG_SITE_URL=http://服务器ip leiblog install
-
-指定域名安装 LeiBlog:
-  sudo env LEIBLOG_SITE_URL=https://域名 leiblog install
 EOF
 }
 

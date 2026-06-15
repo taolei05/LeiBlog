@@ -39,16 +39,10 @@ sudo chmod +x /usr/local/bin/leiblog
 sudo leiblog --help
 ```
 
-安装完成后，可以在任意目录直接使用 `leiblog`。使用 IP 部署时，将 `LEIBLOG_SITE_URL` 改成你的服务器访问地址：
+安装完成后，可以在任意目录直接使用 `leiblog`。执行安装时，脚本会自动探测公网 IP 并提示确认站点访问地址；如果需要域名、IP:端口或其它地址，按提示输入即可：
 
 ```bash
-sudo env LEIBLOG_SITE_URL=http://217.160.159.141/ leiblog install
-```
-
-使用域名部署时：
-
-```bash
-sudo env LEIBLOG_SITE_URL=https://域名 leiblog install
+sudo leiblog install
 ```
 
 安装成功后终端会输出：
@@ -377,10 +371,10 @@ sudo ss -ltnp | grep ':80'
 如果不能释放 80 端口，可以用其他端口安装：
 
 ```bash
-sudo env LEIBLOG_HTTP_PORT=8080 \
-  LEIBLOG_SITE_URL=http://服务器ip:8080 \
-  leiblog install
+sudo env LEIBLOG_HTTP_PORT=8080 leiblog install
 ```
+
+安装提示出现后，将站点访问地址输入为 `http://服务器ip:8080`。
 
 ### 忘记 SETUP_TOKEN
 
