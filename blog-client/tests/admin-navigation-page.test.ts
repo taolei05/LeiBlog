@@ -1,17 +1,74 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
 import navigationPageSource from "../src/features/admin/content/NavigationPage.tsx?raw";
 import routerSource from "../src/app/router.tsx?raw";
 import { persistOptimisticOrder } from "../src/features/admin/content/navigation-order";
 
+const navigationStyles = readFileSync(
+  new URL("../src/shared/theme/navigation.css", import.meta.url),
+  "utf8",
+);
+
 describe("admin navigation page", () => {
-  it("supports icon media, drag sorting, accessible sorting, and protected group deletion", () => {
+  it("supports icon media, card drag sorting, and protected group deletion", () => {
     expect(navigationPageSource).toContain('folderSlug="website-icons"');
     expect(navigationPageSource).toContain("draggable");
-    expect(navigationPageSource).toContain("moveOrderedItem");
     expect(navigationPageSource).toContain("reorderByDrop");
+    expect(navigationPageSource).not.toContain("moveOrderedItem");
+    expect(navigationPageSource).not.toContain("swapVertical");
+    expect(navigationPageSource).not.toContain("上移");
+    expect(navigationPageSource).not.toContain("下移");
+    expect(navigationPageSource).toContain('className="navigation-admin-row__icon"');
+    expect(navigationPageSource).toContain("item.iconUrl ? (");
+    expect(navigationPageSource).toContain("resolveApiAssetUrl(item.iconUrl)");
+    expect(navigationPageSource).toContain('<AppIcon name="link" />');
     expect(navigationPageSource).toContain("请先移动或删除组内网站");
     expect(routerSource).toContain('path="admin/content/navigation"');
+  });
+
+  it("uses the shared danger confirmation dialog for deletions", () => {
+    expect(navigationPageSource).not.toContain("window.confirm");
+    expect(navigationPageSource).toContain("<AlertDialog.Backdrop");
+    expect(navigationPageSource).toContain('<AlertDialog.Icon status="danger" />');
+    expect(navigationPageSource).toContain("确认删除分组");
+    expect(navigationPageSource).toContain("确认删除网站");
+    expect(navigationPageSource).toContain("请先移动或删除组内网站");
+  });
+
+  it("keeps the group column compact on desktop", () => {
+    expect(navigationStyles).toContain(
+      "grid-template-columns: minmax(16rem, 0.7fr) minmax(24rem, 1.3fr);",
+    );
+    expect(navigationStyles).toContain(`@media (max-width: 1024px) {
+  .navigation-admin-layout {
+    grid-template-columns: 1fr;
+  }`);
+  });
+
+  it("aligns create and card action buttons for mobile", () => {
+    expect(navigationStyles).toContain(`@media (max-width: 720px) {
+  .navigation-admin-panel__header,
+  .navigation-admin-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .navigation-admin-panel__header > .button {
+    align-self: flex-end;
+  }
+
+  .navigation-admin-row__actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .navigation-admin-row__actions > .button {
+    width: 100%;
+  }
+}`);
   });
 
   it("rolls back an optimistic order when persistence fails", async () => {

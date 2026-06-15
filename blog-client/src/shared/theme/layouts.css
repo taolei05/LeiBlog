@@ -5519,6 +5519,10 @@
   max-width: 32rem;
 }
 
+.dashboard-page .admin-status-card {
+  max-width: none;
+}
+
 .admin-page {
   max-width: 76rem;
 }

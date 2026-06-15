@@ -61,7 +61,7 @@ export function AdminDashboardPage() {
   );
 
   return (
-    <section className="page-stack admin-page">
+    <section className="page-stack admin-page admin-page--wide dashboard-page">
       <div className="admin-page__heading">
         <div className="page-heading page-heading--compact">
           <p className="eyebrow">主要</p>

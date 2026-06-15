@@ -1,11 +1,19 @@
+import { readFileSync } from "node:fs";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import blogLayoutSource from "../src/app/blog/BlogLayout.tsx?raw";
+import interactiveCursorSource from "../src/app/blog/InteractiveCursor.tsx?raw";
 import routerSource from "../src/app/router.tsx?raw";
 import { NavigationPage } from "../src/features/blog/navigation/NavigationPage";
 import { normalizeNavigationGroups } from "../src/features/blog/navigation/navigation-api";
+
+const navigationStyles = readFileSync(
+  new URL("../src/shared/theme/navigation.css", import.meta.url),
+  "utf8",
+);
 
 const fixtureGroups = [
   {
@@ -66,5 +74,25 @@ describe("public navigation page", () => {
   it("wires a top-level navigation entry and public route", () => {
     expect(blogLayoutSource).toContain('{ to: "/navigation", label: "导航页"');
     expect(routerSource).toContain('path="navigation"');
+  });
+
+  it("uses restrained Interactive Cursor feedback across navigation surfaces", () => {
+    expect(interactiveCursorSource).toContain('".navigation-admin-row"');
+    expect(navigationStyles).toContain(
+      "transform: translate3d(var(--cursor-pull-x, 0), var(--cursor-pull-y, 0), 0);",
+    );
+    expect(navigationStyles).toContain(".navigation-page__card:focus-visible");
+    expect(navigationStyles).toContain(".navigation-admin-row:focus-within");
+    expect(navigationStyles).toContain(
+      '.interactive-shell--cursor-active .navigation-admin-row[draggable="true"]',
+    );
+    expect(navigationStyles).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("keeps navigation surfaces rounded independently from the compact global radius", () => {
+    expect(navigationStyles).toContain("--navigation-surface-radius: 1rem;");
+    expect(navigationStyles).toContain("--navigation-item-radius: 0.75rem;");
+    expect(navigationStyles).toContain("border-radius: var(--navigation-surface-radius);");
+    expect(navigationStyles).toContain("border-radius: var(--navigation-item-radius);");
   });
 });

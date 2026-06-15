@@ -15,6 +15,7 @@ const interactiveSelector = [
   ".front-action-link",
   ".mdx-read-next",
   ".media-grid-card",
+  ".navigation-admin-row",
   ".setup-steps__item",
 ].join(",");
 

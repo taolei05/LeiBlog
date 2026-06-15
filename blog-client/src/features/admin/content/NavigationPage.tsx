@@ -1,6 +1,7 @@
-import { Button } from "@heroui/react";
+import { AlertDialog, Button } from "@heroui/react";
 import { useEffect, useState } from "react";
 
+import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { AdminDataPage } from "../shared/AdminDataPage";
@@ -12,7 +13,7 @@ import {
 } from "../shared/admin-form-modal";
 import { adminFetch, uploadAdminMediaFile } from "../shared/admin-api";
 import { MediaAssetField } from "../shared/media-asset-field";
-import { moveOrderedItem, persistOptimisticOrder, reorderByDrop } from "./navigation-order";
+import { persistOptimisticOrder, reorderByDrop } from "./navigation-order";
 
 type NavigationItem = {
   createdAt: string;
@@ -37,6 +38,9 @@ type NavigationGroup = {
 
 type GroupModalState = { group?: NavigationGroup; mode: "create" | "edit" };
 type ItemModalState = { item?: NavigationItem; mode: "create" | "edit" };
+type DeleteTarget =
+  | { group: NavigationGroup; kind: "group" }
+  | { item: NavigationItem; kind: "item" };
 
 const emptyItemForm = {
   groupId: "",
@@ -61,6 +65,8 @@ export function NavigationPage() {
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [iconLocalFile, setIconLocalFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [notice, setNoticeState] = useState("");
 
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? groups[0] ?? null;
@@ -69,6 +75,13 @@ export function NavigationPage() {
     (total, group) => total + group.items.filter((item) => item.iconUrl).length,
     0,
   );
+  const deleteDialogHeading = deleteTarget?.kind === "group" ? "确认删除分组？" : "确认删除网站？";
+  const deleteDialogDescription =
+    deleteTarget?.kind === "group"
+      ? `删除分组「${deleteTarget.group.name}」后无法恢复。`
+      : deleteTarget?.kind === "item"
+        ? `删除网站「${deleteTarget.item.name}」后，将从公开导航页移除且无法恢复。`
+        : "";
 
   function setNotice(message: string, tone: "success" | "warning" | "danger" = "success") {
     setNoticeState(message);
@@ -167,31 +180,42 @@ export function NavigationPage() {
     }
   }
 
-  async function deleteGroup(group: NavigationGroup) {
+  function requestDeleteGroup(group: NavigationGroup) {
     if (group.items.length > 0) {
       setNotice("请先移动或删除组内网站", "warning");
       return;
     }
-    if (!window.confirm(`确认删除分组「${group.name}」？`)) return;
-
-    try {
-      await adminFetch(`/admin/navigation/groups/${group.id}`, { method: "DELETE" });
-      setNotice("导航分组已删除");
-      await loadNavigation();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "导航分组删除失败", "danger");
-    }
+    setDeleteTarget({ group, kind: "group" });
   }
 
-  async function deleteItem(item: NavigationItem) {
-    if (!window.confirm(`确认删除网站「${item.name}」？`)) return;
+  function requestDeleteItem(item: NavigationItem) {
+    setDeleteTarget({ item, kind: "item" });
+  }
 
+  async function confirmDelete() {
+    if (!deleteTarget || isDeleting) return;
     try {
-      await adminFetch(`/admin/navigation/items/${item.id}`, { method: "DELETE" });
-      setNotice("网站已删除");
+      setIsDeleting(true);
+      if (deleteTarget.kind === "group") {
+        await adminFetch(`/admin/navigation/groups/${deleteTarget.group.id}`, { method: "DELETE" });
+        setNotice("导航分组已删除");
+      } else {
+        await adminFetch(`/admin/navigation/items/${deleteTarget.item.id}`, { method: "DELETE" });
+        setNotice("网站已删除");
+      }
+      setDeleteTarget(null);
       await loadNavigation();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "网站删除失败", "danger");
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : deleteTarget.kind === "group"
+            ? "导航分组删除失败"
+            : "网站删除失败",
+        "danger",
+      );
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -267,7 +291,7 @@ export function NavigationPage() {
 
   return (
     <AdminDataPage
-      description="维护公开导航页的分组、网站、说明与图标；拖拽或上下移动后会立即保存。"
+      description="维护公开导航页的分组、网站、说明与图标；拖拽排序后会立即保存。"
       eyebrow="内容管理"
       icon="map"
       metrics={[
@@ -283,6 +307,41 @@ export function NavigationPage() {
           {notice}
         </p>
       ) : null}
+      <AlertDialog>
+        <AlertDialog.Backdrop
+          isOpen={deleteTarget !== null}
+          onOpenChange={(isOpen) => {
+            if (!isOpen && !isDeleting) setDeleteTarget(null);
+          }}
+        >
+          <AlertDialog.Container placement="center" size="sm">
+            <AlertDialog.Dialog>
+              <AlertDialog.CloseTrigger />
+              <AlertDialog.Header>
+                <AlertDialog.Icon status="danger" />
+                <AlertDialog.Heading>{deleteDialogHeading}</AlertDialog.Heading>
+              </AlertDialog.Header>
+              <AlertDialog.Body>{deleteDialogDescription}</AlertDialog.Body>
+              <AlertDialog.Footer>
+                <Button
+                  isDisabled={isDeleting}
+                  onPress={() => setDeleteTarget(null)}
+                  variant="tertiary"
+                >
+                  取消
+                </Button>
+                <Button
+                  isPending={isDeleting}
+                  onPress={() => void confirmDelete()}
+                  variant="danger"
+                >
+                  确认删除
+                </Button>
+              </AlertDialog.Footer>
+            </AlertDialog.Dialog>
+          </AlertDialog.Container>
+        </AlertDialog.Backdrop>
+      </AlertDialog>
       <AdminFormModal
         description="分组名称会显示在公开导航页和右侧目录中。"
         icon="folderOpen"
@@ -366,7 +425,7 @@ export function NavigationPage() {
           <header className="navigation-admin-panel__header">
             <div>
               <h3>分组</h3>
-              <p>拖拽或使用上下移动调整公开顺序。</p>
+              <p>拖拽卡片调整公开顺序。</p>
             </div>
             <Button
               onPress={() => {
@@ -380,7 +439,7 @@ export function NavigationPage() {
             </Button>
           </header>
           <div className="navigation-admin-list">
-            {groups.map((group, index) => (
+            {groups.map((group) => (
               <div
                 className={
                   group.id === selectedGroup?.id
@@ -407,47 +466,12 @@ export function NavigationPage() {
                   onClick={() => setSelectedGroupId(group.id)}
                   type="button"
                 >
-                  <AppIcon name="swapVertical" />
                   <span>
                     <strong>{group.name}</strong>
                     <small>{group.items.length} 个网站</small>
                   </span>
                 </button>
                 <div className="navigation-admin-row__actions">
-                  <Button
-                    isDisabled={index === 0}
-                    onPress={() =>
-                      void saveGroupOrder(
-                        moveOrderedItem(
-                          groups.map((item) => item.id),
-                          group.id,
-                          -1,
-                        ),
-                      )
-                    }
-                    size="sm"
-                    variant="tertiary"
-                  >
-                    <AppIcon name="arrowUp" />
-                    上移
-                  </Button>
-                  <Button
-                    isDisabled={index === groups.length - 1}
-                    onPress={() =>
-                      void saveGroupOrder(
-                        moveOrderedItem(
-                          groups.map((item) => item.id),
-                          group.id,
-                          1,
-                        ),
-                      )
-                    }
-                    size="sm"
-                    variant="tertiary"
-                  >
-                    <AppIcon name="arrowDown" />
-                    下移
-                  </Button>
                   <Button
                     onPress={() => {
                       setGroupName(group.name);
@@ -459,7 +483,7 @@ export function NavigationPage() {
                     <AppIcon name="pencil" />
                     编辑
                   </Button>
-                  <Button onPress={() => void deleteGroup(group)} size="sm" variant="danger-soft">
+                  <Button onPress={() => requestDeleteGroup(group)} size="sm" variant="danger-soft">
                     <AppIcon name="trash" />
                     删除
                   </Button>
@@ -482,7 +506,7 @@ export function NavigationPage() {
             </Button>
           </header>
           <div className="navigation-admin-list">
-            {selectedGroup?.items.map((item, index) => (
+            {selectedGroup?.items.map((item) => (
               <div
                 className="navigation-admin-row navigation-admin-row--item"
                 draggable
@@ -501,52 +525,24 @@ export function NavigationPage() {
                 }}
               >
                 <div className="navigation-admin-row__main">
-                  <AppIcon name="swapVertical" />
+                  <span className="navigation-admin-row__icon">
+                    {item.iconUrl ? (
+                      <img alt="" src={resolveApiAssetUrl(item.iconUrl)} />
+                    ) : (
+                      <AppIcon name="link" />
+                    )}
+                  </span>
                   <span>
                     <strong>{item.name}</strong>
                     <small>{item.note || item.url}</small>
                   </span>
                 </div>
                 <div className="navigation-admin-row__actions">
-                  <Button
-                    isDisabled={index === 0}
-                    onPress={() =>
-                      void saveItemOrder(
-                        moveOrderedItem(
-                          selectedGroup.items.map((entry) => entry.id),
-                          item.id,
-                          -1,
-                        ),
-                      )
-                    }
-                    size="sm"
-                    variant="tertiary"
-                  >
-                    <AppIcon name="arrowUp" />
-                    上移
-                  </Button>
-                  <Button
-                    isDisabled={index === selectedGroup.items.length - 1}
-                    onPress={() =>
-                      void saveItemOrder(
-                        moveOrderedItem(
-                          selectedGroup.items.map((entry) => entry.id),
-                          item.id,
-                          1,
-                        ),
-                      )
-                    }
-                    size="sm"
-                    variant="tertiary"
-                  >
-                    <AppIcon name="arrowDown" />
-                    下移
-                  </Button>
                   <Button onPress={() => openEditItem(item)} size="sm" variant="tertiary">
                     <AppIcon name="pencil" />
                     编辑
                   </Button>
-                  <Button onPress={() => void deleteItem(item)} size="sm" variant="danger-soft">
+                  <Button onPress={() => requestDeleteItem(item)} size="sm" variant="danger-soft">
                     <AppIcon name="trash" />
                     删除
                   </Button>
