@@ -328,6 +328,16 @@ export function SetupPage() {
     });
   }
 
+  function goToPreviousStep() {
+    setIsCompleteConfirmOpen(false);
+    setCurrentStep((step) => Math.max(0, step - 1));
+  }
+
+  function goToNextStep() {
+    setIsCompleteConfirmOpen(false);
+    setCurrentStep((step) => Math.min(setupSteps.length - 1, step + 1));
+  }
+
   useEffect(() => {
     let isActive = true;
 
@@ -452,11 +462,6 @@ export function SetupPage() {
             className="setup-wizard__form"
             onSubmit={(event) => {
               event.preventDefault();
-              if (currentStep < setupSteps.length - 1) {
-                setCurrentStep((step) => Math.min(setupSteps.length - 1, step + 1));
-                return;
-              }
-              setIsCompleteConfirmOpen(true);
             }}
           >
             {currentStep === 0 ? (
@@ -742,23 +747,22 @@ export function SetupPage() {
             <div className="setup-wizard__footer">
               <Button
                 isDisabled={currentStep === 0}
-                onPress={() => setCurrentStep((step) => Math.max(0, step - 1))}
+                onPress={goToPreviousStep}
                 type="button"
                 variant="tertiary"
               >
                 上一步
               </Button>
               {currentStep < setupSteps.length - 1 ? (
-                <Button
-                  onPress={() =>
-                    setCurrentStep((step) => Math.min(setupSteps.length - 1, step + 1))
-                  }
-                  type="button"
-                >
+                <Button onPress={goToNextStep} type="button">
                   下一步
                 </Button>
               ) : (
-                <Button isDisabled={isSubmitting} type="submit">
+                <Button
+                  isDisabled={isSubmitting}
+                  onPress={() => setIsCompleteConfirmOpen(true)}
+                  type="button"
+                >
                   <AppIcon name="save" />
                   完成配置并进入后台
                 </Button>
