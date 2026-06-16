@@ -293,10 +293,12 @@ export function MediaAssetField({
                 <div className="media-picker-grid">
                   {items.map((item) => (
                     <Card className="media-picker-card" key={item.id}>
-                      <SvgAsset
-                        alt={item.fileName}
-                        src={resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl}
-                      />
+                      <div className="media-picker-card__preview">
+                        <SvgAsset
+                          alt={item.fileName}
+                          src={resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl}
+                        />
+                      </div>
                       <strong>{item.fileName}</strong>
                       <Button
                         onPress={() => {
@@ -631,10 +633,12 @@ export function MultiMediaAssetField({
 
                     return (
                       <Card className="media-picker-card" key={item.id}>
-                        <SvgAsset
-                          alt={item.fileName}
-                          src={resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl}
-                        />
+                        <div className="media-picker-card__preview">
+                          <SvgAsset
+                            alt={item.fileName}
+                            src={resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl}
+                          />
+                        </div>
                         <strong>{item.fileName}</strong>
                         <Button
                           isDisabled={isSelected || itemCount >= maxItems}

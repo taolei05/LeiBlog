@@ -37,6 +37,15 @@ describe("site SVG assets", () => {
     expect(mediaAssetField).toContain('localFile?.type === "image/svg+xml"');
   });
 
+  it("keeps SVG picker thumbnails inside a fixed-ratio preview frame", () => {
+    const mediaAssetField = source("src/features/admin/shared/media-asset-field.tsx");
+    const layoutsCss = source("src/shared/theme/layouts.css");
+
+    expect(mediaAssetField.match(/className="media-picker-card__preview"/g)?.length ?? 0).toBe(2);
+    expect(layoutsCss).toContain(".media-picker-card__preview");
+    expect(layoutsCss).toContain(".media-picker-card__preview svg");
+  });
+
   it("sets SVG favicons with the correct type and sanitized data URI fallback", () => {
     const siteInfo = source("src/shared/site/site-info.ts");
 
