@@ -9,6 +9,7 @@ import { requireAdmin } from "../../shared/auth";
 import { appConfig } from "../../shared/config";
 import { db, withTransaction } from "../../shared/db";
 import { notFound, validationError } from "../../shared/errors";
+import { normalizeSvgBuffer } from "../../shared/media/svg";
 import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
 
 type MediaType = "image" | "video" | "document";
@@ -352,9 +353,15 @@ async function validateUploadFile(file: File, config: AppConfig) {
   const format = fileExtension(file.name);
   if (!format) throw validationError("不支持的文件类型");
 
-  const buffer = new Uint8Array(await file.arrayBuffer());
+  let buffer = new Uint8Array(await file.arrayBuffer());
   if (!validateSignature(format, buffer)) {
     throw validationError("文件内容与扩展名不匹配");
+  }
+
+  if (format === "svg") {
+    const normalizedBuffer = normalizeSvgBuffer(buffer);
+    if (!normalizedBuffer) throw validationError("SVG 文件内容无效");
+    buffer = normalizedBuffer;
   }
 
   return {
@@ -709,7 +716,7 @@ async function storeMediaAsset(
         ${displayName},
         ${fileInfo.format},
         ${fileInfo.fileType},
-        ${input.file.size},
+        ${fileInfo.buffer.byteLength},
         ${accessUrl},
         ${folder?.id ?? null},
         ${input.uploadedBy}

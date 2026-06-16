@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
@@ -39,6 +39,16 @@ function pngFile(name = "cover.png") {
     ],
     name,
     { type: "image/png" }
+  );
+}
+
+function svgFile(name = "logo.svg") {
+  return new File(
+    [
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>\nContent-Length: 0\n`,
+    ],
+    name,
+    { type: "image/svg+xml" }
   );
 }
 
@@ -175,6 +185,33 @@ describe("admin media service", () => {
         { client: testDb, config }
       )
     ).rejects.toThrow("需要管理员权限");
+  });
+
+  test("normalizes uploaded SVG files before storing them", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      UPLOADS_DIR: uploadRoot,
+      UPLOADS_URL_PREFIX: "/uploads",
+      UPLOAD_MAX_FILE_SIZE_BYTES: "2048",
+    });
+
+    const uploaded = await uploadMedia(
+      currentAdmin,
+      { file: svgFile(), folderSlug: "site" },
+      { client: testDb, config }
+    );
+    const download = await getMediaDownload(currentAdmin, uploaded.id, {
+      client: testDb,
+      config,
+    });
+    const body = await readFile(download.filePath, "utf8");
+
+    expect(uploaded.fileFormat).toBe("svg");
+    expect(download.contentType).toBe("image/svg+xml");
+    expect(body).toBe(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>`
+    );
+    expect(body).not.toContain("Content-Length: 0");
   });
 
   test("creates and protects the website icon folder", async () => {

@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, test } from "bun:test";
 
 import { createApp } from "../src/app";
@@ -65,6 +69,36 @@ describe("app skeleton", () => {
       code: "NOT_FOUND",
       message: "接口不存在",
     });
+  });
+
+  test("serves uploaded SVG files without trailing response metadata", async () => {
+    const uploadRoot = await mkdtemp(join(tmpdir(), "leiblog-static-svg-"));
+
+    try {
+      const svgPath = join(uploadRoot, "logo.svg");
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>\nContent-Length: 0\n`;
+      await writeFile(svgPath, svg);
+
+      const config = loadConfig({
+        NODE_ENV: "test",
+        UPLOADS_DIR: uploadRoot,
+        UPLOADS_URL_PREFIX: "/uploads",
+      });
+      const app = await createApp({ config });
+      const response = await app.handle(
+        new Request("http://localhost/uploads/logo.svg")
+      );
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("image/svg+xml");
+      expect(body).toBe(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>`
+      );
+      expect(body).not.toContain("Content-Length: 0");
+    } finally {
+      await rm(uploadRoot, { recursive: true, force: true });
+    }
   });
 
   test("does not expose raw validation details in production", async () => {

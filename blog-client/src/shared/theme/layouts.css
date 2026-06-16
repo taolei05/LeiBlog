@@ -6267,7 +6267,8 @@
   overflow: hidden;
 }
 
-.media-asset-field__preview img {
+.media-asset-field__preview img,
+.media-asset-field__preview svg {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -6290,7 +6291,8 @@
   background: var(--surface);
 }
 
-.multi-media-asset-card img {
+.multi-media-asset-card img,
+.multi-media-asset-card svg {
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: calc(var(--radius) - 2px);
@@ -6460,6 +6462,7 @@
 }
 
 .media-picker-card img,
+.media-picker-card svg,
 .media-grid-card__preview img,
 .media-grid-card__preview .media-svg-preview {
   width: 100%;
@@ -6468,6 +6471,7 @@
 }
 
 .media-picker-card img,
+.media-picker-card svg,
 .media-grid-card__preview img {
   object-fit: cover;
 }

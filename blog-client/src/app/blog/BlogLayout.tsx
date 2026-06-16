@@ -16,11 +16,13 @@ import {
   clearStoredBlogSession,
 } from "../../shared/auth/blog-session";
 import { AppIcon } from "../../shared/icons/AppIcon";
+import { SvgAsset } from "../../shared/media/svg-asset";
 import {
   applyFavicon,
   fetchPublicSiteConfig,
   fetchPublicSiteFiling,
   fetchPublicSiteInfo,
+  getFallbackSiteLogo,
   getPreferredSiteLogo,
 } from "../../shared/site/site-info";
 import { ThemeSwitcher } from "../../shared/theme/ThemeSwitcher";
@@ -515,6 +517,7 @@ type BlogMobileDrawerProps = {
   onSessionClear: () => void;
   searchQuery: string;
   session: BlogNavSession | null;
+  siteLogoFallbackUrl?: string;
   siteLogoUrl?: string;
   siteName: string;
 };
@@ -527,6 +530,7 @@ function BlogMobileDrawer({
   onSessionClear,
   searchQuery,
   session,
+  siteLogoFallbackUrl,
   siteLogoUrl,
   siteName,
 }: BlogMobileDrawerProps) {
@@ -548,7 +552,17 @@ function BlogMobileDrawer({
               to="/"
             >
               {siteLogoUrl ? (
-                <img alt="" className="blog-brand__image" src={siteLogoUrl} />
+                <SvgAsset
+                  alt=""
+                  className="blog-brand__image"
+                  fallback={
+                    <span aria-hidden="true" className="brand-mark">
+                      {siteName.slice(0, 1).toUpperCase()}
+                    </span>
+                  }
+                  fallbackSrc={siteLogoFallbackUrl}
+                  src={siteLogoUrl}
+                />
               ) : (
                 <span aria-hidden="true" className="brand-mark">
                   {siteName.slice(0, 1).toUpperCase()}
@@ -588,6 +602,11 @@ export function BlogLayout() {
   );
   const siteName = siteInfo?.siteName ?? "LeiBlog";
   const siteLogoUrl = getPreferredSiteLogo(siteInfo, resolvedTheme);
+  const nextSiteLogoFallbackUrl = getFallbackSiteLogo(siteInfo, resolvedTheme);
+  const siteLogoFallbackUrl =
+    nextSiteLogoFallbackUrl && nextSiteLogoFallbackUrl !== siteLogoUrl
+      ? nextSiteLogoFallbackUrl
+      : undefined;
 
   useEffect(() => {
     setSearchQuery(new URLSearchParams(location.search).get("q") ?? "");
@@ -673,7 +692,17 @@ export function BlogLayout() {
       <header className="blog-shell__header">
         <NavLink aria-label={`${siteName} 首页`} className="brand-link blog-brand" to="/">
           {siteLogoUrl ? (
-            <img alt="" className="blog-brand__image" src={siteLogoUrl} />
+            <SvgAsset
+              alt=""
+              className="blog-brand__image"
+              fallback={
+                <span aria-hidden="true" className="brand-mark">
+                  {siteName.slice(0, 1).toUpperCase()}
+                </span>
+              }
+              fallbackSrc={siteLogoFallbackUrl}
+              src={siteLogoUrl}
+            />
           ) : (
             <span aria-hidden="true" className="brand-mark">
               {siteName.slice(0, 1).toUpperCase()}
@@ -711,6 +740,7 @@ export function BlogLayout() {
         onSessionClear={() => setNavSession(null)}
         searchQuery={searchQuery}
         session={navSession}
+        siteLogoFallbackUrl={siteLogoFallbackUrl}
         siteLogoUrl={siteLogoUrl}
         siteName={siteName}
       />

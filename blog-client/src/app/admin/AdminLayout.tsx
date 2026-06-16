@@ -7,10 +7,12 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { adminFetch } from "../../features/admin/shared/admin-api";
 import { resolveApiAssetUrl } from "../../shared/api/api-base-url";
 import { AppIcon } from "../../shared/icons";
+import { SvgAsset } from "../../shared/media/svg-asset";
 import { signOutAdminSession, useAdminSession } from "../../shared/routing/adminGuards";
 import {
   applyFavicon,
   fetchPublicSiteInfo,
+  getFallbackSiteLogo,
   getPreferredSiteLogo,
 } from "../../shared/site/site-info";
 import { ThemeSwitcher } from "../../shared/theme/ThemeSwitcher";
@@ -77,6 +79,11 @@ export function AdminLayout() {
   const sidebarClassName = isNavOpen ? "admin-shell__sidebar is-open" : "admin-shell__sidebar";
   const siteName = siteInfo?.siteName ?? "LeiBlog";
   const siteLogoUrl = getPreferredSiteLogo(siteInfo, resolvedTheme);
+  const nextSiteLogoFallbackUrl = getFallbackSiteLogo(siteInfo, resolvedTheme);
+  const siteLogoFallbackUrl =
+    nextSiteLogoFallbackUrl && nextSiteLogoFallbackUrl !== siteLogoUrl
+      ? nextSiteLogoFallbackUrl
+      : undefined;
   const currentDisplayName =
     currentProfile?.name || currentProfile?.username || session.displayName || "管理员";
   const currentAvatarUrl =
@@ -222,7 +229,17 @@ export function AdminLayout() {
         <div className="admin-shell__sidebar-header">
           <NavLink aria-label={`${siteName} 首页`} className="brand-link" to="/">
             {siteLogoUrl ? (
-              <img alt="" className="brand-mark brand-mark--image" src={siteLogoUrl} />
+              <SvgAsset
+                alt=""
+                className="brand-mark brand-mark--image"
+                fallback={
+                  <span aria-hidden="true" className="brand-mark">
+                    {siteName.slice(0, 1).toUpperCase()}
+                  </span>
+                }
+                fallbackSrc={siteLogoFallbackUrl}
+                src={siteLogoUrl}
+              />
             ) : (
               <span aria-hidden="true" className="brand-mark">
                 {siteName.slice(0, 1).toUpperCase()}

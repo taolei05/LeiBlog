@@ -16,6 +16,7 @@ import type { AppIconName } from "../../../shared/icons";
 import { AppIcon } from "../../../shared/icons";
 import type { LocalImageEditorKind } from "../../../shared/media/local-image-editor";
 import { LocalImageEditorDialog } from "../../../shared/media/local-image-editor";
+import { SvgAsset } from "../../../shared/media/svg-asset";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { adminFetch } from "./admin-api";
 
@@ -101,6 +102,7 @@ export function MediaAssetField({
     return null;
   }, [folderSlug]);
   const previewUrl = localPreviewUrl ?? resolveApiAssetUrl(value);
+  const isLocalSvgPreview = localFile?.type === "image/svg+xml";
   const hasStoredValue = value.trim().length > 0;
 
   useEffect(() => {
@@ -267,7 +269,7 @@ export function MediaAssetField({
       </p>
       {previewUrl ? (
         <div className="media-asset-field__preview">
-          <img alt={`${label}预览`} src={previewUrl} />
+          <SvgAsset alt={`${label}预览`} isSvg={isLocalSvgPreview || undefined} src={previewUrl} />
         </div>
       ) : null}
       <Modal.Backdrop isOpen={isPickerOpen} onOpenChange={setIsPickerOpen} variant="blur">
@@ -291,7 +293,7 @@ export function MediaAssetField({
                 <div className="media-picker-grid">
                   {items.map((item) => (
                     <Card className="media-picker-card" key={item.id}>
-                      <img
+                      <SvgAsset
                         alt={item.fileName}
                         src={resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl}
                       />
@@ -526,7 +528,7 @@ export function MultiMediaAssetField({
         <div className="multi-media-asset-field__grid">
           {cleanValues.map((value, index) => (
             <div className="multi-media-asset-card" key={`${value}-${index}`}>
-              <img alt={`${label}${index + 1}`} src={resolveApiAssetUrl(value) ?? value} />
+              <SvgAsset alt={`${label}${index + 1}`} src={resolveApiAssetUrl(value) ?? value} />
               <div className="multi-media-asset-card__meta">
                 <span>{index === 0 ? "主封面" : `封面 ${index + 1}`}</span>
                 <small>{value}</small>
@@ -575,7 +577,11 @@ export function MultiMediaAssetField({
               className="multi-media-asset-card"
               key={`${file.name}-${file.lastModified}-${index}`}
             >
-              <img alt={`待上传${file.name}`} src={localPreviewUrls[index]} />
+              <SvgAsset
+                alt={`待上传${file.name}`}
+                isSvg={file.type === "image/svg+xml" || undefined}
+                src={localPreviewUrls[index]}
+              />
               <div className="multi-media-asset-card__meta">
                 <span>待上传 {index + 1}</span>
                 <small>{file.name}</small>
@@ -625,7 +631,7 @@ export function MultiMediaAssetField({
 
                     return (
                       <Card className="media-picker-card" key={item.id}>
-                        <img
+                        <SvgAsset
                           alt={item.fileName}
                           src={resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl}
                         />

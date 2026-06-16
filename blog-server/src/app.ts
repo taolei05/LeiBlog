@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { resolve, sep } from "node:path";
+
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { serverTiming } from "@elysiajs/server-timing";
@@ -17,6 +20,7 @@ import {
   ErrorResponseSchema,
   RateLimitErrorResponseSchema,
 } from "./shared/errors";
+import { extractSvgDocument } from "./shared/media/svg";
 
 export interface CreateAppOptions {
   config?: AppConfig;
@@ -150,6 +154,52 @@ function getRetryAfterSeconds(error: AppError) {
   return readNumber(error.details, "retryAfterSeconds");
 }
 
+function resolveUploadedSvgPath(config: AppConfig, request: Request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+
+  const prefix = config.uploadsUrlPrefix.replace(/\/$/, "");
+  let pathname: string;
+
+  try {
+    pathname = decodeURIComponent(new URL(request.url).pathname);
+  } catch {
+    return null;
+  }
+
+  if (!pathname.startsWith(`${prefix}/`) || !pathname.toLowerCase().endsWith(".svg")) {
+    return null;
+  }
+
+  const relativePath = pathname.slice(prefix.length + 1);
+  const root = resolve(process.cwd(), config.uploadsDir);
+  const filePath = resolve(root, relativePath);
+
+  if (filePath !== root && filePath.startsWith(`${root}${sep}`)) {
+    return filePath;
+  }
+
+  return null;
+}
+
+async function serveUploadedSvg(request: Request, config: AppConfig) {
+  const filePath = resolveUploadedSvgPath(config, request);
+  if (!filePath) return undefined;
+
+  try {
+    const svg = extractSvgDocument(await readFile(filePath, "utf8"));
+    if (!svg) return undefined;
+
+    return new Response(request.method === "HEAD" ? null : svg, {
+      headers: {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "image/svg+xml; charset=utf-8",
+      },
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 export async function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? appConfig;
   const enableStatic = options.enableStatic ?? true;
@@ -241,6 +291,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   }
 
   if (enableStatic) {
+    app.onRequest(({ request }) => serveUploadedSvg(request, config));
     app.use(
       await staticPlugin({
         assets: config.uploadsDir,

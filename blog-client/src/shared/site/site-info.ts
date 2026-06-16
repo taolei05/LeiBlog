@@ -1,6 +1,7 @@
 import type { ResolvedTheme } from "../theme/ThemeProviderLite";
 
 import { getPublicApiBaseUrl, resolveApiAssetUrl } from "../api/api-base-url";
+import { isSvgAssetUrl, toSvgDataUri } from "../media/svg";
 
 export type PublicSiteInfo = {
   description: string;
@@ -255,16 +256,62 @@ export function getPreferredSiteLogo(
     : (siteInfo.logoLightUrl ?? siteInfo.logoDarkUrl);
 }
 
+export function getFallbackSiteLogo(
+  siteInfo: PublicSiteInfo | undefined,
+  resolvedTheme: ResolvedTheme,
+) {
+  if (!siteInfo) return undefined;
+
+  return resolvedTheme === "dark" ? siteInfo.logoLightUrl : siteInfo.logoDarkUrl;
+}
+
+function getFaviconContentType(faviconUrl: string) {
+  if (isSvgAssetUrl(faviconUrl)) return "image/svg+xml";
+  if (/\.png(?:[?#]|$)/i.test(faviconUrl)) return "image/png";
+  if (/\.webp(?:[?#]|$)/i.test(faviconUrl)) return "image/webp";
+  if (/\.ico(?:[?#]|$)/i.test(faviconUrl)) return "image/x-icon";
+
+  return undefined;
+}
+
 export function applyFavicon(faviconUrl: string | undefined) {
   if (!faviconUrl || typeof document === "undefined") return;
 
   const existingLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   const link = existingLink ?? document.createElement("link");
+  const contentType = getFaviconContentType(faviconUrl);
 
   link.rel = "icon";
+  if (contentType) {
+    link.type = contentType;
+  } else {
+    link.removeAttribute("type");
+  }
   link.href = faviconUrl;
 
   if (!existingLink) {
     document.head.append(link);
   }
+
+  if (!isSvgAssetUrl(faviconUrl) || faviconUrl.toLowerCase().startsWith("data:")) {
+    delete link.dataset.leiblogFaviconSource;
+    return;
+  }
+
+  link.dataset.leiblogFaviconSource = faviconUrl;
+
+  void fetch(faviconUrl, { credentials: "same-origin" })
+    .then((response) => {
+      if (!response.ok) throw new Error("favicon SVG fetch failed");
+      return response.text();
+    })
+    .then((svg) => {
+      if (link.dataset.leiblogFaviconSource !== faviconUrl) return;
+      link.href = toSvgDataUri(svg);
+    })
+    .catch(() => {
+      if (link.dataset.leiblogFaviconSource === faviconUrl) {
+        link.href = faviconUrl;
+      }
+    });
 }
