@@ -60,5 +60,7 @@ describe("admin login mobile layout", () => {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;`);
+    expect(layoutsCss).toContain(`.admin-login-card :where(input, textarea) {
+  font-size: 16px;`);
   });
 });

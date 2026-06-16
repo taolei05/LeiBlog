@@ -7611,6 +7611,10 @@
   max-width: 100%;
 }
 
+.admin-login-card :where(input, textarea) {
+  font-size: 16px;
+}
+
 .admin-login-card__meta {
   flex-wrap: wrap;
 }
