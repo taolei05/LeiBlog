@@ -12,6 +12,7 @@ LEIBLOG_COMMAND_PATH="${LEIBLOG_COMMAND_PATH:-/usr/local/bin/leiblog}"
 LEIBLOG_HTTP_PORT="${LEIBLOG_HTTP_PORT:-80}"
 LEIBLOG_SITE_URL=""
 LEIBLOG_INSTALL_DOCKER="${LEIBLOG_INSTALL_DOCKER:-1}"
+LEIBLOG_CADDYFILE_PATH="${LEIBLOG_CADDYFILE_PATH:-/etc/caddy/Caddyfile}"
 
 COMPOSE_FILE="${LEIBLOG_BASE_DIR}/docker-compose.yml"
 ENV_FILE="${LEIBLOG_BASE_DIR}/.env"
@@ -379,6 +380,15 @@ update_site_url_in_env() {
   chmod 600 "${ENV_FILE}"
 }
 
+update_http_port_in_env() {
+  local http_port="$1"
+
+  [[ -f "${ENV_FILE}" ]] || die "未找到环境变量文件：${ENV_FILE}"
+
+  upsert_env_value "HTTP_PORT" "${http_port}"
+  chmod 600 "${ENV_FILE}"
+}
+
 show_domain_resolution_hint() {
   local domain="$1"
   local public_ip="$2"
@@ -413,7 +423,7 @@ configure_domain_settings() {
   [[ -f "${ENV_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
   load_env_file
 
-  local current_site_url public_ip domain new_site_url
+  local current_site_url public_ip domain
   current_site_url="$(trim_trailing_slash "${SITE_URL:-}")"
   public_ip="$(detect_public_ip)"
 
@@ -423,11 +433,72 @@ configure_domain_settings() {
 
   domain="$(prompt_domain_name)"
   show_domain_resolution_hint "${domain}" "${public_ip}"
+  echo "${domain}"
+}
 
-  new_site_url="$(build_site_url_from_domain "${domain}" "${current_site_url}")"
-  info "写入站点地址：${new_site_url}"
-  update_site_url_in_env "${new_site_url}"
+ensure_caddy() {
+  if command_exists caddy; then
+    return
+  fi
+
+  info "安装 Caddy"
+  install_packages caddy
+  command_exists caddy || die "Caddy 安装失败，请检查系统仓库或按 Caddy 官方方式手动安装"
+}
+
+write_caddyfile() {
+  local domain="$1"
+  local caddy_dir
+
+  caddy_dir="$(dirname "${LEIBLOG_CADDYFILE_PATH}")"
+  mkdir -p "${caddy_dir}"
+
+  cat >"${LEIBLOG_CADDYFILE_PATH}" <<EOF
+${domain} {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8080
+}
+EOF
+}
+
+reload_caddy() {
+  command_exists caddy || die "未找到 caddy 命令"
+  caddy validate --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null
+
+  if command_exists systemctl; then
+    systemctl enable --now caddy >/dev/null 2>&1 || true
+    systemctl reload caddy
+    systemctl is-active --quiet caddy || die "Caddy 服务未正常运行"
+    return
+  fi
+
+  die "当前系统不支持 systemctl，请手动启动并重载 Caddy"
+}
+
+configure_https_proxy() {
+  local domain="$1"
+  local site_url="https://${domain}"
+
+  info "切换 LeiBlog 到 8080，并配置源站 HTTPS"
+  update_http_port_in_env "8080"
+  update_site_url_in_env "${site_url}"
   ensure_env_defaults
+  load_env_file
+
+  ensure_caddy
+  write_caddyfile "${domain}"
+  reload_caddy
+}
+
+print_cloudflare_full_strict_hint() {
+  local domain="$1"
+
+  echo
+  echo -e "${yellow}Cloudflare 手动收尾步骤:${plain}"
+  echo "1. 确认 ${domain} DNS 记录已切回已代理（橙云）"
+  echo "2. 打开 Cloudflare -> SSL/TLS -> Overview"
+  echo "3. 将加密模式设置为 Full (strict)"
+  echo "4. 确认 www 子域名是否需要单独添加 DNS 记录"
 }
 
 fetch_source() {
@@ -643,18 +714,23 @@ domain_leiblog() {
   [[ -f "${COMPOSE_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
   [[ -d "${SOURCE_DIR}/blog-server" ]] || die "未找到源码目录，请先执行 update 后重试"
 
-  configure_domain_settings
+  local domain
+  domain="$(configure_domain_settings)"
+  info "写入长期 HTTPS 站点地址：https://${domain}"
+  configure_https_proxy "${domain}"
   write_runtime_files
   write_compose_file
 
-  info "重建并应用域名配置"
+  info "重建并应用长期 HTTPS 配置"
   compose up -d --build --remove-orphans api web
 
   print_install_result
+  print_cloudflare_full_strict_hint "${domain}"
 }
 
 update_leiblog() {
   local update_domain=0
+  local domain=""
 
   shift || true
   while [[ $# -gt 0 ]]; do
@@ -676,7 +752,9 @@ update_leiblog() {
   prepare_directories
   [[ -f "${ENV_FILE}" ]] || die "尚未安装 LeiBlog，请先执行 install"
   if [[ "${update_domain}" == "1" ]]; then
-    configure_domain_settings
+    domain="$(configure_domain_settings)"
+    info "写入长期 HTTPS 站点地址：https://${domain}"
+    configure_https_proxy "${domain}"
   fi
   ensure_env_defaults
   fetch_source
@@ -687,6 +765,10 @@ update_leiblog() {
   info "重建并更新 LeiBlog"
   compose build --pull
   compose up -d --remove-orphans
+
+  if [[ -n "${domain}" ]]; then
+    print_cloudflare_full_strict_hint "${domain}"
+  fi
 }
 
 start_leiblog() {
@@ -855,8 +937,8 @@ LeiBlog 部署脚本 ${LEIBLOG_SCRIPT_VERSION}
 用法:
   leiblog install-cli           安装或刷新 ${LEIBLOG_COMMAND_PATH} 全局命令
   leiblog install               安装或重新生成部署，并刷新全局命令
-  leiblog update [--domain]     拉取部署分支最新源码、刷新全局命令并重建服务
-  leiblog domain                设置或修改站点域名，并重建服务
+  leiblog update [--domain]     拉取部署分支最新源码、刷新全局命令并重建服务；带 --domain 时同步自动化长期 HTTPS
+  leiblog domain                设置或修改站点域名，并自动完成服务器侧长期 HTTPS
   leiblog start                 启动服务
   leiblog stop                  停止服务
   leiblog restart               重启服务
