@@ -473,14 +473,23 @@ reload_caddy() {
   command_exists caddy || die "未找到 caddy 命令"
   caddy validate --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null
 
-  if command_exists systemctl; then
+  if command_exists systemctl && [[ -d /run/systemd/system ]]; then
     systemctl enable --now caddy >/dev/null 2>&1 || true
     systemctl reload caddy
     systemctl is-active --quiet caddy || die "Caddy 服务未正常运行"
     return
   fi
 
-  die "当前系统不支持 systemctl，请手动启动并重载 Caddy"
+  warn "当前环境未启用 systemd，改用 caddy 命令直接加载配置"
+  if command_exists pgrep && pgrep -x caddy >/dev/null 2>&1; then
+    caddy reload --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null || die "Caddy 配置重载失败"
+  else
+    caddy start --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null || die "Caddy 启动失败"
+  fi
+
+  if command_exists pgrep && ! pgrep -x caddy >/dev/null 2>&1; then
+    die "Caddy 进程未正常运行"
+  fi
 }
 
 configure_https_proxy() {
