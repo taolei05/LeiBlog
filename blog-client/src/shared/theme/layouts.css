@@ -7526,10 +7526,17 @@
 .setup-page,
 .error-page {
   display: grid;
+  box-sizing: border-box;
   min-height: 100svh;
   place-items: center;
   padding: var(--space-page);
   background: var(--background);
+}
+
+.admin-login-page {
+  width: 100%;
+  max-width: 100dvw;
+  overflow-x: hidden;
 }
 
 .setup-card {
@@ -7545,7 +7552,10 @@
 }
 
 .admin-login-card {
-  width: min(34rem, 100%);
+  box-sizing: border-box;
+  width: min(34rem, calc(100dvw - 2rem));
+  max-width: 100%;
+  min-width: 0;
 }
 
 .admin-login-card__header,
@@ -7586,7 +7596,19 @@
 
 .admin-login-card__form {
   display: grid;
+  min-width: 0;
   gap: 1rem;
+}
+
+.admin-login-card :where(.text-field, .input-group, input) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-login-card :where(.input, .input-group) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 .admin-login-card__meta {
@@ -7599,7 +7621,9 @@
 }
 
 .admin-login-card__actions > .button {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 

@@ -18,7 +18,9 @@ describe("admin login mobile layout", () => {
     expect(actionLayoutIndex).toBeGreaterThan(-1);
     expect(actionLayoutIndex).toBeLessThan(layoutsCss.indexOf("@media (max-width: 768px)"));
     expect(layoutsCss).toContain(`.admin-login-card__actions > .button {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
   min-width: 0;`);
     expect(layoutsCss).not.toContain(".admin-login-card__actions > .button:first-child");
   });
@@ -36,5 +38,27 @@ describe("admin login mobile layout", () => {
     expect(layoutsCss).not.toContain("@media (max-width: 520px)");
     expect(layoutsCss).toContain(`.admin-login-card__header .theme-switcher span {
     display: inline-flex;`);
+  });
+
+  it("constrains the login card to the mobile viewport", () => {
+    expect(layoutsCss).toContain(`.admin-login-page {
+  width: 100%;
+  max-width: 100dvw;
+  overflow-x: hidden;`);
+    expect(layoutsCss).toContain(`.admin-login-card {
+  box-sizing: border-box;
+  width: min(34rem, calc(100dvw - 2rem));
+  max-width: 100%;`);
+    expect(layoutsCss).toContain(`.admin-login-card :where(.text-field, .input-group, input) {
+  min-width: 0;
+  max-width: 100%;`);
+    expect(layoutsCss).toContain(`.admin-login-card :where(.input, .input-group) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;`);
+    expect(layoutsCss).toContain(`.admin-login-card__actions > .button {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;`);
   });
 });
