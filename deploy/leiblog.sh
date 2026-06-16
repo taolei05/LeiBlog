@@ -33,6 +33,14 @@ warn() {
   echo -e "${yellow}!${plain} $*"
 }
 
+info_stderr() {
+  echo -e "${green}>${plain} $*" >&2
+}
+
+warn_stderr() {
+  echo -e "${yellow}!${plain} $*" >&2
+}
+
 die() {
   echo -e "${red}错误:${plain} $*" >&2
   exit 1
@@ -396,17 +404,17 @@ show_domain_resolution_hint() {
 
   resolved_ips="$(resolve_domain_a_records "${domain}")"
   if [[ -z "${resolved_ips}" ]]; then
-    warn "暂未查询到 ${domain} 的 A 记录"
+    warn_stderr "暂未查询到 ${domain} 的 A 记录"
     return
   fi
 
-  echo -e "当前 A 记录：${yellow}$(echo "${resolved_ips}" | awk 'BEGIN { first=1 } { if (!first) printf ", "; printf "%s", $0; first=0 } END { print "" }')${plain}"
+  echo -e "当前 A 记录：${yellow}$(echo "${resolved_ips}" | awk 'BEGIN { first=1 } { if (!first) printf ", "; printf "%s", $0; first=0 } END { print "" }')${plain}" >&2
   if echo "${resolved_ips}" | grep -Fxq "${public_ip}"; then
-    info "域名解析匹配当前服务器公网 IP"
+    info_stderr "域名解析匹配当前服务器公网 IP"
     return
   fi
 
-  warn "当前解析未直接指向本机公网 IP；如果你使用了 Cloudflare 代理或其它 CDN/代理，这可能是正常现象"
+  warn_stderr "当前解析未直接指向本机公网 IP；如果你使用了 Cloudflare 代理或其它 CDN/代理，这可能是正常现象"
 }
 
 prompt_domain_name() {
@@ -427,9 +435,9 @@ configure_domain_settings() {
   current_site_url="$(trim_trailing_slash "${SITE_URL:-}")"
   public_ip="$(detect_public_ip)"
 
-  echo -e "当前站点地址：${yellow}${current_site_url:-未设置}${plain}"
-  echo -e "服务器公网 IP：${yellow}${public_ip}${plain}"
-  echo -e "A 记录应指向服务器公网 IP：${yellow}${public_ip}${plain}"
+  echo -e "当前站点地址：${yellow}${current_site_url:-未设置}${plain}" >&2
+  echo -e "服务器公网 IP：${yellow}${public_ip}${plain}" >&2
+  echo -e "A 记录应指向服务器公网 IP：${yellow}${public_ip}${plain}" >&2
 
   domain="$(prompt_domain_name)"
   show_domain_resolution_hint "${domain}" "${public_ip}"
