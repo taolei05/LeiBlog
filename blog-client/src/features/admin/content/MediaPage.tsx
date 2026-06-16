@@ -1,4 +1,5 @@
 import { AlertDialog, Button, Card, Checkbox, Modal, ScrollShadow } from "@heroui/react";
+import SVG from "react-inlinesvg";
 import { useEffect, useRef, useState } from "react";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
@@ -19,6 +20,7 @@ type MediaRow = {
   folderSlug: string | null;
   folderSystemKey: string | null;
   id: string;
+  isSvg: boolean;
   kind: "document" | "image" | "video";
   size: string;
   status: "linked" | "unused";
@@ -87,6 +89,14 @@ function formatFileSize(bytes: number) {
   return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
 }
 
+function isSvgMediaItem(item: AdminMediaItem) {
+  const fileFormat = item.fileFormat.trim().toLowerCase();
+  const fileName = item.fileName.trim().toLowerCase();
+  const accessPath = item.accessUrl.trim().toLowerCase().split(/[?#]/)[0] ?? "";
+
+  return fileFormat === "svg" || fileName.endsWith(".svg") || accessPath.endsWith(".svg");
+}
+
 function toMediaRow(item: AdminMediaItem): MediaRow {
   return {
     alt: item.fileName,
@@ -96,6 +106,7 @@ function toMediaRow(item: AdminMediaItem): MediaRow {
     folderSlug: item.folderSlug,
     folderSystemKey: item.folderSystemKey,
     id: item.id,
+    isSvg: isSvgMediaItem(item),
     kind: item.fileType,
     size: formatFileSize(item.fileSizeBytes),
     status: "linked",
@@ -109,6 +120,28 @@ function MediaThumb({ item }: { item: MediaRow }) {
   return (
     <span className={`media-thumb media-thumb--${item.kind}`} title={item.alt}>
       <AppIcon name={item.kind === "image" ? "image" : "documentAttach"} />
+    </span>
+  );
+}
+
+type SvgMediaPreviewProps = {
+  item: MediaRow;
+};
+
+function SvgMediaPreview({ item }: SvgMediaPreviewProps) {
+  return (
+    <span className="media-svg-preview" title={item.alt}>
+      <SVG
+        aria-label={item.alt}
+        className="media-svg-preview__svg"
+        loader={<MediaThumb item={item} />}
+        role="img"
+        src={item.url}
+        title={item.alt}
+        uniquifyIDs
+      >
+        <MediaThumb item={item} />
+      </SVG>
     </span>
   );
 }
@@ -144,7 +177,11 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
               <div className="media-preview-modal__content">
                 <div className="media-preview-card__visual">
                   {item?.kind === "image" ? (
-                    <img alt={item.alt} src={item.url} />
+                    item.isSvg ? (
+                      <SvgMediaPreview item={item} />
+                    ) : (
+                      <img alt={item.alt} src={item.url} />
+                    )
                   ) : item ? (
                     <MediaThumb item={item} />
                   ) : (
@@ -270,6 +307,7 @@ export function MediaPage() {
 
   function getUploadEditorKind(file: File, folderSlug: string): LocalImageEditorKind | null {
     if (!file.type.startsWith("image/")) return null;
+    if (file.type === "image/svg+xml") return null;
     if (folderSlug === "article-covers") return "article-cover";
     if (folderSlug === "avatars") return "avatar";
 
@@ -760,7 +798,11 @@ export function MediaPage() {
                       </Checkbox.Control>
                     </Checkbox>
                     {row.kind === "image" ? (
-                      <img alt={row.alt} src={row.url} />
+                      row.isSvg ? (
+                        <SvgMediaPreview item={row} />
+                      ) : (
+                        <img alt={row.alt} src={row.url} />
+                      )
                     ) : (
                       <MediaThumb item={row} />
                     )}

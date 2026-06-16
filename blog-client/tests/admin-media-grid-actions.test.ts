@@ -30,6 +30,19 @@ describe("admin media grid actions", () => {
   min-height: 12rem;
   grid-column: 1 / -1;`);
   });
+
+  it("renders SVG image assets with react-inlinesvg in grid cards and preview modal", () => {
+    expect(mediaPageSource).toContain('import SVG from "react-inlinesvg";');
+    expect(mediaPageSource).toContain("isSvg: isSvgMediaItem(item)");
+    expect(mediaPageSource).toContain("function SvgMediaPreview");
+    expect(mediaPageSource).toContain("<SVG");
+    expect(mediaPageSource).toContain('className="media-svg-preview__svg"');
+    expect(mediaPageSource).toContain("row.isSvg ? (");
+    expect(mediaPageSource).toContain("item.isSvg ? (");
+    expect(mediaPageSource).toContain('if (file.type === "image/svg+xml") return null;');
+    expect(layoutsCss).toContain(".media-svg-preview {");
+    expect(layoutsCss).toContain(".media-svg-preview__svg {");
+  });
 });
 
 describe("admin user actions", () => {
