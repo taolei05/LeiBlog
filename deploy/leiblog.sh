@@ -471,20 +471,26 @@ EOF
 
 reload_caddy() {
   command_exists caddy || die "未找到 caddy 命令"
-  caddy validate --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null
+  caddy validate --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null 2>&1 ||
+    die "Caddy 配置校验失败：${LEIBLOG_CADDYFILE_PATH}"
 
   if command_exists systemctl && [[ -d /run/systemd/system ]]; then
     systemctl enable --now caddy >/dev/null 2>&1 || true
-    systemctl reload caddy
-    systemctl is-active --quiet caddy || die "Caddy 服务未正常运行"
-    return
+    if systemctl is-active --quiet caddy; then
+      systemctl reload caddy || die "Caddy 服务重载失败"
+      systemctl is-active --quiet caddy || die "Caddy 服务未正常运行"
+      return
+    fi
+
+    warn "systemd 中的 caddy 服务未启动，改用 caddy 命令直接加载配置"
+  else
+    warn "当前环境未启用 systemd，改用 caddy 命令直接加载配置"
   fi
 
-  warn "当前环境未启用 systemd，改用 caddy 命令直接加载配置"
   if command_exists pgrep && pgrep -x caddy >/dev/null 2>&1; then
-    caddy reload --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null || die "Caddy 配置重载失败"
+    caddy reload --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null 2>&1 || die "Caddy 配置重载失败"
   else
-    caddy start --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null || die "Caddy 启动失败"
+    caddy start --config "${LEIBLOG_CADDYFILE_PATH}" >/dev/null 2>&1 || die "Caddy 启动失败"
   fi
 
   if command_exists pgrep && ! pgrep -x caddy >/dev/null 2>&1; then
