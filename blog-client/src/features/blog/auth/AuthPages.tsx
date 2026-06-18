@@ -55,6 +55,7 @@ type BlogAuthUser = {
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
   name: string | null;
+  newArticleEmailNotificationsEnabled: boolean;
   role: BlogUserRole;
   tags: string[];
   username: string;
@@ -183,7 +184,7 @@ const profileConfirmCopy: Record<
   },
   "save-preferences": {
     confirmLabel: "确认保存",
-    description: "保存后，评论回复邮件通知开关会按当前选择生效。",
+    description: "保存后，邮件通知开关会按当前选择生效。",
     status: "warning",
     title: "确认保存偏好设置？",
   },
@@ -235,6 +236,10 @@ function parseBlogUser(value: unknown): BlogAuthUser | null {
     lastLoginIp: readNullableString(value.lastLoginIp),
     lastLoginLocation: readNullableString(value.lastLoginLocation),
     name: readNullableString(value.name),
+    newArticleEmailNotificationsEnabled: readBoolean(
+      value.newArticleEmailNotificationsEnabled,
+      true,
+    ),
     role: readRole(value.role),
     tags: readStringArray(value.tags),
     username,
@@ -459,9 +464,17 @@ async function updateCurrentBlogUserProfile(
   return parseMeResponse(payload);
 }
 
-async function updateCurrentBlogUserPreferences(token: string, nextValue: boolean) {
+type UpdateCurrentBlogUserPreferencesInput = {
+  commentEmailNotificationsEnabled: boolean;
+  newArticleEmailNotificationsEnabled: boolean;
+};
+
+async function updateCurrentBlogUserPreferences(
+  token: string,
+  input: UpdateCurrentBlogUserPreferencesInput,
+) {
   const payload = await authJsonRequest<unknown>("/me/preferences", {
-    body: { commentEmailNotificationsEnabled: nextValue },
+    body: input,
     method: "PATCH",
     token,
   });
@@ -1084,6 +1097,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [commentEmailNotificationsDraft, setCommentEmailNotificationsDraft] = useState(true);
+  const [newArticleEmailNotificationsDraft, setNewArticleEmailNotificationsDraft] = useState(true);
   const [isSavingEmail, setIsSavingEmail] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [pendingProfileAction, setPendingProfileAction] = useState<ProfileConfirmAction | null>(
@@ -1174,7 +1188,8 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
     setProfileForm(createProfileFormState(user));
     setEmailForm(createEmailChangeFormState(user));
     setCommentEmailNotificationsDraft(user.commentEmailNotificationsEnabled);
-  }, [user?.commentEmailNotificationsEnabled, user?.id]);
+    setNewArticleEmailNotificationsDraft(user.newArticleEmailNotificationsEnabled);
+  }, [user?.commentEmailNotificationsEnabled, user?.id, user?.newArticleEmailNotificationsEnabled]);
 
   useEffect(() => {
     if (!sessionToken) return undefined;
@@ -1190,6 +1205,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
         setProfileForm(createProfileFormState(nextUser));
         setEmailForm(createEmailChangeFormState(nextUser));
         setCommentEmailNotificationsDraft(nextUser.commentEmailNotificationsEnabled);
+        setNewArticleEmailNotificationsDraft(nextUser.newArticleEmailNotificationsEnabled);
         setSession((current) => {
           if (!current || current.token !== token) return current;
 
@@ -1398,7 +1414,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
     }, 0);
   }
 
-  async function saveCommentEmailNotificationPreference() {
+  async function saveEmailNotificationPreferences() {
     const previousSession = session;
 
     if (!previousSession || !user) return;
@@ -1407,18 +1423,17 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
     setIsSavingPreferences(true);
 
     try {
-      const nextUser = await updateCurrentBlogUserPreferences(
-        requestToken,
-        commentEmailNotificationsDraft,
-      );
+      const nextUser = await updateCurrentBlogUserPreferences(requestToken, {
+        commentEmailNotificationsEnabled: commentEmailNotificationsDraft,
+        newArticleEmailNotificationsEnabled: newArticleEmailNotificationsDraft,
+      });
       updateSessionForToken(requestToken, (current) => ({ ...current, user: nextUser }));
       setCommentEmailNotificationsDraft(nextUser.commentEmailNotificationsEnabled);
-      showOperationToast("评论回复邮件通知偏好已保存", "success");
+      setNewArticleEmailNotificationsDraft(nextUser.newArticleEmailNotificationsEnabled);
+      showOperationToast("邮件通知偏好已保存", "success");
     } catch (error) {
       showOperationToast(
-        error instanceof Error
-          ? `评论回复邮件通知偏好保存失败：${error.message}`
-          : "评论回复邮件通知偏好保存失败",
+        error instanceof Error ? `邮件通知偏好保存失败：${error.message}` : "邮件通知偏好保存失败",
         "danger",
       );
     } finally {
@@ -1731,7 +1746,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
         void saveProfile();
         return;
       case "save-preferences":
-        void saveCommentEmailNotificationPreference();
+        void saveEmailNotificationPreferences();
         return;
       default: {
         const exhaustiveAction: never = action;
@@ -2097,6 +2112,19 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                       <Switch.Content>
                         <strong>评论回复邮件通知</strong>
                         <span>自己的评论收到直接回复时，通过邮箱通知我。</span>
+                      </Switch.Content>
+                    </Switch>
+                    <Switch
+                      isDisabled={isSavingPreferences}
+                      isSelected={newArticleEmailNotificationsDraft}
+                      onChange={setNewArticleEmailNotificationsDraft}
+                    >
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <Switch.Content>
+                        <strong>新文章邮件通知</strong>
+                        <span>有新文章发布时，通过邮箱通知我。</span>
                       </Switch.Content>
                     </Switch>
                     <Button

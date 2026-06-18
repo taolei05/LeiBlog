@@ -1,4 +1,5 @@
 import type { Key } from "@heroui/react";
+import type { ReactNode } from "react";
 
 import { Label, ListBox, Pagination, Select } from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
@@ -148,15 +149,76 @@ export function createArticlePaginationViewModel<TArticle>({
   };
 }
 
+export type SearchSnippetPart = {
+  isMatch: boolean;
+  text: string;
+};
+
+export function highlightSearchSnippet(snippet: string, query: string): SearchSnippetPart[] {
+  const normalizedQuery = query.trim();
+
+  if (!snippet || !normalizedQuery) {
+    return [];
+  }
+
+  const parts: SearchSnippetPart[] = [];
+  const lowerSnippet = snippet.toLocaleLowerCase();
+  const lowerQuery = normalizedQuery.toLocaleLowerCase();
+  let cursor = 0;
+
+  while (cursor < snippet.length) {
+    const matchIndex = lowerSnippet.indexOf(lowerQuery, cursor);
+
+    if (matchIndex < 0) {
+      break;
+    }
+
+    if (matchIndex > cursor) {
+      parts.push({ isMatch: false, text: snippet.slice(cursor, matchIndex) });
+    }
+
+    parts.push({
+      isMatch: true,
+      text: snippet.slice(matchIndex, matchIndex + normalizedQuery.length),
+    });
+    cursor = matchIndex + normalizedQuery.length;
+  }
+
+  if (cursor < snippet.length) {
+    parts.push({ isMatch: false, text: snippet.slice(cursor) });
+  }
+
+  return parts.length > 0 ? parts : [{ isMatch: false, text: snippet }];
+}
+
+function renderSearchSnippet(parts: SearchSnippetPart[]): ReactNode[] {
+  return parts.map((part, index) =>
+    part.isMatch ? (
+      <mark key={`${part.text}-${index}`}>{part.text}</mark>
+    ) : (
+      <span key={`${part.text}-${index}`}>{part.text}</span>
+    ),
+  );
+}
+
 type ArticleIndexCardProps = {
   article: BlogArticle;
   fallbackCoverUrl?: string;
   index: number;
+  searchQuery?: string;
 };
 
-function ArticleIndexCard({ article, fallbackCoverUrl, index }: ArticleIndexCardProps) {
+function ArticleIndexCard({
+  article,
+  fallbackCoverUrl,
+  index,
+  searchQuery = "",
+}: ArticleIndexCardProps) {
   const coverUrl = article.cover || fallbackCoverUrl;
   const excerpt = getArticleExcerpt(article);
+  const searchSnippet = article.searchExcerpt
+    ? highlightSearchSnippet(article.searchExcerpt, searchQuery)
+    : [];
 
   return (
     <article className="articles-index-card">
@@ -193,6 +255,12 @@ function ArticleIndexCard({ article, fallbackCoverUrl, index }: ArticleIndexCard
           <Link to={`/articles/${article.slug}`}>{article.title}</Link>
         </h2>
         <p>{excerpt}</p>
+        {searchSnippet.length > 0 ? (
+          <p className="articles-index-card__search-excerpt">
+            <AppIcon name="search" size={14} />
+            <span>{renderSearchSnippet(searchSnippet)}</span>
+          </p>
+        ) : null}
         <div className="articles-index-card__footer">
           <div className="articles-index-card__tags">
             {article.tags.slice(0, 3).map((tag) => (
@@ -426,6 +494,7 @@ export function BlogArticlesPage() {
                   fallbackCoverUrl={fallbackCoverAssignments[article.slug]}
                   index={fromArticle + index - 1}
                   key={article.slug}
+                  searchQuery={searchQuery}
                 />
               ))}
             </div>

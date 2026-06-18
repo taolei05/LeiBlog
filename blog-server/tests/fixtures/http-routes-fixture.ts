@@ -42,6 +42,7 @@ interface MeBody {
     socialLinks: Record<string, string>;
     blogUrl: string | null;
     commentEmailNotificationsEnabled: boolean;
+    newArticleEmailNotificationsEnabled: boolean;
     createdAt: string;
     updatedAt: string;
     lastLoginAt: string | null;
@@ -81,6 +82,10 @@ function assertUserProfileShape(user: MeBody["user"]) {
     typeof user.commentEmailNotificationsEnabled === "boolean",
     "用户资料应包含 commentEmailNotificationsEnabled"
   );
+  assert(
+    typeof user.newArticleEmailNotificationsEnabled === "boolean",
+    "用户资料应包含 newArticleEmailNotificationsEnabled"
+  );
   assert(typeof user.createdAt === "string", "用户资料应包含 createdAt");
   assert(typeof user.updatedAt === "string", "用户资料应包含 updatedAt");
   assertNullableString(user.lastLoginAt, "用户资料应包含 lastLoginAt");
@@ -101,6 +106,12 @@ async function readJson<T>(response: Response): Promise<T> {
 async function expectJson<T>(response: Response, status: number) {
   const body = await readJson<T>(response);
   assert(response.status === status, `期望状态码 ${status}，实际 ${response.status}：${JSON.stringify(body)}`);
+  return body;
+}
+
+async function expectText(response: Response, status: number) {
+  const body = await response.text();
+  assert(response.status === status, `期望状态码 ${status}，实际 ${response.status}：${body}`);
   return body;
 }
 
@@ -256,6 +267,26 @@ async function main() {
   assert(publicDetail.item.contentMdx === "# 路由缓存文章", "公共文章详情应返回 MDX 内容");
   assert(publicDetail.item.commentCount === 1, "公共文章详情应返回评论数量");
 
+  const rss = await expectText(await app.handle(new Request("https://taolei.test/rss.xml")), 200);
+  assert(rss.includes("<rss"), "RSS 应返回 rss 文档");
+  assert(rss.includes("LeiBlog Routes"), "RSS 应包含站点标题");
+  assert(rss.includes("https://taolei.test/articles/route-post"), "RSS 应包含文章链接");
+
+  const atom = await expectText(await app.handle(new Request("https://taolei.test/atom.xml")), 200);
+  assert(atom.includes("<feed"), "Atom 应返回 feed 文档");
+  assert(atom.includes("https://taolei.test/articles/route-post"), "Atom 应包含文章链接");
+
+  const sitemap = await expectText(
+    await app.handle(new Request("https://taolei.test/sitemap.xml")),
+    200
+  );
+  assert(sitemap.includes("<urlset"), "sitemap 应返回 urlset");
+  assert(sitemap.includes("https://taolei.test/articles/route-post"), "sitemap 应包含文章链接");
+
+  const robots = await expectText(await app.handle(new Request("https://taolei.test/robots.txt")), 200);
+  assert(robots.includes("User-agent: *"), "robots 应包含默认爬虫规则");
+  assert(robots.includes("Sitemap: https://taolei.test/sitemap.xml"), "robots 应指向 sitemap");
+
   const comments = await expectJson<ListBody<{ content: string }>>(
     await app.handle(
       new Request(`http://localhost/api/public/articles/${seeded.article.id}/comments`)
@@ -295,6 +326,7 @@ async function main() {
       headers: jsonHeaders(userAuth.token),
       body: JSON.stringify({
         commentEmailNotificationsEnabled: false,
+        newArticleEmailNotificationsEnabled: false,
       }),
     })),
     200
@@ -305,20 +337,45 @@ async function main() {
     preferences.user.commentEmailNotificationsEnabled === false,
     "偏好更新响应应返回已关闭邮件通知"
   );
+  assert(
+    preferences.user.newArticleEmailNotificationsEnabled === false,
+    "偏好更新响应应返回已关闭新文章邮件通知"
+  );
   assertUserProfileShape(preferences.user);
 
-  const [currentUserPreferences] = await db<{ enabled: boolean }[]>`
-    SELECT comment_email_notifications_enabled AS enabled
+  const [currentUserPreferences] = await db<{
+    comment_enabled: boolean;
+    new_article_enabled: boolean;
+  }[]>`
+    SELECT
+      comment_email_notifications_enabled AS comment_enabled,
+      new_article_email_notifications_enabled AS new_article_enabled
     FROM users
     WHERE id = ${seeded.userId}
   `;
-  const [otherUserPreferences] = await db<{ enabled: boolean }[]>`
-    SELECT comment_email_notifications_enabled AS enabled
+  const [otherUserPreferences] = await db<{
+    comment_enabled: boolean;
+    new_article_enabled: boolean;
+  }[]>`
+    SELECT
+      comment_email_notifications_enabled AS comment_enabled,
+      new_article_email_notifications_enabled AS new_article_enabled
     FROM users
     WHERE id = ${seeded.adminId}
   `;
-  assert(currentUserPreferences?.enabled === false, "当前用户偏好应持久化为 false");
-  assert(otherUserPreferences?.enabled === true, "其他用户偏好应保持 true");
+  assert(
+    currentUserPreferences?.comment_enabled === false,
+    "当前用户评论邮件偏好应持久化为 false"
+  );
+  assert(
+    currentUserPreferences?.new_article_enabled === false,
+    "当前用户新文章邮件偏好应持久化为 false"
+  );
+  assert(otherUserPreferences?.comment_enabled === true, "其他用户评论邮件偏好应保持 true");
+  assert(
+    otherUserPreferences?.new_article_enabled === true,
+    "其他用户新文章邮件偏好应保持 true"
+  );
 
   const invalidPreferences = await expectJson<{ code: string }>(
     await app.handle(new Request("http://localhost/api/me/preferences", {
@@ -326,6 +383,7 @@ async function main() {
       headers: jsonHeaders(userAuth.token),
       body: JSON.stringify({
         commentEmailNotificationsEnabled: "false",
+        newArticleEmailNotificationsEnabled: false,
       }),
     })),
     422

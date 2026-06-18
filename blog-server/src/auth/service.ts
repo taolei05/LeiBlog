@@ -386,6 +386,33 @@ export function renderCommentNotificationEmailHtml({
   });
 }
 
+type RenderArticleNotificationEmailHtmlParameters = {
+  articleUrl: string;
+  branding?: EmailBranding;
+  description: string;
+  summary: string;
+  title: string;
+};
+
+export function renderArticleNotificationEmailHtml({
+  articleUrl,
+  branding,
+  description,
+  summary,
+  title,
+}: RenderArticleNotificationEmailHtmlParameters) {
+  return renderLeiBlogEmailHtml({
+    bodyHtml: `
+      <p style="margin:0 0 14px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
+      <div style="margin:18px 0 0;padding:16px 18px;border:1px solid #e4e4e7;border-radius:18px;background:#fafafa;color:#27272a;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word;">${escapeHtml(summary)}</div>
+      <p style="margin:20px 0 0;"><a href="${escapeHtml(articleUrl)}" style="display:inline-block;padding:11px 16px;border-radius:12px;background:#ec4899;color:#ffffff;font-size:14px;font-weight:800;line-height:1.2;text-decoration:none;">查看文章</a></p>
+    `,
+    branding,
+    preheader: description,
+    title,
+  });
+}
+
 async function getResendConfig(client: DbClient) {
   const [config] = await client<ResendConfigRow[]>`
     SELECT resend_domain, resend_api_key_encrypted
@@ -536,6 +563,7 @@ async function getUserProfileById(userId: string, client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
            social_links, blog_url, comment_email_notifications_enabled,
+           new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip, last_login_location,
            last_login_device
@@ -694,6 +722,7 @@ export async function verifyLogin(
   const [user] = await client<LoginUserRow[]>`
     SELECT id, username, password_hash, email, name, description, tags, role,
            avatar_url, social_links, blog_url, comment_email_notifications_enabled,
+           new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip
     FROM users

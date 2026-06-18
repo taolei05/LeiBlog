@@ -4,6 +4,11 @@ import {
   Button,
   Card,
   Chip,
+  ColorArea,
+  ColorField,
+  ColorPicker,
+  ColorSlider,
+  ColorSwatch,
   Description,
   FieldError,
   Input,
@@ -15,6 +20,7 @@ import {
   TagGroup,
   TextArea,
   TextField,
+  parseColor,
 } from "@heroui/react";
 import type { Key } from "@react-types/shared";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
@@ -73,13 +79,32 @@ type ContributorFormState = {
   name: string;
 };
 
+type CategoryFormState = {
+  name: string;
+  slug: string;
+};
+
+type TagFormState = CategoryFormState;
+
 const emptyContributorForm: ContributorFormState = {
   avatarUrl: "",
   linkUrl: "",
   name: "",
 };
 
-function contributorOptionalValue(value: string) {
+const emptyCategoryForm: CategoryFormState = {
+  name: "",
+  slug: "",
+};
+
+const defaultTagColor = "#ec4899";
+
+const emptyTagForm: TagFormState = {
+  name: "",
+  slug: "",
+};
+
+function optionalFormValue(value: string) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed : null;
@@ -147,7 +172,10 @@ function mergeTags(currentItems: AdminTagItem[], relationItems: AdminArticleTag[
 }
 
 function createInputHandler(
-  key: keyof Pick<ArticleFormState, "coverImageUrl" | "slug" | "summary" | "title">,
+  key: keyof Pick<
+    ArticleFormState,
+    "coverImageUrl" | "scheduledPublishAt" | "slug" | "summary" | "title"
+  >,
 ) {
   return (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -165,9 +193,16 @@ export function ArticleEditPage() {
   const [categories, setCategories] = useState<AdminCategoryItem[]>([]);
   const [contributors, setContributors] = useState<AdminContributorItem[]>([]);
   const [tags, setTags] = useState<AdminTagItem[]>([]);
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState>(emptyCategoryForm);
+  const [tagForm, setTagForm] = useState<TagFormState>(emptyTagForm);
+  const [tagColor, setTagColor] = useState(parseColor(defaultTagColor));
   const [contributorForm, setContributorForm] =
     useState<ContributorFormState>(emptyContributorForm);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
   const [isContributorModalOpen, setIsContributorModalOpen] = useState(false);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [isCreatingContributor, setIsCreatingContributor] = useState(false);
   const [contributorAvatarLocalFile, setContributorAvatarLocalFile] = useState<File | null>(null);
   const [coverLocalFile, setCoverLocalFile] = useState<File | null>(null);
@@ -315,12 +350,16 @@ export function ArticleEditPage() {
 
       setFormState(toFormState(response.item));
       setCoverLocalFile(null);
+      const isScheduledArticle =
+        response.item.status === "draft" && response.item.scheduledPublishAt !== null;
       updateNotice(
-        isNewArticle && response.item.status === "published"
-          ? "文章已发布"
-          : isNewArticle
-            ? "文章草稿已保存"
-            : "文章已更新",
+        isScheduledArticle
+          ? "文章已设置定时发布"
+          : isNewArticle && response.item.status === "published"
+            ? "文章已发布"
+            : isNewArticle
+              ? "文章草稿已保存"
+              : "文章已更新",
       );
       if (isNewArticle) {
         void navigate(`/admin/content/articles/${response.item.id}/edit`, { replace: true });
@@ -335,6 +374,7 @@ export function ArticleEditPage() {
   const titleInputHandler = createInputHandler("title");
   const slugInputHandler = createInputHandler("slug");
   const summaryInputHandler = createInputHandler("summary");
+  const scheduledPublishAtInputHandler = createInputHandler("scheduledPublishAt");
   const selectedCategories = categories.filter((category) => category.id === formState.categoryId);
   const selectedContributors = contributors.filter((contributor) =>
     formState.contributorIds.includes(contributor.id),
@@ -361,8 +401,84 @@ export function ArticleEditPage() {
     setFormState((state) => ({ ...state, tagIds: tagIds.map(String) }));
   }
 
+  function updateCategoryForm(key: keyof CategoryFormState, value: string) {
+    setCategoryForm((state) => ({ ...state, [key]: value }));
+  }
+
+  function updateTagForm(key: keyof TagFormState, value: string) {
+    setTagForm((state) => ({ ...state, [key]: value }));
+  }
+
   function updateContributorForm(key: keyof ContributorFormState, value: string) {
     setContributorForm((state) => ({ ...state, [key]: value }));
+  }
+
+  async function createCategory() {
+    const name = categoryForm.name.trim();
+
+    if (!name) {
+      updateNotice("分类名称不能为空");
+      return;
+    }
+
+    try {
+      setIsCreatingCategory(true);
+      const response = await adminFetch<{ item: AdminCategoryItem }>("/admin/content/categories", {
+        body: {
+          name,
+          slug: optionalFormValue(categoryForm.slug) ?? undefined,
+        },
+        method: "POST",
+      });
+
+      setCategories((items) => [...items, response.item]);
+      setFormState((state) => ({ ...state, categoryId: response.item.id }));
+      setCategoryForm(emptyCategoryForm);
+      setIsCategoryModalOpen(false);
+      updateNotice("分类已创建并关联");
+    } catch (error) {
+      updateNotice(error instanceof Error ? error.message : "分类创建失败");
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  }
+
+  async function createTag() {
+    const name = tagForm.name.trim();
+    const color = tagColor.toString("hex");
+
+    if (!name) {
+      updateNotice("标签名称不能为空");
+      return;
+    }
+
+    try {
+      setIsCreatingTag(true);
+      const response = await adminFetch<{ item: AdminTagItem }>("/admin/content/tags", {
+        body: {
+          color,
+          name,
+          slug: optionalFormValue(tagForm.slug) ?? undefined,
+        },
+        method: "POST",
+      });
+
+      setTags((items) => [...items, response.item]);
+      setFormState((state) => ({
+        ...state,
+        tagIds: state.tagIds.includes(response.item.id)
+          ? state.tagIds
+          : [...state.tagIds, response.item.id],
+      }));
+      setTagForm(emptyTagForm);
+      setTagColor(parseColor(defaultTagColor));
+      setIsTagModalOpen(false);
+      updateNotice("标签已创建并关联");
+    } catch (error) {
+      updateNotice(error instanceof Error ? error.message : "标签创建失败");
+    } finally {
+      setIsCreatingTag(false);
+    }
   }
 
   async function createContributor() {
@@ -387,8 +503,8 @@ export function ArticleEditPage() {
         "/admin/content/contributors",
         {
           body: {
-            avatarUrl: contributorOptionalValue(avatarUrl),
-            linkUrl: contributorOptionalValue(contributorForm.linkUrl),
+            avatarUrl: optionalFormValue(avatarUrl),
+            linkUrl: optionalFormValue(contributorForm.linkUrl),
             name,
           },
           method: "POST",
@@ -410,6 +526,100 @@ export function ArticleEditPage() {
 
   return (
     <section className="page-stack admin-page admin-page--wide article-edit-page">
+      <AdminFormModal
+        confirmDescription="创建后会立即关联到当前文章草稿。"
+        description="分类会用于前台分类页、文章筛选和文章卡片展示。"
+        icon="albums"
+        isOpen={isCategoryModalOpen}
+        isSubmitting={isCreatingCategory}
+        onOpenChange={(isOpen) => {
+          setIsCategoryModalOpen(isOpen);
+          if (!isOpen) {
+            setCategoryForm(emptyCategoryForm);
+          }
+        }}
+        onSubmit={createCategory}
+        submitLabel="创建并关联"
+        title="新建分类"
+      >
+        <AdminInputGroupField
+          icon="albums"
+          isRequired
+          label="分类名称"
+          onChange={(value) => updateCategoryForm("name", value)}
+          placeholder="输入分类名称"
+          value={categoryForm.name}
+        />
+        <AdminInputGroupField
+          description="留空时后端会按名称自动生成。"
+          icon="link"
+          label="Slug"
+          onChange={(value) => updateCategoryForm("slug", value)}
+          placeholder="photography-notes"
+          value={categoryForm.slug}
+        />
+      </AdminFormModal>
+      <AdminFormModal
+        confirmDescription="创建后会立即关联到当前文章草稿。"
+        description="标签会用于前台标签页、文章筛选和文章卡片展示。"
+        icon="pricetags"
+        isOpen={isTagModalOpen}
+        isSubmitting={isCreatingTag}
+        onOpenChange={(isOpen) => {
+          setIsTagModalOpen(isOpen);
+          if (!isOpen) {
+            setTagForm(emptyTagForm);
+            setTagColor(parseColor(defaultTagColor));
+          }
+        }}
+        onSubmit={createTag}
+        submitLabel="创建并关联"
+        title="新建标签"
+      >
+        <AdminInputGroupField
+          icon="pricetags"
+          isRequired
+          label="标签名称"
+          onChange={(value) => updateTagForm("name", value)}
+          placeholder="输入标签名称"
+          value={tagForm.name}
+        />
+        <AdminInputGroupField
+          description="留空时后端会按名称自动生成。"
+          icon="link"
+          label="Slug"
+          onChange={(value) => updateTagForm("slug", value)}
+          placeholder="tools"
+          value={tagForm.slug}
+        />
+        <div className="admin-tag-color-field">
+          <Label>标签颜色</Label>
+          <ColorPicker value={tagColor} onChange={setTagColor}>
+            <ColorPicker.Trigger className="admin-tag-color-trigger">
+              <ColorSwatch className="admin-tag-color-trigger__swatch" />
+              <span>{tagColor.toString("hex")}</span>
+            </ColorPicker.Trigger>
+            <ColorPicker.Popover className="admin-tag-color-popover">
+              <ColorArea colorSpace="hsb" xChannel="saturation" yChannel="brightness">
+                <ColorArea.Thumb />
+              </ColorArea>
+              <ColorSlider aria-label="色相" channel="hue" colorSpace="hsb">
+                <ColorSlider.Track>
+                  <ColorSlider.Thumb />
+                </ColorSlider.Track>
+              </ColorSlider>
+              <ColorField aria-label="标签颜色值">
+                <ColorField.Group variant="secondary">
+                  <ColorField.Prefix>
+                    <ColorSwatch size="xs" />
+                  </ColorField.Prefix>
+                  <ColorField.Input />
+                </ColorField.Group>
+              </ColorField>
+            </ColorPicker.Popover>
+          </ColorPicker>
+        </div>
+      </AdminFormModal>
       <AdminFormModal
         confirmDescription="创建后会立即关联到当前文章草稿。"
         description="贡献者可以复用于多篇文章。"
@@ -594,6 +804,16 @@ export function ArticleEditPage() {
               <Description>用于文章列表简介和 SEO 描述，建议不超过 500 字。</Description>
               <FieldError>摘要长度或格式不正确</FieldError>
             </TextField>
+            <TextField fullWidth>
+              <Label>定时发布</Label>
+              <Input
+                onChange={(event) => scheduledPublishAtInputHandler(event, setFormState)}
+                type="datetime-local"
+                value={formState.scheduledPublishAt}
+              />
+              <Description>填写后保存为草稿，系统会在该时间自动发布并发送新文章邮件。</Description>
+              <FieldError>定时发布时间格式不正确</FieldError>
+            </TextField>
             <MediaAssetField
               folderSlug="article-covers"
               label="封面图片"
@@ -603,34 +823,45 @@ export function ArticleEditPage() {
               value={formState.coverImageUrl}
             />
             <div className="article-taxonomy-field">
-              <Select
-                fullWidth
-                onChange={updateCategorySelection}
-                placeholder="选择分类"
-                value={formState.categoryId}
-                variant="secondary"
-              >
-                <Label>关联分类</Label>
-                <Select.Trigger>
-                  <AppIcon name="albums" size={16} />
-                  <Select.Value>
-                    {({ isPlaceholder, selectedText }) =>
-                      isPlaceholder ? "选择分类" : selectedText
-                    }
-                  </Select.Value>
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox aria-label="关联分类">
-                    {categories.map((category) => (
-                      <ListBox.Item id={category.id} key={category.id} textValue={category.name}>
-                        {category.name}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+              <div className="article-contributor-picker-row">
+                <Select
+                  fullWidth
+                  onChange={updateCategorySelection}
+                  placeholder="选择分类"
+                  value={formState.categoryId}
+                  variant="secondary"
+                >
+                  <Label>关联分类</Label>
+                  <Select.Trigger>
+                    <AppIcon name="albums" size={16} />
+                    <Select.Value>
+                      {({ isPlaceholder, selectedText }) =>
+                        isPlaceholder ? "选择分类" : selectedText
+                      }
+                    </Select.Value>
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox aria-label="关联分类">
+                      {categories.map((category) => (
+                        <ListBox.Item id={category.id} key={category.id} textValue={category.name}>
+                          {category.name}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+                <Button
+                  onPress={() => setIsCategoryModalOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="albums" />
+                  新建分类
+                </Button>
+              </div>
               <TagGroup
                 aria-label="已关联分类"
                 onRemove={(keys) =>
@@ -664,35 +895,46 @@ export function ArticleEditPage() {
               </TagGroup>
             </div>
             <div className="article-taxonomy-field">
-              <Select
-                fullWidth
-                onChange={updateTagSelection}
-                placeholder="选择标签"
-                selectionMode="multiple"
-                value={formState.tagIds}
-                variant="secondary"
-              >
-                <Label>关联标签</Label>
-                <Select.Trigger>
-                  <AppIcon name="pricetags" size={16} />
-                  <Select.Value>
-                    {({ isPlaceholder, selectedText }) =>
-                      isPlaceholder ? "选择标签" : selectedText
-                    }
-                  </Select.Value>
-                  <Select.Indicator />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox aria-label="关联标签">
-                    {tags.map((tag) => (
-                      <ListBox.Item id={tag.id} key={tag.id} textValue={tag.name}>
-                        {tag.name}
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
-                  </ListBox>
-                </Select.Popover>
-              </Select>
+              <div className="article-contributor-picker-row">
+                <Select
+                  fullWidth
+                  onChange={updateTagSelection}
+                  placeholder="选择标签"
+                  selectionMode="multiple"
+                  value={formState.tagIds}
+                  variant="secondary"
+                >
+                  <Label>关联标签</Label>
+                  <Select.Trigger>
+                    <AppIcon name="pricetags" size={16} />
+                    <Select.Value>
+                      {({ isPlaceholder, selectedText }) =>
+                        isPlaceholder ? "选择标签" : selectedText
+                      }
+                    </Select.Value>
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox aria-label="关联标签">
+                      {tags.map((tag) => (
+                        <ListBox.Item id={tag.id} key={tag.id} textValue={tag.name}>
+                          {tag.name}
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+                <Button
+                  onPress={() => setIsTagModalOpen(true)}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="pricetags" />
+                  新建标签
+                </Button>
+              </div>
               <TagGroup
                 aria-label="已关联标签"
                 onRemove={(keys) =>

@@ -18,6 +18,7 @@ export const UpdateMeBody = t.Object({
 
 export const UpdateMyPreferencesBody = t.Object({
   commentEmailNotificationsEnabled: t.Boolean(),
+  newArticleEmailNotificationsEnabled: t.Boolean(),
 });
 
 export const UploadAvatarBody = t.Object({

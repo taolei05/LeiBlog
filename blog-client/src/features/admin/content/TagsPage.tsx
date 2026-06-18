@@ -28,6 +28,7 @@ type TagRow = DataTableRow & {
   color: string;
   group: "内容" | "技术" | "站点";
   name: string;
+  slug: string;
   status: "active" | "cleanup" | "featured";
   trend: number;
   updatedAt: string;
@@ -57,6 +58,7 @@ type TagEditorModalState =
 type TagFormState = {
   color: string;
   name: string;
+  slug: string;
 };
 
 const defaultTagColor = "#ec4899";
@@ -77,6 +79,12 @@ function normalizeTagColor(color: string | null | undefined) {
   return defaultTagColor;
 }
 
+function optionalFormValue(value: string) {
+  const trimmed = value.trim();
+
+  return trimmed ? trimmed : null;
+}
+
 const tagColumns: DataTableColumn<TagRow>[] = [
   {
     header: "标签",
@@ -88,7 +96,7 @@ const tagColumns: DataTableColumn<TagRow>[] = [
         <small>{row.group}</small>
       </span>
     ),
-    searchValue: (row) => `${row.name} ${row.group}`,
+    searchValue: (row) => `${row.name} ${row.slug} ${row.group}`,
     sortable: true,
     value: (row) => row.name,
   },
@@ -173,6 +181,7 @@ function toTagRow(item: AdminTagItem): TagRow {
     group: "内容",
     id: item.id,
     name: item.name,
+    slug: item.slug,
     status: isFeatured ? "featured" : "active",
     trend: 0,
     updatedAt: new Date(item.updatedAt).toLocaleString("zh-CN"),
@@ -186,6 +195,7 @@ export function TagsPage() {
   const [tagForm, setTagForm] = useState<TagFormState>({
     color: defaultTagColor,
     name: "",
+    slug: "",
   });
   const [tagColor, setTagColor] = useState(parseColor(defaultTagColor));
   const [isSavingName, setIsSavingName] = useState(false);
@@ -215,20 +225,20 @@ export function TagsPage() {
 
       if (tagModalState.mode === "create") {
         await adminFetch("/admin/content/tags", {
-          body: { color, name },
+          body: { color, name, slug: optionalFormValue(tagForm.slug) ?? undefined },
           method: "POST",
         });
         tagModalState.setNotice("标签已创建");
       } else {
         await adminFetch(`/admin/content/tags/${tagModalState.row.id}`, {
-          body: { color, name },
+          body: { color, name, slug: optionalFormValue(tagForm.slug) ?? undefined },
           method: "PATCH",
         });
         tagModalState.setNotice("标签已更新");
       }
 
       setTagModalState(null);
-      setTagForm({ color: defaultTagColor, name: "" });
+      setTagForm({ color: defaultTagColor, name: "", slug: "" });
       setTagColor(parseColor(defaultTagColor));
       setReloadKey((key) => key + 1);
     } catch (error) {
@@ -244,7 +254,7 @@ export function TagsPage() {
       icon: "pricetags",
       label: "新建标签",
       onPress: ({ setNotice }) => {
-        setTagForm({ color: defaultTagColor, name: "" });
+        setTagForm({ color: defaultTagColor, name: "", slug: "" });
         setTagColor(parseColor(defaultTagColor));
         setTagModalState({ mode: "create", setNotice });
       },
@@ -299,7 +309,7 @@ export function TagsPage() {
       icon: "pencil",
       label: "编辑",
       onPress: (row, { setNotice }) => {
-        setTagForm({ color: row.color, name: row.name });
+        setTagForm({ color: row.color, name: row.name, slug: row.slug });
         setTagColor(parseColor(row.color));
         setTagModalState({ mode: "rename", row, setNotice });
       },
@@ -338,14 +348,16 @@ export function TagsPage() {
       wide
     >
       <AdminFormModal
-        confirmDescription="将保存标签名称和颜色，并同步更新后台标签列表。"
-        description="标签名称会用于文章聚合和前台筛选，颜色会展示在前台标签页。"
+        confirmDescription="将保存标签名称、Slug 和颜色，并同步更新后台标签列表。"
+        description="标签名称和 Slug 会用于文章聚合、前台筛选和标签链接，颜色会展示在前台标签页。"
         icon="pricetags"
         isOpen={tagModalState !== null}
         isSubmitting={isSavingName}
         onOpenChange={(isOpen) => {
           if (isOpen) return;
           setTagModalState(null);
+          setTagForm({ color: defaultTagColor, name: "", slug: "" });
+          setTagColor(parseColor(defaultTagColor));
         }}
         onSubmit={submitTagName}
         submitLabel={tagModalState?.mode === "rename" ? "保存标签" : "创建标签"}
@@ -358,6 +370,14 @@ export function TagsPage() {
           onChange={(name) => setTagForm((form) => ({ ...form, name }))}
           placeholder="输入标签名称"
           value={tagForm.name}
+        />
+        <AdminInputGroupField
+          description="留空时后端会按名称自动生成，已有标签留空则保持原 Slug。"
+          icon="link"
+          label="Slug"
+          onChange={(slug) => setTagForm((form) => ({ ...form, slug }))}
+          placeholder="tools"
+          value={tagForm.slug}
         />
         <div className="admin-tag-color-field">
           <Label>标签颜色</Label>

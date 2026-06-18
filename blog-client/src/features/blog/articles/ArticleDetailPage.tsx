@@ -1,14 +1,90 @@
 import { Avatar, Button, Chip, Link as HeroLink, Popover } from "@heroui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { AppIcon } from "../../../shared/icons";
+import { useDocumentMetadata } from "../../../shared/seo/document-metadata";
 import { ArticleMdxContent } from "../shared/ArticleMdxContent";
 import { EmptyPlaceholder } from "../shared/BlogComponents";
 import { CommentThread } from "../shared/CommentThread";
 import type { BlogArticle } from "../shared/blogApi";
-import { fetchPublicArticleBySlug } from "../shared/blogApi";
+import { fetchPublicArticleBySlug, fetchPublicArticles } from "../shared/blogApi";
 import { getArticleTagColorStyle } from "../shared/tagColors";
+
+export type ArticleReadingNavigation = {
+  nextArticle?: BlogArticle;
+  previousArticle?: BlogArticle;
+  relatedArticles: BlogArticle[];
+};
+
+function getArticleTime(article: BlogArticle) {
+  const time = new Date(article.publishedAt ?? article.date).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+type GetSharedTagCountParameters = {
+  article: BlogArticle;
+  currentArticle: BlogArticle;
+};
+
+function getSharedTagCount({ article, currentArticle }: GetSharedTagCountParameters) {
+  const currentTagSlugs = new Set(currentArticle.tags.map((tag) => tag.slug));
+
+  return article.tags.filter((tag) => currentTagSlugs.has(tag.slug)).length;
+}
+
+type GetRelatedArticleScoreParameters = {
+  article: BlogArticle;
+  currentArticle: BlogArticle;
+};
+
+function getRelatedArticleScore({ article, currentArticle }: GetRelatedArticleScoreParameters) {
+  const tagScore = getSharedTagCount({ article, currentArticle }) * 3;
+  const categoryScore = article.categorySlug === currentArticle.categorySlug ? 1 : 0;
+
+  return tagScore + categoryScore;
+}
+
+export type CreateArticleReadingNavigationParameters = {
+  articles: BlogArticle[];
+  currentArticle: BlogArticle;
+};
+
+export function createArticleReadingNavigation({
+  articles,
+  currentArticle,
+}: CreateArticleReadingNavigationParameters): ArticleReadingNavigation {
+  const sortedArticles = [...articles].sort(
+    (left, right) => getArticleTime(right) - getArticleTime(left),
+  );
+  const currentIndex = sortedArticles.findIndex((article) => article.slug === currentArticle.slug);
+  const relatedArticles = articles
+    .filter((article) => article.slug !== currentArticle.slug)
+    .filter((article) => getSharedTagCount({ article, currentArticle }) > 0)
+    .map((article) => ({
+      article,
+      score: getRelatedArticleScore({ article, currentArticle }),
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => {
+      if (right.score !== left.score) {
+        return right.score - left.score;
+      }
+
+      return getArticleTime(right.article) - getArticleTime(left.article);
+    })
+    .slice(0, 3)
+    .map(({ article }) => article);
+
+  return {
+    nextArticle: currentIndex > 0 ? sortedArticles[currentIndex - 1] : undefined,
+    previousArticle:
+      currentIndex >= 0 && currentIndex < sortedArticles.length - 1
+        ? sortedArticles[currentIndex + 1]
+        : undefined,
+    relatedArticles,
+  };
+}
 
 type ArticleTocNavProps = {
   items: BlogArticle["toc"];
@@ -24,7 +100,7 @@ function ArticleTocNav({ items, onNavigate }: ArticleTocNavProps) {
     <nav className="article-toc__nav">
       {items.map((item) => (
         <a
-          className="article-toc__link"
+          className={`article-toc__link article-toc__link--level-${item.level}`}
           href={`#${item.id}`}
           key={item.id}
           onClick={() => onNavigate?.()}
@@ -104,10 +180,104 @@ function ArticleBreadcrumbs({ title, tocItems = [] }: ArticleBreadcrumbsProps) {
   );
 }
 
+type ArticleNeighborLinkProps = {
+  article?: BlogArticle;
+  direction: "next" | "previous";
+};
+
+function ArticleNeighborLink({ article, direction }: ArticleNeighborLinkProps) {
+  if (!article) {
+    return (
+      <span aria-hidden="true" className="article-neighbor-card article-neighbor-card--empty" />
+    );
+  }
+
+  const isNext = direction === "next";
+
+  return (
+    <Link className="article-neighbor-card" to={`/articles/${article.slug}`}>
+      <span>
+        <AppIcon name={isNext ? "chevronForward" : "chevronBack"} />
+        {isNext ? "下一篇" : "上一篇"}
+      </span>
+      <strong>{article.title}</strong>
+      <small>{article.date}</small>
+    </Link>
+  );
+}
+
+type ArticleReadingNavigationPanelProps = {
+  navigation: ArticleReadingNavigation | null;
+};
+
+function ArticleReadingNavigationPanel({ navigation }: ArticleReadingNavigationPanelProps) {
+  if (!navigation) {
+    return null;
+  }
+
+  const hasNeighbors = Boolean(navigation.nextArticle || navigation.previousArticle);
+  const hasRelatedArticles = navigation.relatedArticles.length > 0;
+
+  if (!hasNeighbors && !hasRelatedArticles) {
+    return null;
+  }
+
+  return (
+    <section aria-label="继续阅读" className="article-reading-navigation">
+      {hasNeighbors ? (
+        <div className="article-neighbor-grid">
+          <ArticleNeighborLink article={navigation.previousArticle} direction="previous" />
+          <ArticleNeighborLink article={navigation.nextArticle} direction="next" />
+        </div>
+      ) : null}
+
+      {hasRelatedArticles ? (
+        <div className="article-related">
+          <p className="eyebrow">相关阅读</p>
+          <div className="article-related-grid">
+            {navigation.relatedArticles.map((article) => (
+              <Link
+                className="article-related-card"
+                key={article.slug}
+                to={`/articles/${article.slug}`}
+              >
+                <strong>{article.title}</strong>
+                <span>
+                  {article.category} / {article.date}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function BlogArticleDetailPage() {
   const { slug } = useParams();
   const [article, setArticle] = useState<BlogArticle | null>(null);
+  const [articleNavigation, setArticleNavigation] = useState<ArticleReadingNavigation | null>(null);
+  const [readingProgress, setReadingProgress] = useState(0);
   const [status, setStatus] = useState<"error" | "idle" | "loading">("loading");
+  const articleRef = useRef<HTMLElement | null>(null);
+
+  useDocumentMetadata(
+    article
+      ? {
+          canonicalPath: `/articles/${article.slug}`,
+          description: article.excerpt,
+          imageUrl: article.cover,
+          keywords: [
+            article.category,
+            ...article.tags.map((tag) => tag.name),
+            ...article.categories.map((category) => category.name),
+          ],
+          title: `${article.title} - LeiBlog`,
+          type: "article",
+        }
+      : undefined,
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -123,10 +293,12 @@ export function BlogArticleDetailPage() {
         const nextArticle = await fetchPublicArticleBySlug(slug);
         if (!isActive) return;
         setArticle(nextArticle);
+        setArticleNavigation(null);
         setStatus("idle");
       } catch {
         if (!isActive) return;
         setArticle(null);
+        setArticleNavigation(null);
         setStatus("error");
       }
     }
@@ -137,6 +309,73 @@ export function BlogArticleDetailPage() {
       isActive = false;
     };
   }, [slug]);
+
+  useEffect(() => {
+    if (!article) {
+      setArticleNavigation(null);
+      return;
+    }
+
+    const currentArticle = article;
+    let isActive = true;
+
+    async function loadArticleNavigation() {
+      try {
+        const articles = await fetchPublicArticles({
+          pageSize: 100,
+          sortBy: "publishedAt",
+          sortOrder: "desc",
+        });
+
+        if (!isActive) {
+          return;
+        }
+
+        setArticleNavigation(createArticleReadingNavigation({ articles, currentArticle }));
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setArticleNavigation(null);
+      }
+    }
+
+    void loadArticleNavigation();
+
+    return () => {
+      isActive = false;
+    };
+  }, [article]);
+
+  useEffect(() => {
+    function updateReadingProgress() {
+      const element = articleRef.current;
+
+      if (!element) {
+        setReadingProgress(0);
+        return;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const scrollableDistance = Math.max(1, rect.height - viewportHeight);
+      const progress = Math.min(
+        100,
+        Math.max(0, ((viewportHeight - rect.top) / scrollableDistance) * 100),
+      );
+      setReadingProgress(progress);
+    }
+
+    updateReadingProgress();
+    window.addEventListener("scroll", updateReadingProgress, { passive: true });
+    window.addEventListener("resize", updateReadingProgress);
+
+    return () => {
+      window.removeEventListener("scroll", updateReadingProgress);
+      window.removeEventListener("resize", updateReadingProgress);
+    };
+  }, [article]);
 
   if (!article) {
     return (
@@ -153,7 +392,10 @@ export function BlogArticleDetailPage() {
 
   return (
     <section className="article-reading-layout">
-      <article className="article-detail">
+      <div aria-hidden="true" className="article-reading-progress">
+        <span style={{ transform: `scaleX(${readingProgress / 100})` }} />
+      </div>
+      <article className="article-detail" ref={articleRef}>
         <ArticleBreadcrumbs title={article.title} tocItems={article.toc} />
 
         <header className="article-detail__header">
@@ -182,6 +424,8 @@ export function BlogArticleDetailPage() {
         ) : null}
 
         <ArticleMdxContent contentMdx={article.contentMdx ?? ""} />
+
+        <ArticleReadingNavigationPanel navigation={articleNavigation} />
 
         <footer className="article-detail__footer">
           <Link className="front-action-link" to="/articles">

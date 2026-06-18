@@ -32,13 +32,20 @@ describe("setup payload helpers", () => {
     expect(getCompletedSetupRedirectPath()).toBe("/admin/login");
   });
 
-  it("includes the admin comment email notification preference in setup step 1", () => {
+  it("includes the admin email notification preferences in setup step 1", () => {
     expect(setupPageSource).toContain("commentEmailNotificationsEnabled: boolean;");
+    expect(setupPageSource).toContain("newArticleEmailNotificationsEnabled: boolean;");
     expect(setupPageSource).toContain("commentEmailNotificationsEnabled: true,");
+    expect(setupPageSource).toContain("newArticleEmailNotificationsEnabled: true,");
     expect(setupPageSource).toContain(
       "commentEmailNotificationsEnabled: setupState.commentEmailNotificationsEnabled,",
     );
+    expect(setupPageSource).toContain(
+      "newArticleEmailNotificationsEnabled: setupState.newArticleEmailNotificationsEnabled,",
+    );
     expect(setupPageSource).toContain("<strong>评论邮件通知</strong>");
     expect(setupPageSource).toContain("接收全站文章和留言板的新评论、新回复邮件。");
+    expect(setupPageSource).toContain("<strong>新文章邮件通知</strong>");
+    expect(setupPageSource).toContain("有新文章发布时，通过邮箱接收通知。");
   });
 });

@@ -27,6 +27,7 @@ export interface SetupAdminInput {
   username: string;
   password: string;
   commentEmailNotificationsEnabled?: boolean;
+  newArticleEmailNotificationsEnabled?: boolean;
   email?: string;
   name?: string;
   tags?: string[];
@@ -237,7 +238,7 @@ export async function configureAdmin(
     await tx`
       INSERT INTO users (
         username, password_hash, email, name, tags, description, avatar_url,
-        role, comment_email_notifications_enabled
+        role, comment_email_notifications_enabled, new_article_email_notifications_enabled
       )
       VALUES (
         ${input.username.trim()},
@@ -248,7 +249,8 @@ export async function configureAdmin(
         ${input.description?.trim() ?? ""},
         ${cleanOptional(input.avatarUrl)},
         'admin',
-        ${input.commentEmailNotificationsEnabled ?? true}
+        ${input.commentEmailNotificationsEnabled ?? true},
+        ${input.newArticleEmailNotificationsEnabled ?? true}
       )
     `;
 

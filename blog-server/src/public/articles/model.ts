@@ -45,6 +45,7 @@ export const ArticleSummaryItem = t.Object({
   commentCount: t.Number(),
   categories: t.Array(ArticleRelationItem),
   tags: t.Array(ArticleRelationItem),
+  searchExcerpt: t.Nullable(t.String()),
 });
 
 export const ArticleDetailItem = t.Object({

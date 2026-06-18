@@ -27,6 +27,7 @@ export const SetupAdminBody = t.Object({
   username: t.String({ minLength: 2, maxLength: 60 }),
   password: t.String({ minLength: 8, maxLength: 128 }),
   commentEmailNotificationsEnabled: t.Optional(t.Boolean()),
+  newArticleEmailNotificationsEnabled: t.Optional(t.Boolean()),
   email: t.Optional(t.String({ format: "email", maxLength: 254 })),
   name: t.Optional(t.String({ maxLength: 80 })),
   tags: t.Optional(t.Array(t.String({ maxLength: 40 }), { maxItems: 12 })),

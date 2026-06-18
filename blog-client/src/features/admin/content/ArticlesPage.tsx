@@ -17,6 +17,7 @@ type ArticleRow = DataTableRow & {
   author: string;
   category: string;
   comments: number;
+  scheduledPublishAt: string | null;
   slug: string;
   status: "draft" | "offline" | "published";
   title: string;
@@ -30,6 +31,7 @@ type AdminArticleItem = {
   commentCount: number;
   id: string;
   readCount: number;
+  scheduledPublishAt: string | null;
   slug: string;
   status: ArticleRow["status"];
   title: string;
@@ -54,6 +56,14 @@ const statusMeta = {
   published: { label: "已发布", tone: "success" },
 } as const;
 
+function getArticleStatusMeta(row: ArticleRow) {
+  if (row.status === "draft" && row.scheduledPublishAt) {
+    return { label: "定时", tone: "warning" as const };
+  }
+
+  return statusMeta[row.status];
+}
+
 const articleColumns: DataTableColumn<ArticleRow>[] = [
   {
     header: "标题",
@@ -73,12 +83,12 @@ const articleColumns: DataTableColumn<ArticleRow>[] = [
     header: "状态",
     id: "status",
     render: (row) => (
-      <DataStatusChip tone={statusMeta[row.status].tone}>
-        {statusMeta[row.status].label}
+      <DataStatusChip tone={getArticleStatusMeta(row).tone}>
+        {getArticleStatusMeta(row).label}
       </DataStatusChip>
     ),
     sortable: true,
-    value: (row) => statusMeta[row.status].label,
+    value: (row) => getArticleStatusMeta(row).label,
   },
   {
     header: "作者",
@@ -182,6 +192,7 @@ function ArticleDataPage({ relation }: { relation?: ArticleRelationScope }) {
         category: article.categories[0]?.name ?? "未分类",
         comments: article.commentCount,
         id: article.id,
+        scheduledPublishAt: article.scheduledPublishAt,
         slug: article.slug,
         status: article.status,
         title: article.title,

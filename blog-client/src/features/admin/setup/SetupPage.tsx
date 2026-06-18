@@ -60,6 +60,7 @@ const setupSteps = [
 type SetupFormState = {
   adminAvatar: string;
   commentEmailNotificationsEnabled: boolean;
+  newArticleEmailNotificationsEnabled: boolean;
   adminDescription: string;
   adminEmail: string;
   adminName: string;
@@ -122,6 +123,7 @@ const setupSubmitStepIndexes: Record<SetupSubmitStepKey, number> = {
 const initialFormState: SetupFormState = {
   adminAvatar: "",
   commentEmailNotificationsEnabled: true,
+  newArticleEmailNotificationsEnabled: true,
   adminDescription: "",
   adminEmail: "",
   adminName: "",
@@ -371,6 +373,7 @@ export function SetupPage() {
         admin: {
           avatarUrl: setupState.adminAvatar || undefined,
           commentEmailNotificationsEnabled: setupState.commentEmailNotificationsEnabled,
+          newArticleEmailNotificationsEnabled: setupState.newArticleEmailNotificationsEnabled,
           description: setupState.adminDescription,
           email: setupState.adminEmail || undefined,
           name: setupState.adminName || undefined,
@@ -552,6 +555,24 @@ export function SetupPage() {
                   <Switch.Content>
                     <strong>评论邮件通知</strong>
                     <span>接收全站文章和留言板的新评论、新回复邮件。</span>
+                  </Switch.Content>
+                </Switch>
+                <Switch
+                  className="form-grid__wide"
+                  isSelected={formState.newArticleEmailNotificationsEnabled}
+                  onChange={(isSelected) =>
+                    setFormState((state) => ({
+                      ...state,
+                      newArticleEmailNotificationsEnabled: isSelected,
+                    }))
+                  }
+                >
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <Switch.Content>
+                    <strong>新文章邮件通知</strong>
+                    <span>有新文章发布时，通过邮箱接收通知。</span>
                   </Switch.Content>
                 </Switch>
               </div>

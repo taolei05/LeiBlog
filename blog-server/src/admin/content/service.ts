@@ -1,13 +1,20 @@
-import { requireAdmin, type AuthUser } from "../../shared/auth";
-import { decryptSecret, type StoredEncryptedSecret } from "../../shared/crypto";
+import type { AuthUser } from "../../shared/auth";
+import { requireAdmin } from "../../shared/auth";
+import type { StoredEncryptedSecret } from "../../shared/crypto";
+import { decryptSecret } from "../../shared/crypto";
 import {
   clearAllArticleCache,
   clearArticleCache,
 } from "../../shared/cache/content";
-import { db, withTransaction, type DbClient } from "../../shared/db";
+import type { DbClient } from "../../shared/db";
+import { db, withTransaction } from "../../shared/db";
 import { conflict, notFound, validationError } from "../../shared/errors";
 import { createArticleSummary } from "../../shared/mdx/summary";
 import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
+import {
+  scheduleArticleEmailNotifications,
+  sendArticleEmailNotifications,
+} from "../../public/articles/notification";
 
 type ArticleStatus = "draft" | "published" | "offline";
 type SortOrder = "asc" | "desc";
@@ -53,6 +60,7 @@ export interface ArticleInput {
   status?: ArticleStatus;
   isPinned?: boolean;
   publishedAt?: string | null;
+  scheduledPublishAt?: string | null;
   categoryIds?: string[];
   tagIds?: string[];
   contributorIds?: string[];
@@ -96,6 +104,7 @@ interface ArticleRow {
   created_at: Date | string;
   updated_at: Date | string;
   published_at: Date | string | null;
+  scheduled_publish_at: Date | string | null;
   categories: string | RelationItem[];
   tags: string | RelationItem[];
   contributors: string | RelationItem[];
@@ -130,13 +139,77 @@ function cleanIdList(values: string[] | undefined) {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
 
-function parseDate(value: string | null | undefined) {
+type ParseDateParameters = {
+  label: string;
+  value: string | null | undefined;
+};
+
+function parseDate({ label, value }: ParseDateParameters) {
   if (value === undefined) return undefined;
   if (value === null || value.trim() === "") return null;
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) throw validationError("发布时间格式无效");
+  if (Number.isNaN(date.getTime())) throw validationError(`${label}格式无效`);
   return date;
+}
+
+function isPublicArticleState(status: ArticleStatus, publishedAt: string | null) {
+  return (
+    status === "published" &&
+    publishedAt !== null &&
+    new Date(publishedAt).getTime() <= Date.now()
+  );
+}
+
+function shouldScheduleBackgroundArticleNotifications(client: DbClient) {
+  return client === db;
+}
+
+type ResolveArticlePublicationStateParameters = {
+  existingPublishedAt?: string | null;
+  publishedAtInput: Date | null | undefined;
+  scheduledPublishAtInput: Date | null | undefined;
+  status: ArticleStatus;
+};
+
+function resolveArticlePublicationState({
+  existingPublishedAt,
+  publishedAtInput,
+  scheduledPublishAtInput,
+  status,
+}: ResolveArticlePublicationStateParameters) {
+  if (scheduledPublishAtInput !== undefined && scheduledPublishAtInput !== null) {
+    if (scheduledPublishAtInput.getTime() > Date.now()) {
+      return {
+        publishedAt: null,
+        scheduledPublishAt: scheduledPublishAtInput,
+        status: "draft" as ArticleStatus,
+      };
+    }
+
+    return {
+      publishedAt: scheduledPublishAtInput,
+      scheduledPublishAt: null,
+      status: "published" as ArticleStatus,
+    };
+  }
+
+  const publishedAt =
+    publishedAtInput !== undefined
+      ? publishedAtInput
+      : status === "published"
+        ? existingPublishedAt
+          ? new Date(existingPublishedAt)
+          : new Date()
+        : existingPublishedAt
+          ? new Date(existingPublishedAt)
+          : null;
+
+  return {
+    publishedAt,
+    scheduledPublishAt: null,
+    status,
+  };
 }
 
 function toPage(input: ListQuery) {
@@ -230,6 +303,7 @@ function toArticle(row: ArticleRow) {
     createdAt: toIso(row.created_at) ?? "",
     updatedAt: toIso(row.updated_at) ?? "",
     publishedAt: toIso(row.published_at),
+    scheduledPublishAt: toIso(row.scheduled_publish_at),
     categories: parseRelations(row.categories),
     tags: parseRelations(row.tags),
     contributors: parseRelations(row.contributors),
@@ -665,7 +739,7 @@ export async function getArticleById(id: string, client: DbClient = db) {
           AND c.deleted_at IS NULL
       ) AS comment_count,
       a.is_pinned,
-      a.created_at, a.updated_at, a.published_at,
+      a.created_at, a.updated_at, a.published_at, a.scheduled_publish_at,
       COALESCE((
         SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug) ORDER BY c.name)
         FROM article_category_links acl
@@ -727,7 +801,7 @@ export async function listArticles(
             AND c.deleted_at IS NULL
         ) AS comment_count,
         a.is_pinned,
-        a.created_at, a.updated_at, a.published_at,
+        a.created_at, a.updated_at, a.published_at, a.scheduled_publish_at,
         COALESCE((
           SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug) ORDER BY c.name)
           FROM article_category_links acl
@@ -802,13 +876,14 @@ export async function createArticle(
   requireAdmin(currentUser);
   const contentMdx = input.contentMdx ?? "";
   const status = input.status ?? "draft";
-  const publishedAtInput = parseDate(input.publishedAt);
-  const publishedAt =
-    publishedAtInput !== undefined
-      ? publishedAtInput
-      : status === "published"
-        ? new Date()
-        : null;
+  const publication = resolveArticlePublicationState({
+    publishedAtInput: parseDate({ label: "发布时间", value: input.publishedAt }),
+    scheduledPublishAtInput: parseDate({
+      label: "定时发布时间",
+      value: input.scheduledPublishAt,
+    }),
+    status,
+  });
   const baseSlug = await createArticleSlugBase(input.title, input.slug, client);
   let articleId = "";
 
@@ -817,7 +892,7 @@ export async function createArticle(
     const [row] = await tx<{ id: string }[]>`
       INSERT INTO articles (
         author_id, title, slug, summary, content_mdx, cover_image_url,
-        status, is_pinned, published_at
+        status, is_pinned, published_at, scheduled_publish_at
       )
       VALUES (
         ${currentUser.id},
@@ -826,9 +901,10 @@ export async function createArticle(
         ${createArticleSummary(input.summary, contentMdx)},
         ${contentMdx},
         ${cleanOptional(input.coverImageUrl)},
-        ${status},
+        ${publication.status},
         ${input.isPinned ?? false},
-        ${publishedAt}
+        ${publication.publishedAt},
+        ${publication.scheduledPublishAt}
       )
       RETURNING id
     `;
@@ -845,6 +921,12 @@ export async function createArticle(
 
   const article = await getArticleById(articleId, client);
   await clearArticleCache([article.slug]);
+  if (
+    shouldScheduleBackgroundArticleNotifications(client) &&
+    isPublicArticleState(article.status, article.publishedAt)
+  ) {
+    scheduleArticleEmailNotifications(article.id, client);
+  }
   return article;
 }
 
@@ -867,15 +949,24 @@ export async function updateArticle(
       ? existing.coverImageUrl
       : cleanOptional(input.coverImageUrl);
   const status = input.status ?? existing.status;
-  const parsedPublishedAt = parseDate(input.publishedAt);
-  const publishedAt =
-    parsedPublishedAt !== undefined
-      ? parsedPublishedAt
-      : status === "published" && !existing.publishedAt
-        ? new Date()
-        : existing.publishedAt
-          ? new Date(existing.publishedAt)
-          : null;
+  const scheduledPublishAtInput = parseDate({
+    label: "定时发布时间",
+    value: input.scheduledPublishAt,
+  });
+  const publication = resolveArticlePublicationState({
+    existingPublishedAt: existing.publishedAt,
+    publishedAtInput: parseDate({ label: "发布时间", value: input.publishedAt }),
+    scheduledPublishAtInput:
+      scheduledPublishAtInput !== undefined
+        ? scheduledPublishAtInput
+        : input.status === "published"
+          ? null
+          : existing.scheduledPublishAt
+            ? new Date(existing.scheduledPublishAt)
+            : undefined,
+    status,
+  });
+  const wasPublic = isPublicArticleState(existing.status, existing.publishedAt);
   const slug =
     input.slug?.trim()
       ? await createUniqueManagedSlug(client, "articles", input.slug, id)
@@ -899,9 +990,10 @@ export async function updateArticle(
           summary = ${summary},
           content_mdx = ${contentMdx},
           cover_image_url = ${coverImageUrl},
-          status = ${status},
+          status = ${publication.status},
           is_pinned = ${input.isPinned ?? existing.isPinned},
-          published_at = ${publishedAt}
+          published_at = ${publication.publishedAt},
+          scheduled_publish_at = ${publication.scheduledPublishAt}
       WHERE id = ${id}
     `;
 
@@ -916,7 +1008,81 @@ export async function updateArticle(
 
   const updated = await getArticleById(id, client);
   await clearArticleCache([existing.slug, updated.slug]);
+  if (
+    shouldScheduleBackgroundArticleNotifications(client) &&
+    !wasPublic &&
+    isPublicArticleState(updated.status, updated.publishedAt)
+  ) {
+    scheduleArticleEmailNotifications(updated.id, client);
+  }
   return updated;
+}
+
+export async function publishDueScheduledArticles(client: DbClient = db) {
+  const rows = await client<{ id: string; slug: string }[]>`
+    UPDATE articles
+    SET status = 'published',
+        published_at = COALESCE(scheduled_publish_at, now()),
+        scheduled_publish_at = null
+    WHERE status = 'draft'
+      AND scheduled_publish_at IS NOT NULL
+      AND scheduled_publish_at <= now()
+    RETURNING id, slug
+  `;
+
+  if (rows.length > 0) {
+    await clearArticleCache(rows.map((row) => row.slug));
+  }
+
+  for (const row of rows) {
+    await sendArticleEmailNotifications(row.id, client);
+  }
+
+  return {
+    ok: true,
+    articleIds: rows.map((row) => row.id),
+    publishedCount: rows.length,
+  };
+}
+
+type StartScheduledArticlePublisherParameters = {
+  client?: DbClient;
+  intervalMs?: number;
+};
+
+export function startScheduledArticlePublisher({
+  client = db,
+  intervalMs = 60_000,
+}: StartScheduledArticlePublisherParameters = {}) {
+  let isRunning = false;
+
+  async function runNow() {
+    if (isRunning) return;
+
+    isRunning = true;
+    try {
+      await publishDueScheduledArticles(client);
+    } catch (error) {
+      console.error({
+        error,
+        source: "scheduled-article-publisher",
+      });
+    } finally {
+      isRunning = false;
+    }
+  }
+
+  const timer = setInterval(() => {
+    void runNow();
+  }, intervalMs);
+  void runNow();
+
+  return {
+    runNow,
+    stop() {
+      clearInterval(timer);
+    },
+  };
 }
 
 export async function deleteArticle(currentUser: AuthUser, id: string, client: DbClient = db) {

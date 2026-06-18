@@ -4,11 +4,22 @@ import {
   buildArticleRequestBody,
   toFormState,
 } from "../src/features/admin/content/article-edit-helpers";
+import articleEditPageSource from "../src/features/admin/content/ArticleEditPage.tsx?raw";
+import categoriesPageSource from "../src/features/admin/content/CategoriesPage.tsx?raw";
 import { toCommentRow } from "../src/features/admin/content/CommentsPage";
+import tagsPageSource from "../src/features/admin/content/TagsPage.tsx?raw";
 import { adminNavigationGroups } from "../src/app/admin/adminNavigation";
+
+function toExpectedLocalDateTime(value: string) {
+  const date = new Date(value);
+  const timezoneOffset = date.getTimezoneOffset() * 60_000;
+
+  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+}
 
 describe("admin article form relations", () => {
   it("hydrates a single category and tag relations into form state", () => {
+    const scheduledPublishAt = "2026-06-20T01:30:00.000Z";
     const formState = toFormState({
       categories: [
         { id: "category-1", name: "工程实践" },
@@ -19,6 +30,7 @@ describe("admin article form relations", () => {
       coverImageUrl: null,
       id: "article-1",
       isPinned: false,
+      scheduledPublishAt,
       slug: "article-1",
       status: "draft",
       summary: null,
@@ -29,15 +41,18 @@ describe("admin article form relations", () => {
 
     expect(formState.categoryId).toBe("category-1");
     expect(formState.tagIds).toEqual(["tag-1"]);
+    expect(formState.scheduledPublishAt).toBe(toExpectedLocalDateTime(scheduledPublishAt));
   });
 
-  it("submits only one selected category id and multiple tag ids", () => {
+  it("submits only one selected category id, multiple tag ids, and schedule time", () => {
+    const scheduledPublishAt = "2026-06-20T09:30";
     const body = buildArticleRequestBody({
       categoryId: "category-1",
       contentMdx: "正文",
       contributorIds: [],
       coverImageUrl: "",
       isPinned: false,
+      scheduledPublishAt,
       slug: "test-article",
       status: "draft",
       summary: "",
@@ -47,6 +62,51 @@ describe("admin article form relations", () => {
 
     expect(body.categoryIds).toEqual(["category-1"]);
     expect(body.tagIds).toEqual(["tag-1"]);
+    expect(body.scheduledPublishAt).toBe(new Date(scheduledPublishAt).toISOString());
+  });
+
+  it("clears scheduled publish time for immediate publish actions", () => {
+    const body = buildArticleRequestBody(
+      {
+        categoryId: "",
+        contentMdx: "正文",
+        contributorIds: [],
+        coverImageUrl: "",
+        isPinned: false,
+        scheduledPublishAt: "2026-06-20T09:30",
+        slug: "test-article",
+        status: "draft",
+        summary: "",
+        tagIds: [],
+        title: "测试文章",
+      },
+      "published",
+    );
+
+    expect(body.status).toBe("published");
+    expect(body.scheduledPublishAt).toBeNull();
+  });
+
+  it("lets editors create and immediately associate categories and tags from the article form", () => {
+    expect(articleEditPageSource).toContain("新建分类");
+    expect(articleEditPageSource).toContain("新建标签");
+    expect(articleEditPageSource).toContain('"/admin/content/categories"');
+    expect(articleEditPageSource).toContain('"/admin/content/tags"');
+    expect(articleEditPageSource).toContain("setIsCategoryModalOpen(true)");
+    expect(articleEditPageSource).toContain("setIsTagModalOpen(true)");
+    expect(articleEditPageSource).toContain("categoryId: response.item.id");
+    expect(articleEditPageSource).toContain("ColorPicker");
+    expect(articleEditPageSource).toContain("ColorArea");
+    expect(articleEditPageSource).toContain("ColorSlider");
+    expect(articleEditPageSource).toContain("ColorField");
+    expect(articleEditPageSource).toContain("ColorSwatch");
+    expect(articleEditPageSource).toContain('tagColor.toString("hex")');
+    expect(articleEditPageSource).toContain("setTagColor(parseColor(defaultTagColor))");
+    expect(articleEditPageSource).toMatch(
+      /tagIds:\s+state\.tagIds\.includes\(response\.item\.id\)\s+\?\s+state\.tagIds\s+:\s+\[\.\.\.state\.tagIds,\s+response\.item\.id\]/,
+    );
+    expect(articleEditPageSource).toContain("分类已创建并关联");
+    expect(articleEditPageSource).toContain("标签已创建并关联");
   });
 });
 
@@ -67,6 +127,20 @@ describe("admin comment rows", () => {
     });
 
     expect(row.article).toBe("阅读札记");
+  });
+});
+
+describe("admin taxonomy forms", () => {
+  it("lets editors create and update category and tag slugs from management modals", () => {
+    expect(categoriesPageSource).toContain('label="Slug"');
+    expect(categoriesPageSource).toContain("setCategorySlug(row.slug)");
+    expect(categoriesPageSource).toContain("value={categorySlug}");
+    expect(categoriesPageSource).toContain("slug: optionalFormValue(categorySlug) ?? undefined");
+
+    expect(tagsPageSource).toContain('label="Slug"');
+    expect(tagsPageSource).toContain("slug: row.slug");
+    expect(tagsPageSource).toContain("value={tagForm.slug}");
+    expect(tagsPageSource).toContain("slug: optionalFormValue(tagForm.slug) ?? undefined");
   });
 });
 

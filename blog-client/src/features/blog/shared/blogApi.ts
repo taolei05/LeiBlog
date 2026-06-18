@@ -11,6 +11,7 @@ export type BlogTaxonomy = {
 
 export type BlogArticleTocItem = {
   id: string;
+  level: 2 | 3;
   title: string;
 };
 
@@ -36,6 +37,7 @@ export type BlogArticle = {
   publishedAt: string | null;
   readCount: number;
   readTime: string;
+  searchExcerpt: string | null;
   slug: string;
   tags: BlogTaxonomy[];
   title: string;
@@ -119,6 +121,7 @@ type ApiArticleSummary = {
   isPinned: boolean;
   publishedAt: string | null;
   readCount: number;
+  searchExcerpt: string | null;
   slug: string;
   summary: string | null;
   tags: ApiRelationItem[];
@@ -213,6 +216,7 @@ function toArticleSummary(value: unknown): ApiArticleSummary {
     isPinned: readBoolean(value, "isPinned"),
     publishedAt: readNullableString(value, "publishedAt"),
     readCount: readNumber(value, "readCount"),
+    searchExcerpt: readNullableString(value, "searchExcerpt"),
     slug: readString(value, "slug"),
     summary: readNullableString(value, "summary"),
     tags: readArray(value, "tags").map(toRelationItem),
@@ -380,17 +384,31 @@ export function createHeadingId(title: string, index: number) {
   return normalized || `section-${index + 1}`;
 }
 
+function cleanTocTitle(title: string) {
+  return title.replace(/\s+#*$/u, "").trim();
+}
+
 export function extractArticleToc(contentMdx: string | undefined): BlogArticleTocItem[] {
   if (!contentMdx) return [];
 
-  return contentMdx
-    .split("\n")
-    .map((line) => line.match(/^##\s+(.+)$/)?.[1]?.trim())
-    .filter((title): title is string => Boolean(title))
-    .map((title, index) => ({
-      id: createHeadingId(title, index),
+  const items: BlogArticleTocItem[] = [];
+
+  for (const line of contentMdx.split("\n")) {
+    const match = /^(#{2,3})\s+(.+)$/u.exec(line);
+    const title = cleanTocTitle(match?.[2] ?? "");
+
+    if (!match || !title) {
+      continue;
+    }
+
+    items.push({
+      id: createHeadingId(title, items.length),
+      level: match[1]?.length === 3 ? 3 : 2,
       title,
-    }));
+    });
+  }
+
+  return items;
 }
 
 function estimateReadTime(contentMdx: string | undefined, summary: string | null) {
@@ -424,6 +442,7 @@ function toBlogArticle(article: ApiArticleDetail | ApiArticleSummary): BlogArtic
     publishedAt: article.publishedAt,
     readCount: article.readCount,
     readTime: estimateReadTime(contentMdx, article.summary),
+    searchExcerpt: article.searchExcerpt,
     slug: article.slug,
     tags,
     title: article.title,

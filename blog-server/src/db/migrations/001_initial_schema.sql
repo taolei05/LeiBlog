@@ -93,6 +93,7 @@ CREATE TABLE users (
   social_links jsonb NOT NULL DEFAULT '{}'::jsonb,
   blog_url text,
   comment_email_notifications_enabled boolean NOT NULL DEFAULT true,
+  new_article_email_notifications_enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_login_at timestamptz,
@@ -151,13 +152,15 @@ CREATE TABLE articles (
   is_pinned boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  published_at timestamptz
+  published_at timestamptz,
+  scheduled_publish_at timestamptz
 );
 
 CREATE UNIQUE INDEX articles_slug_unique ON articles (lower(slug));
 CREATE INDEX articles_status_published_at_idx ON articles (status, published_at DESC);
 CREATE INDEX articles_pinned_published_at_idx ON articles (is_pinned DESC, published_at DESC);
 CREATE INDEX articles_author_id_idx ON articles (author_id);
+CREATE INDEX articles_scheduled_publish_at_idx ON articles (scheduled_publish_at) WHERE status = 'draft' AND scheduled_publish_at IS NOT NULL;
 
 CREATE TRIGGER articles_set_updated_at
 BEFORE UPDATE ON articles

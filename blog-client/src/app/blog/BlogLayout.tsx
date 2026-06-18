@@ -17,6 +17,7 @@ import {
 } from "../../shared/auth/blog-session";
 import { AppIcon } from "../../shared/icons/AppIcon";
 import { SvgAsset } from "../../shared/media/svg-asset";
+import { useDocumentMetadata } from "../../shared/seo/document-metadata";
 import {
   applyFavicon,
   fetchPublicSiteConfig,
@@ -607,6 +608,20 @@ export function BlogLayout() {
     nextSiteLogoFallbackUrl && nextSiteLogoFallbackUrl !== siteLogoUrl
       ? nextSiteLogoFallbackUrl
       : undefined;
+  const isArticleDetailRoute = /^\/articles\/[^/]+/u.test(location.pathname);
+
+  useDocumentMetadata(
+    isArticleDetailRoute
+      ? undefined
+      : {
+          canonicalPath: location.pathname,
+          description: siteConfig?.seoDescription || siteInfo?.description,
+          imageUrl: siteInfo?.homeCoverUrls[0] ?? siteLogoUrl,
+          keywords: siteConfig?.seoKeywords,
+          title: siteConfig?.seoTitle || siteName,
+          type: "website",
+        },
+  );
 
   useEffect(() => {
     setSearchQuery(new URLSearchParams(location.search).get("q") ?? "");

@@ -6,6 +6,7 @@ import {
   createArticlePaginationItems,
   createArticlePaginationViewModel,
   getArticleListEmptyText,
+  highlightSearchSnippet,
 } from "../src/features/blog/articles/ArticlesPage";
 import articlesPageSource from "../src/features/blog/articles/ArticlesPage.tsx?raw";
 
@@ -114,5 +115,16 @@ describe("article index pagination", () => {
         status: "error",
       }),
     ).toBe("文章接口暂时不可用。");
+  });
+
+  it("highlights visible search result excerpts without injecting html", () => {
+    const snippet = highlightSearchSnippet("正文命中：更新后的内容包含 React 搜索能力。", "React");
+
+    expect(snippet.map((part) => part.text)).toEqual([
+      "正文命中：更新后的内容包含 ",
+      "React",
+      " 搜索能力。",
+    ]);
+    expect(snippet[1]).toEqual({ isMatch: true, text: "React" });
   });
 });

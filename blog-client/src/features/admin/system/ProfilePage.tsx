@@ -43,6 +43,7 @@ type AdminProfile = {
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
   name: string | null;
+  newArticleEmailNotificationsEnabled: boolean;
   role: "admin" | "user";
   socialLinks: Record<string, string>;
   tags: string[];
@@ -82,7 +83,7 @@ const saveConfirmationCopy: Record<
 > = {
   preferences: {
     confirmLabel: "确认保存",
-    description: "保存后，评论邮件通知开关会按当前选择生效。",
+    description: "保存后，邮件通知开关会按当前选择生效。",
     title: "确认保存偏好设置？",
   },
   profile: {
@@ -195,6 +196,7 @@ export function ProfilePage() {
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
   const [commentEmailNotificationsDraft, setCommentEmailNotificationsDraft] = useState(true);
+  const [newArticleEmailNotificationsDraft, setNewArticleEmailNotificationsDraft] = useState(true);
 
   useEffect(() => {
     let isActive = true;
@@ -209,6 +211,7 @@ export function ProfilePage() {
         setSocialLinks(toSocialLinkDrafts(response.user.socialLinks));
         setEmail(response.user.email ?? "");
         setCommentEmailNotificationsDraft(response.user.commentEmailNotificationsEnabled);
+        setNewArticleEmailNotificationsDraft(response.user.newArticleEmailNotificationsEnabled);
       } catch (error) {
         if (!isActive) return;
         showOperationToast(error instanceof Error ? error.message : "管理员资料读取失败", "danger");
@@ -359,7 +362,7 @@ export function ProfilePage() {
     }
   }
 
-  async function saveCommentEmailNotificationPreference() {
+  async function saveEmailNotificationPreferences() {
     if (!profile) {
       showOperationToast("管理员资料仍在读取，请稍后再试", "warning");
       return;
@@ -368,19 +371,20 @@ export function ProfilePage() {
     try {
       setIsSavingPreferences(true);
       const response = await adminFetch<{ user: AdminProfile }>("/me/preferences", {
-        body: { commentEmailNotificationsEnabled: commentEmailNotificationsDraft },
+        body: {
+          commentEmailNotificationsEnabled: commentEmailNotificationsDraft,
+          newArticleEmailNotificationsEnabled: newArticleEmailNotificationsDraft,
+        },
         method: "PATCH",
       });
 
       setProfile(response.user);
       setCommentEmailNotificationsDraft(response.user.commentEmailNotificationsEnabled);
+      setNewArticleEmailNotificationsDraft(response.user.newArticleEmailNotificationsEnabled);
       syncAdminSession(response.user);
-      showOperationToast("评论邮件通知偏好已保存", "success");
+      showOperationToast("邮件通知偏好已保存", "success");
     } catch (error) {
-      showOperationToast(
-        error instanceof Error ? error.message : "评论邮件通知偏好保存失败",
-        "danger",
-      );
+      showOperationToast(error instanceof Error ? error.message : "邮件通知偏好保存失败", "danger");
     } finally {
       setIsSavingPreferences(false);
     }
@@ -392,7 +396,7 @@ export function ProfilePage() {
 
     switch (action) {
       case "preferences":
-        void saveCommentEmailNotificationPreference();
+        void saveEmailNotificationPreferences();
         return;
       case "profile":
         void saveProfile();
@@ -690,6 +694,19 @@ export function ProfilePage() {
               <Switch.Content>
                 <strong>评论邮件通知</strong>
                 <span>接收全站文章和留言板的新评论、新回复邮件。</span>
+              </Switch.Content>
+            </Switch>
+            <Switch
+              isDisabled={isLoading || isSavingPreferences || profile === null}
+              isSelected={newArticleEmailNotificationsDraft}
+              onChange={setNewArticleEmailNotificationsDraft}
+            >
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              <Switch.Content>
+                <strong>新文章邮件通知</strong>
+                <span>有新文章发布时，通过邮箱接收通知。</span>
               </Switch.Content>
             </Switch>
             <Button

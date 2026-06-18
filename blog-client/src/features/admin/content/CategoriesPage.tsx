@@ -20,6 +20,7 @@ type CategoryRow = DataTableRow & {
   name: string;
   parent: string;
   sort: number;
+  slug: string;
   status: "active" | "hidden";
   updatedAt: string;
 };
@@ -55,7 +56,7 @@ const categoryColumns: DataTableColumn<CategoryRow>[] = [
         <small>{row.level}分类</small>
       </span>
     ),
-    searchValue: (row) => `${row.name} ${row.parent}`,
+    searchValue: (row) => `${row.name} ${row.slug} ${row.parent}`,
     sortable: true,
     value: (row) => row.name,
   },
@@ -118,6 +119,12 @@ const categoryFilters: DataTableFilter<CategoryRow>[] = [
   },
 ];
 
+function optionalFormValue(value: string) {
+  const trimmed = value.trim();
+
+  return trimmed ? trimmed : null;
+}
+
 function toCategoryRow(item: AdminCategoryItem): CategoryRow {
   return {
     articleCount: item.articleCount,
@@ -126,6 +133,7 @@ function toCategoryRow(item: AdminCategoryItem): CategoryRow {
     name: item.name,
     parent: "根分类",
     sort: 0,
+    slug: item.slug,
     status: "active",
     updatedAt: new Date(item.updatedAt).toLocaleString("zh-CN"),
   };
@@ -136,6 +144,7 @@ export function CategoriesPage() {
   const [categoryRows, setCategoryRows] = useState<CategoryRow[]>([]);
   const [nameModalState, setNameModalState] = useState<CategoryNameModalState | null>(null);
   const [categoryName, setCategoryName] = useState("");
+  const [categorySlug, setCategorySlug] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -162,13 +171,13 @@ export function CategoriesPage() {
 
       if (nameModalState.mode === "create") {
         await adminFetch("/admin/content/categories", {
-          body: { name },
+          body: { name, slug: optionalFormValue(categorySlug) ?? undefined },
           method: "POST",
         });
         nameModalState.setNotice("分类已创建");
       } else {
         await adminFetch(`/admin/content/categories/${nameModalState.row.id}`, {
-          body: { name },
+          body: { name, slug: optionalFormValue(categorySlug) ?? undefined },
           method: "PATCH",
         });
         nameModalState.setNotice("分类已更新");
@@ -176,6 +185,7 @@ export function CategoriesPage() {
 
       setNameModalState(null);
       setCategoryName("");
+      setCategorySlug("");
       setReloadKey((key) => key + 1);
     } catch (error) {
       nameModalState.setNotice(error instanceof Error ? error.message : "分类保存失败");
@@ -191,6 +201,7 @@ export function CategoriesPage() {
       label: "新建分类",
       onPress: ({ setNotice }) => {
         setCategoryName("");
+        setCategorySlug("");
         setNameModalState({ mode: "create", setNotice });
       },
     },
@@ -244,9 +255,10 @@ export function CategoriesPage() {
     {
       confirmation: "none",
       icon: "pencil",
-      label: "重命名",
+      label: "编辑",
       onPress: (row, { setNotice }) => {
         setCategoryName(row.name);
+        setCategorySlug(row.slug);
         setNameModalState({ mode: "rename", row, setNotice });
       },
     },
@@ -285,18 +297,20 @@ export function CategoriesPage() {
       wide
     >
       <AdminFormModal
-        confirmDescription="将保存分类名称，并同步更新后台分类列表。"
-        description="分类名称会用于前台分类导航和文章归档。"
+        confirmDescription="将保存分类名称和 Slug，并同步更新后台分类列表。"
+        description="分类名称和 Slug 会用于前台分类导航、文章归档和分类链接。"
         icon="albums"
         isOpen={nameModalState !== null}
         isSubmitting={isSavingName}
         onOpenChange={(isOpen) => {
           if (isOpen) return;
           setNameModalState(null);
+          setCategoryName("");
+          setCategorySlug("");
         }}
         onSubmit={submitCategoryName}
         submitLabel={nameModalState?.mode === "rename" ? "保存分类" : "创建分类"}
-        title={nameModalState?.mode === "rename" ? "重命名分类" : "新建分类"}
+        title={nameModalState?.mode === "rename" ? "编辑分类" : "新建分类"}
       >
         <AdminInputGroupField
           icon="albums"
@@ -305,6 +319,14 @@ export function CategoriesPage() {
           onChange={setCategoryName}
           placeholder="输入分类名称"
           value={categoryName}
+        />
+        <AdminInputGroupField
+          description="留空时后端会按名称自动生成，已有分类留空则保持原 Slug。"
+          icon="link"
+          label="Slug"
+          onChange={setCategorySlug}
+          placeholder="photography-notes"
+          value={categorySlug}
         />
       </AdminFormModal>
       <DataTable

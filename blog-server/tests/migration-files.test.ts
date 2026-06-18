@@ -11,10 +11,17 @@ const migration = readFileSync(
   join(migrationsDir, "001_initial_schema.sql"),
   "utf8"
 );
+const articleSchedulingMigration = readFileSync(
+  join(migrationsDir, "002_article_scheduling_and_notifications.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("keeps a consolidated baseline migration", () => {
-    expect(migrationFiles).toEqual(["001_initial_schema.sql"]);
+    expect(migrationFiles).toEqual([
+      "001_initial_schema.sql",
+      "002_article_scheduling_and_notifications.sql",
+    ]);
   });
 
   test("creates the required core tables", () => {
@@ -92,5 +99,19 @@ describe("initial database migration", () => {
     expect(migration).toContain(
       "comment_email_notifications_enabled boolean NOT NULL DEFAULT true"
     );
+  });
+
+  test("supports scheduled article publishing and new article email preferences", () => {
+    expect(migration).toContain(
+      "new_article_email_notifications_enabled boolean NOT NULL DEFAULT true"
+    );
+    expect(migration).toContain("scheduled_publish_at timestamptz");
+    expect(articleSchedulingMigration).toContain(
+      "ADD COLUMN IF NOT EXISTS new_article_email_notifications_enabled boolean NOT NULL DEFAULT true"
+    );
+    expect(articleSchedulingMigration).toContain(
+      "ADD COLUMN IF NOT EXISTS scheduled_publish_at timestamptz"
+    );
+    expect(articleSchedulingMigration).toContain("articles_scheduled_publish_at_idx");
   });
 });

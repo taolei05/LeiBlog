@@ -12,6 +12,7 @@ import { authModule } from "./auth";
 import { healthModule } from "./health";
 import { meModule } from "./me";
 import { publicModule } from "./public";
+import { publicSyndicationModule } from "./public/syndication";
 import type { AppConfig } from "./shared/config";
 import { appConfig } from "./shared/config";
 import {
@@ -77,11 +78,13 @@ function getValidationFieldName(path: string | null) {
     logoDarkUrl: "深色 Logo",
     logoLightUrl: "浅色 Logo",
     name: "显示名称",
+    newArticleEmailNotificationsEnabled: "新文章邮件通知",
     password: "密码",
     policeNumber: "公安备案号",
     policeUrl: "公安备案网址",
     resendApiKey: "Resend API Key",
     resendDomain: "Resend 域名",
+    scheduledPublishAt: "定时发布时间",
     seoDescription: "SEO 描述",
     seoKeywords: "SEO 关键词",
     seoTitle: "SEO 标题",
@@ -302,6 +305,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   }
 
   return app
+    .use(publicSyndicationModule)
     .use(healthModule)
     .use(publicModule)
     .use(authModule)

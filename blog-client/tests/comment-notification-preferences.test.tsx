@@ -28,6 +28,7 @@ type TestBlogUser = {
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
   name: string | null;
+  newArticleEmailNotificationsEnabled?: boolean;
   role: "admin" | "user";
   tags: string[];
   username: string;
@@ -60,6 +61,7 @@ function createTestUser(overrides: Partial<TestBlogUser> = {}): TestBlogUser {
     lastLoginIp: null,
     lastLoginLocation: null,
     name: "读者",
+    newArticleEmailNotificationsEnabled: true,
     role: "user",
     tags: [],
     username: "reader",
@@ -226,8 +228,11 @@ describe("admin comment notification preferences", () => {
     expect(profilePageSource).not.toContain('title="偏好"');
     expect(profilePageSource).toContain("评论邮件通知");
     expect(profilePageSource).toContain("接收全站文章和留言板的新评论、新回复邮件。");
+    expect(profilePageSource).toContain("新文章邮件通知");
+    expect(profilePageSource).toContain("有新文章发布时，通过邮箱接收通知。");
     expect(profilePageSource).toContain("/me/preferences");
     expect(profilePageSource).toContain("commentEmailNotificationsEnabled");
+    expect(profilePageSource).toContain("newArticleEmailNotificationsEnabled");
     expect(profilePageSource).toMatch(
       /import\s*{[\s\S]*\bSwitch\b[\s\S]*}\s*from "@heroui\/react"/,
     );
@@ -235,26 +240,31 @@ describe("admin comment notification preferences", () => {
     expect(profilePageSource).toContain("<Switch.Control>");
     expect(profilePageSource).toContain("isSelected={commentEmailNotificationsDraft}");
     expect(profilePageSource).toContain("onChange={setCommentEmailNotificationsDraft}");
+    expect(profilePageSource).toContain("isSelected={newArticleEmailNotificationsDraft}");
+    expect(profilePageSource).toContain("onChange={setNewArticleEmailNotificationsDraft}");
     expect(profilePageSource).toContain("isDisabled={isLoading || isSavingPreferences");
     expect(profilePageSource).toContain('className="settings-form__submit"');
     expect(profilePageSource).toContain("保存偏好设置");
     expect(profilePageSource).toContain('onPress={() => setPendingSave("preferences")}');
     expect(profilePageSource).toContain("确认保存偏好设置？");
-    expect(profilePageSource).toContain("void saveCommentEmailNotificationPreference();");
+    expect(profilePageSource).toContain("void saveEmailNotificationPreferences();");
   });
 
-  it("saves the admin comment notification preference only from the save button", () => {
+  it("saves the admin email notification preferences only from the save button", () => {
     expect(profilePageSource).toMatch(
-      /adminFetch<\{ user: AdminProfile \}>\("\/me\/preferences", \{\s+body: \{ commentEmailNotificationsEnabled: commentEmailNotificationsDraft \},\s+method: "PATCH",\s+\}\)/,
+      /adminFetch<\{ user: AdminProfile \}>\("\/me\/preferences", \{\s+body: \{\s+commentEmailNotificationsEnabled: commentEmailNotificationsDraft,\s+newArticleEmailNotificationsEnabled: newArticleEmailNotificationsDraft,\s+\},\s+method: "PATCH",\s+\}\)/,
     );
     expect(profilePageSource).toContain("setProfile(response.user)");
     expect(profilePageSource).toContain(
       "setCommentEmailNotificationsDraft(response.user.commentEmailNotificationsEnabled)",
     );
+    expect(profilePageSource).toContain(
+      "setNewArticleEmailNotificationsDraft(response.user.newArticleEmailNotificationsEnabled)",
+    );
     expect(profilePageSource).toContain("syncAdminSession(response.user)");
-    expect(profilePageSource).toMatch(/showOperationToast\("评论邮件通知偏好已保存", "success"\)/);
-    expect(profilePageSource).toMatch(
-      /showOperationToast\(\s+error instanceof Error \? error\.message : "评论邮件通知偏好保存失败",\s+"danger",\s+\)/,
+    expect(profilePageSource).toMatch(/showOperationToast\("邮件通知偏好已保存", "success"\)/);
+    expect(profilePageSource).toContain(
+      'showOperationToast(error instanceof Error ? error.message : "邮件通知偏好保存失败", "danger")',
     );
   });
 });
@@ -275,25 +285,33 @@ describe("front comment notification preferences", () => {
     expect(authPagesSource).toContain("<Switch.Thumb />");
     expect(authPagesSource).toContain("评论回复邮件通知");
     expect(authPagesSource).toContain("自己的评论收到直接回复时，通过邮箱通知我。");
+    expect(authPagesSource).toContain("新文章邮件通知");
+    expect(authPagesSource).toContain("有新文章发布时，通过邮箱通知我。");
     expect(authPagesSource).toContain("isSelected={commentEmailNotificationsDraft}");
+    expect(authPagesSource).toContain("isSelected={newArticleEmailNotificationsDraft}");
     expect(authPagesSource).toContain("isDisabled={isSavingPreferences}");
     expect(authPagesSource).toContain("onChange={setCommentEmailNotificationsDraft}");
+    expect(authPagesSource).toContain("onChange={setNewArticleEmailNotificationsDraft}");
     expect(authPagesSource).toContain('className="settings-form__submit"');
     expect(authPagesSource).toContain("保存偏好设置");
     expect(authPagesSource).toContain(
       'onPress={() => setPendingProfileAction("save-preferences")}',
     );
     expect(authPagesSource).toContain("确认保存偏好设置？");
-    expect(authPagesSource).toContain("void saveCommentEmailNotificationPreference();");
+    expect(authPagesSource).toContain("void saveEmailNotificationPreferences();");
   });
 
-  it("parses and saves the current user's comment notification preference", () => {
+  it("parses and saves the current user's email notification preferences", () => {
     expect(authPagesSource).toContain("commentEmailNotificationsEnabled: boolean;");
+    expect(authPagesSource).toContain("newArticleEmailNotificationsEnabled: boolean;");
     expect(authPagesSource).toContain(
       "commentEmailNotificationsEnabled: readBoolean(value.commentEmailNotificationsEnabled, true)",
     );
     expect(authPagesSource).toMatch(
-      /authJsonRequest<unknown>\("\/me\/preferences", \{\s+body: \{ commentEmailNotificationsEnabled: nextValue \},\s+method: "PATCH",\s+token,\s+\}\)/,
+      /newArticleEmailNotificationsEnabled:\s+readBoolean\(\s+value\.newArticleEmailNotificationsEnabled,\s+true,\s+\)/,
+    );
+    expect(authPagesSource).toMatch(
+      /authJsonRequest<unknown>\("\/me\/preferences", \{\s+body: input,\s+method: "PATCH",\s+token,\s+\}\)/,
     );
     expect(authPagesSource).toContain("return parseMeResponse(payload)");
   });
@@ -305,6 +323,9 @@ describe("front comment notification preferences", () => {
     expect(authPagesSource).toContain(
       "const [commentEmailNotificationsDraft, setCommentEmailNotificationsDraft] = useState(true);",
     );
+    expect(authPagesSource).toContain(
+      "const [newArticleEmailNotificationsDraft, setNewArticleEmailNotificationsDraft] = useState(true);",
+    );
     expect(authPagesSource).toContain("const previousSession = session;");
     expect(authPagesSource).toContain("const requestToken = previousSession.token;");
     expect(authPagesSource).toContain("function updateSessionForToken(");
@@ -314,12 +335,10 @@ describe("front comment notification preferences", () => {
     );
     expect(authPagesSource).toContain("writeBlogSession(createNextSession(storedSession));");
     expect(authPagesSource).toMatch(
-      /updateCurrentBlogUserPreferences\(\s+requestToken,\s+commentEmailNotificationsDraft,\s+\)/,
+      /updateCurrentBlogUserPreferences\(\s*requestToken,\s+\{\s+commentEmailNotificationsEnabled: commentEmailNotificationsDraft,\s+newArticleEmailNotificationsEnabled: newArticleEmailNotificationsDraft,\s+\}\s*\)/,
     );
-    expect(authPagesSource).toMatch(
-      /showOperationToast\("评论回复邮件通知偏好已保存", "success"\)/,
-    );
-    expect(authPagesSource).toContain("评论回复邮件通知偏好保存失败");
+    expect(authPagesSource).toMatch(/showOperationToast\("邮件通知偏好已保存", "success"\)/);
+    expect(authPagesSource).toContain("邮件通知偏好保存失败");
     expect(authPagesSource).toContain("setIsSavingPreferences(false);");
   });
 
@@ -327,6 +346,7 @@ describe("front comment notification preferences", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const legacySession = createTestSession();
     delete legacySession.user.commentEmailNotificationsEnabled;
+    delete legacySession.user.newArticleEmailNotificationsEnabled;
     writeStoredSession(legacySession);
     const { preferencePatchRequests } = installProfileFetchMock(() =>
       jsonResponse({
@@ -337,7 +357,9 @@ describe("front comment notification preferences", () => {
     const container = await renderUserProfilePage();
     expect(container.textContent).toContain("偏好设置");
     expect(container.textContent).toContain("评论回复邮件通知");
+    expect(container.textContent).toContain("新文章邮件通知");
     expect(readStoredSession()?.user.commentEmailNotificationsEnabled).toBe(true);
+    expect(readStoredSession()?.user.newArticleEmailNotificationsEnabled).toBe(true);
 
     await clickPreferenceSwitch(container);
 
@@ -354,13 +376,17 @@ describe("front comment notification preferences", () => {
     expect(preferencePatchRequests).toHaveLength(1);
     expect(preferencePatchRequests[0]?.method).toBe("PATCH");
     expect(preferencePatchRequests[0]?.body).toBe(
-      JSON.stringify({ commentEmailNotificationsEnabled: false }),
+      JSON.stringify({
+        commentEmailNotificationsEnabled: false,
+        newArticleEmailNotificationsEnabled: true,
+      }),
     );
     expect(preferencePatchRequests[0]?.headers).toMatchObject({
       Authorization: "Bearer front-token",
       "Content-Type": "application/json",
     });
     expect(readStoredSession()?.user.commentEmailNotificationsEnabled).toBe(false);
+    expect(readStoredSession()?.user.newArticleEmailNotificationsEnabled).toBe(true);
     expect(consoleError).not.toHaveBeenCalled();
   });
 
@@ -375,6 +401,7 @@ describe("front comment notification preferences", () => {
 
     expect(readStoredSession()?.token).toBe("front-token");
     expect(readStoredSession()?.user.commentEmailNotificationsEnabled).toBe(true);
+    expect(readStoredSession()?.user.newArticleEmailNotificationsEnabled).toBe(true);
   });
 
   it("does not resurrect an expired or replaced session after preference save settles", async () => {

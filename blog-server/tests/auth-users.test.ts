@@ -135,6 +135,7 @@ describe("auth and user services", () => {
     expect(user.role).toBe("user");
     expect(user.email).toBe("user@example.com");
     expect(user.commentEmailNotificationsEnabled).toBe(true);
+    expect(user.newArticleEmailNotificationsEnabled).toBe(true);
 
     const loggedIn = await verifyLogin(
       { identifier: "reader", password: "12345678" },
@@ -270,20 +271,29 @@ describe("auth and user services", () => {
     const profile = await getUserProfile(user.id, testDb);
     expect(profile.lastLoginIp).toBe("127.0.0.1");
     expect(profile.commentEmailNotificationsEnabled).toBe(true);
+    expect(profile.newArticleEmailNotificationsEnabled).toBe(true);
 
     const notificationsDisabled = await updateMyPreferences(
       user.id,
-      { commentEmailNotificationsEnabled: false },
+      {
+        commentEmailNotificationsEnabled: false,
+        newArticleEmailNotificationsEnabled: false,
+      },
       testDb
     );
     expect(notificationsDisabled.commentEmailNotificationsEnabled).toBe(false);
+    expect(notificationsDisabled.newArticleEmailNotificationsEnabled).toBe(false);
 
     const notificationsDisabledProfile = await getUserProfile(user.id, testDb);
     expect(notificationsDisabledProfile.commentEmailNotificationsEnabled).toBe(false);
+    expect(notificationsDisabledProfile.newArticleEmailNotificationsEnabled).toBe(false);
 
     await updateMyPreferences(
       user.id,
-      { commentEmailNotificationsEnabled: true },
+      {
+        commentEmailNotificationsEnabled: true,
+        newArticleEmailNotificationsEnabled: true,
+      },
       testDb
     );
   });

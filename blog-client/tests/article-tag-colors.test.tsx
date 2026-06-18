@@ -27,6 +27,7 @@ const article: BlogArticle = {
   publishedAt: "2026-06-05T00:00:00.000Z",
   readCount: 12,
   readTime: "1 分钟",
+  searchExcerpt: null,
   slug: "article-one",
   tags: [
     { color: "#22c55e", id: "tag-1", name: "React", slug: "react" },

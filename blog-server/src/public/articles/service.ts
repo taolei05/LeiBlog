@@ -30,6 +30,7 @@ interface ArticleSummaryRow {
   title: string;
   slug: string;
   summary: string | null;
+  content_mdx: string | null;
   cover_image_url: string | null;
   read_count: string | number | bigint;
   is_pinned: boolean;
@@ -55,6 +56,44 @@ function toIso(value: Date | string | null) {
 function parseRelations(value: string | RelationItem[]) {
   if (Array.isArray(value)) return value;
   return JSON.parse(value) as RelationItem[];
+}
+
+function cleanSearchText(value: string) {
+  return value
+    .replace(/^---[\s\S]*?---\s*/, "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/[#*_`>|-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type SearchExcerptCandidate = {
+  label: string;
+  text: string;
+};
+
+function createSearchExcerpt(candidates: SearchExcerptCandidate[], search: string | null) {
+  if (!search) return null;
+
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return null;
+
+  for (const candidate of candidates) {
+    const text = cleanSearchText(candidate.text);
+    const matchIndex = text.toLowerCase().indexOf(normalizedSearch);
+    if (matchIndex < 0) continue;
+
+    const start = Math.max(0, matchIndex - 24);
+    const end = Math.min(text.length, matchIndex + normalizedSearch.length + 48);
+    const prefix = start > 0 ? "…" : "";
+    const suffix = end < text.length ? "…" : "";
+
+    return `${candidate.label}命中：${prefix}${text.slice(start, end)}${suffix}`;
+  }
+
+  return null;
 }
 
 function toPage(input: PublicArticleQuery) {
@@ -105,7 +144,10 @@ const publicArticleSearchCondition = `
   )
 `;
 
-function toArticleSummary(row: ArticleSummaryRow) {
+function toArticleSummary(row: ArticleSummaryRow, search: string | null = null) {
+  const categories = parseRelations(row.categories);
+  const tags = parseRelations(row.tags);
+
   return {
     id: row.id,
     title: row.title,
@@ -118,8 +160,18 @@ function toArticleSummary(row: ArticleSummaryRow) {
     updatedAt: toIso(row.updated_at) ?? "",
     publishedAt: toIso(row.published_at),
     commentCount: Number(row.comment_count),
-    categories: parseRelations(row.categories),
-    tags: parseRelations(row.tags),
+    categories,
+    tags,
+    searchExcerpt: createSearchExcerpt(
+      [
+        { label: "标题", text: row.title },
+        { label: "摘要", text: row.summary ?? "" },
+        { label: "正文", text: row.content_mdx ?? "" },
+        { label: "分类", text: categories.map((category) => `${category.name} ${category.slug ?? ""}`).join(" ") },
+        { label: "标签", text: tags.map((tag) => `${tag.name} ${tag.slug ?? ""}`).join(" ") },
+      ],
+      search
+    ),
   };
 }
 
@@ -155,7 +207,7 @@ export async function listPublishedArticles(
     const rows = await client.unsafe<ArticleSummaryRow[]>(
       `
         SELECT
-          a.id, a.title, a.slug, a.summary, a.cover_image_url,
+          a.id, a.title, a.slug, a.summary, a.content_mdx, a.cover_image_url,
           a.read_count, a.is_pinned, a.created_at, a.updated_at, a.published_at,
           (
             SELECT count(*)
@@ -179,6 +231,7 @@ export async function listPublishedArticles(
           ), '[]'::jsonb) AS tags
         FROM articles a
         WHERE a.status = 'published'
+          AND COALESCE(a.published_at, a.created_at) <= now()
           AND ${publicArticleSearchCondition}
           AND ($2::text IS NULL OR EXISTS (
             SELECT 1
@@ -211,6 +264,7 @@ export async function listPublishedArticles(
         SELECT count(*) AS total
         FROM articles a
         WHERE a.status = 'published'
+          AND COALESCE(a.published_at, a.created_at) <= now()
           AND ${publicArticleSearchCondition}
           AND ($2::text IS NULL OR EXISTS (
             SELECT 1
@@ -236,7 +290,7 @@ export async function listPublishedArticles(
 
     return {
       ok: true,
-      items: rows.map(toArticleSummary),
+      items: rows.map((row) => toArticleSummary(row, normalizedQuery.search)),
       page,
       pageSize,
       total: Number(count?.total ?? 0),
@@ -281,6 +335,7 @@ export async function getPublishedArticleBySlug(slug: string, client: DbClient =
       FROM articles a
       WHERE lower(a.slug) = ${normalizedSlug}
         AND a.status = 'published'
+        AND COALESCE(a.published_at, a.created_at) <= now()
     `;
 
     if (!row) throw notFound("文章不存在或未发布");

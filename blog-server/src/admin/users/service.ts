@@ -79,6 +79,7 @@ async function getUserById(userId: string, client: DbClient = db) {
   const [row] = await client<UserProfileRow[]>`
     SELECT id, username, email, name, description, tags, role, avatar_url,
            social_links, blog_url, comment_email_notifications_enabled,
+           new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip, last_login_location
     FROM users
@@ -134,6 +135,7 @@ export async function listUsers(
     `
       SELECT id, username, email, name, description, tags, role, avatar_url,
              social_links, blog_url, comment_email_notifications_enabled,
+             new_article_email_notifications_enabled,
              created_at, updated_at, last_login_at,
              host(last_login_ip) AS last_login_ip, last_login_location
       FROM users

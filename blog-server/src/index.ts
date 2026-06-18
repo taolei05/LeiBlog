@@ -1,10 +1,12 @@
 import { createApp } from "./app";
+import { startScheduledArticlePublisher } from "./admin/content/service";
 import { appConfig } from "./shared/config";
 import { closeDb } from "./shared/db";
 import { logStartupConnectionStatus } from "./shared/diagnostics/startup-checks";
 import { closeRedis } from "./shared/redis";
 
 const app = await createApp();
+const scheduledArticlePublisher = startScheduledArticlePublisher();
 
 await logStartupConnectionStatus();
 
@@ -24,6 +26,7 @@ async function shutdown(signal: NodeJS.Signals) {
 
   const results = await Promise.allSettled([
     app.stop(),
+    Promise.resolve().then(() => scheduledArticlePublisher.stop()),
     closeDb(),
     closeRedis(),
   ]);

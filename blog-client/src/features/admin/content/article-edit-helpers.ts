@@ -27,6 +27,7 @@ export type AdminArticleDetail = {
   coverImageUrl: string | null;
   id: string;
   isPinned: boolean;
+  scheduledPublishAt: string | null;
   slug: string;
   status: ArticleStatus;
   summary: string | null;
@@ -41,6 +42,7 @@ export type ArticleFormState = {
   contributorIds: string[];
   coverImageUrl: string;
   isPinned: boolean;
+  scheduledPublishAt: string;
   slug: string;
   status: ArticleStatus;
   summary: string;
@@ -54,6 +56,7 @@ export const emptyFormState: ArticleFormState = {
   contributorIds: [],
   coverImageUrl: "",
   isPinned: false,
+  scheduledPublishAt: "",
   slug: "",
   status: "draft",
   summary: "",
@@ -67,6 +70,21 @@ function toOptional(value: string) {
   return trimmed ? trimmed : null;
 }
 
+function toLocalDateTimeValue(value: string | null | undefined) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const timezoneOffset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+}
+
+function toIsoDateTimeValue(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? new Date(trimmed).toISOString() : null;
+}
+
 export function toFormState(article: AdminArticleDetail): ArticleFormState {
   return {
     categoryId: article.categories[0]?.id ?? "",
@@ -74,6 +92,7 @@ export function toFormState(article: AdminArticleDetail): ArticleFormState {
     contributorIds: article.contributors.map((contributor) => contributor.id),
     coverImageUrl: article.coverImageUrl ?? "",
     isPinned: article.isPinned,
+    scheduledPublishAt: toLocalDateTimeValue(article.scheduledPublishAt),
     slug: article.slug,
     status: article.status,
     summary: article.summary ?? "",
@@ -92,6 +111,8 @@ export function buildArticleRequestBody(
     coverImageUrl: toOptional(formState.coverImageUrl),
     contributorIds: formState.contributorIds,
     isPinned: formState.isPinned,
+    scheduledPublishAt:
+      statusOverride === "published" ? null : toIsoDateTimeValue(formState.scheduledPublishAt),
     slug: formState.slug,
     status: statusOverride ?? formState.status,
     summary: toOptional(formState.summary),

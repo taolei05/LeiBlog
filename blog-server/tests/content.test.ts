@@ -13,6 +13,7 @@ import {
   listCategories,
   listContributors,
   listTags,
+  publishDueScheduledArticles,
   updateArticle,
 } from "../src/admin/content/service";
 import { listPublishedArticles } from "../src/public/articles/service";
@@ -154,10 +155,16 @@ describe("admin content service", () => {
       { search: "react", page: 1, pageSize: 10 },
       testDb
     );
+    const publicByBody = await listPublishedArticles(
+      { search: "更新后", page: 1, pageSize: 10 },
+      testDb
+    );
     expect(publicByCategory.total).toBe(1);
     expect(publicByCategory.items[0]?.id).toBe(article.id);
     expect(publicByTag.total).toBe(1);
     expect(publicByTag.items[0]?.id).toBe(article.id);
+    expect(publicByBody.total).toBe(1);
+    expect(publicByBody.items[0]?.searchExcerpt).toContain("更新后的内容");
 
     const [revisionCount] = await testDb<{ count: string }[]>`
       SELECT count(*) AS count
@@ -194,5 +201,57 @@ describe("admin content service", () => {
         testDb
       )
     ).rejects.toThrow("需要管理员权限");
+  });
+
+  test("keeps future scheduled articles private until the publisher promotes them", async () => {
+    const scheduledAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const scheduledArticle = await createArticle(
+      currentAdmin,
+      {
+        contentMdx: "这是一篇定时发布文章。",
+        scheduledPublishAt: scheduledAt,
+        status: "published",
+        title: "定时发布文章",
+      },
+      testDb
+    );
+
+    expect(scheduledArticle.status).toBe("draft");
+    expect(scheduledArticle.publishedAt).toBeNull();
+    expect(scheduledArticle.scheduledPublishAt).toBe(scheduledAt);
+
+    const beforePublish = await listPublishedArticles(
+      { search: "定时发布文章", page: 1, pageSize: 10 },
+      testDb
+    );
+    expect(beforePublish.total).toBe(0);
+
+    await testDb`
+      UPDATE articles
+      SET scheduled_publish_at = now() - interval '1 minute'
+      WHERE id = ${scheduledArticle.id}
+    `;
+
+    const result = await publishDueScheduledArticles(testDb);
+    const [publishedRow] = await testDb<{
+      published_at: Date | null;
+      scheduled_publish_at: Date | null;
+      status: string;
+    }[]>`
+      SELECT status, published_at, scheduled_publish_at
+      FROM articles
+      WHERE id = ${scheduledArticle.id}
+    `;
+    const afterPublish = await listPublishedArticles(
+      { search: "定时发布文章", page: 1, pageSize: 10 },
+      testDb
+    );
+
+    expect(result.publishedCount).toBe(1);
+    expect(publishedRow.status).toBe("published");
+    expect(publishedRow.published_at).toBeInstanceOf(Date);
+    expect(publishedRow.scheduled_publish_at).toBeNull();
+    expect(afterPublish.total).toBe(1);
+    expect(afterPublish.items[0]?.id).toBe(scheduledArticle.id);
   });
 });
