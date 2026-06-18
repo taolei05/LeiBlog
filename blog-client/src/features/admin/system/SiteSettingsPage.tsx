@@ -1183,7 +1183,7 @@ export function SiteSettingsPage() {
         }}
         variant="blur"
       >
-        <Modal.Container placement="auto" size="lg">
+        <Modal.Container placement="center" size="lg">
           <Modal.Dialog>
             <div className="admin-form-modal admin-form-modal--reveal">
               <Modal.CloseTrigger />

@@ -60,7 +60,7 @@ export function AdminFormModal({
   return (
     <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange} variant="blur">
       <Modal.Container
-        placement="auto"
+        placement="center"
         scroll={isBodyScrollable ? "inside" : undefined}
         size={size}
       >
