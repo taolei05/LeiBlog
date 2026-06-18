@@ -1061,10 +1061,10 @@ export function SiteSettingsPage() {
                 }))
               }
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
               <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
                 <strong>开启评论系统</strong>
                 <span>关闭后前台不再接收新评论。</span>
               </Switch.Content>

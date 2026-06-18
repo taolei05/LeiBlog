@@ -1057,10 +1057,10 @@ export function ArticleEditPage() {
                 setFormState((state) => ({ ...state, isPinned: isSelected }))
               }
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
               <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
                 <strong>置顶文章</strong>
                 <span>开启后文章会在列表中优先展示。</span>
               </Switch.Content>

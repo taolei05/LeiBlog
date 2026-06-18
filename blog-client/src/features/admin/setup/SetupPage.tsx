@@ -549,10 +549,10 @@ export function SetupPage() {
                     }))
                   }
                 >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
                   <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
                     <strong>评论邮件通知</strong>
                     <span>接收全站文章和留言板的新评论、新回复邮件。</span>
                   </Switch.Content>
@@ -567,10 +567,10 @@ export function SetupPage() {
                     }))
                   }
                 >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
                   <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
                     <strong>新文章邮件通知</strong>
                     <span>有新文章发布时，通过邮箱接收通知。</span>
                   </Switch.Content>
@@ -732,10 +732,10 @@ export function SetupPage() {
                     setFormState((state) => ({ ...state, commentsEnabled: isSelected }))
                   }
                 >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
                   <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
                     <strong>开启评论</strong>
                     <span>后续评论管理会读取这个站点配置。</span>
                   </Switch.Content>

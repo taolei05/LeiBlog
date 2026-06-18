@@ -688,10 +688,10 @@ export function ProfilePage() {
               isSelected={commentEmailNotificationsDraft}
               onChange={setCommentEmailNotificationsDraft}
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
               <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
                 <strong>评论邮件通知</strong>
                 <span>接收全站文章和留言板的新评论、新回复邮件。</span>
               </Switch.Content>
@@ -701,10 +701,10 @@ export function ProfilePage() {
               isSelected={newArticleEmailNotificationsDraft}
               onChange={setNewArticleEmailNotificationsDraft}
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
               <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
                 <strong>新文章邮件通知</strong>
                 <span>有新文章发布时，通过邮箱接收通知。</span>
               </Switch.Content>

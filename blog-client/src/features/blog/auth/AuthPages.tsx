@@ -2106,10 +2106,10 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                       isSelected={commentEmailNotificationsDraft}
                       onChange={setCommentEmailNotificationsDraft}
                     >
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
                       <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
                         <strong>评论回复邮件通知</strong>
                         <span>自己的评论收到直接回复时，通过邮箱通知我。</span>
                       </Switch.Content>
@@ -2119,10 +2119,10 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                       isSelected={newArticleEmailNotificationsDraft}
                       onChange={setNewArticleEmailNotificationsDraft}
                     >
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
                       <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
                         <strong>新文章邮件通知</strong>
                         <span>有新文章发布时，通过邮箱通知我。</span>
                       </Switch.Content>
