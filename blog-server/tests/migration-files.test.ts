@@ -7,6 +7,13 @@ const migrationsDir = join(import.meta.dir, "../src/db/migrations");
 const migrationFiles = readdirSync(migrationsDir)
   .filter((file) => file.endsWith(".sql"))
   .sort();
+function readMigration(file: string) {
+  try {
+    return readFileSync(join(migrationsDir, file), "utf8");
+  } catch {
+    return "";
+  }
+}
 const migration = readFileSync(
   join(migrationsDir, "001_initial_schema.sql"),
   "utf8"
@@ -23,6 +30,7 @@ const authSessionLoginMethodMigration = readFileSync(
   join(migrationsDir, "004_auth_session_login_method.sql"),
   "utf8"
 );
+const googleAuthProviderMigration = readMigration("005_google_auth_provider.sql");
 
 describe("initial database migration", () => {
   test("keeps a consolidated baseline migration", () => {
@@ -31,6 +39,7 @@ describe("initial database migration", () => {
       "002_article_scheduling_and_notifications.sql",
       "003_auth_providers.sql",
       "004_auth_session_login_method.sql",
+      "005_google_auth_provider.sql",
     ]);
   });
 
@@ -141,6 +150,9 @@ describe("initial database migration", () => {
     expect(migration).toContain("user_oauth_accounts_provider_user_unique");
     expect(migration).toContain("oauth_login_tickets_hash_unique");
     expect(authProvidersMigration).toContain("'github', 'GitHub'");
+    expect(migration).toContain("'google', 'Google'");
+    expect(googleAuthProviderMigration).toContain("'google', 'Google'");
+    expect(googleAuthProviderMigration).toContain("'openid', 'profile', 'email'");
   });
 
   test("marks OAuth sessions as front-only for administrator accounts", () => {

@@ -89,6 +89,47 @@ function oauthFetch(
   };
 }
 
+function googleOauthFetch(
+  payload: {
+    email?: string;
+    emailVerified?: boolean;
+    name?: string;
+    picture?: string;
+    sub?: string;
+  } = {}
+) {
+  const calls: string[] = [];
+  const fetcher = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    calls.push(url);
+
+    if (url === "https://oauth2.googleapis.com/token") {
+      return Response.json({
+        access_token: "google-access-token",
+        scope: "openid profile email",
+        token_type: "bearer",
+      });
+    }
+
+    if (url === "https://openidconnect.googleapis.com/v1/userinfo") {
+      return Response.json({
+        email: payload.email ?? "reader-google@example.com",
+        email_verified: payload.emailVerified ?? true,
+        name: payload.name ?? "Google Reader",
+        picture: payload.picture ?? "https://lh3.googleusercontent.com/a/default-user",
+        sub: payload.sub ?? "google-sub-1",
+      });
+    }
+
+    throw new Error(`Unexpected Google OAuth fetch URL: ${url}`);
+  };
+
+  return {
+    calls,
+    fetcher,
+  };
+}
+
 async function configureGithubProvider({
   clientId = "github-client-id",
   redirectUri = "https://taolei.net/api/auth/oauth/github/callback",
@@ -109,9 +150,46 @@ async function configureGithubProvider({
   );
 }
 
+async function configureGoogleProvider({
+  clientId = "google-client-id",
+  redirectUri = "https://taolei.net/api/auth/oauth/google/callback",
+  secret = "google-client-secret",
+} = {}) {
+  return updateAuthProviderSettings(
+    adminUser,
+    "google",
+    {
+      clientId,
+      clientSecret: secret,
+      displayName: "Google",
+      enabled: true,
+      redirectUri,
+      scopes: ["openid", "profile", "email"],
+    },
+    testDb
+  );
+}
+
 async function createStartedGithubState(returnTo = "/profile") {
   const authorization = await createOAuthAuthorization(
     "github",
+    {
+      returnTo,
+    },
+    testDb
+  );
+  const authorizationUrl = new URL(authorization.authorizationUrl);
+
+  return {
+    authorization,
+    state: authorizationUrl.searchParams.get("state") ?? "",
+    url: authorizationUrl,
+  };
+}
+
+async function createStartedGoogleState(returnTo = "/profile") {
+  const authorization = await createOAuthAuthorization(
+    "google",
     {
       returnTo,
     },
@@ -148,6 +226,15 @@ describe("OAuth login providers", () => {
         provider: "github",
         redirectUri: null,
         scopes: ["read:user", "user:email"],
+      },
+      {
+        clientId: null,
+        displayName: "Google",
+        enabled: false,
+        hasClientSecret: false,
+        provider: "google",
+        redirectUri: null,
+        scopes: ["openid", "profile", "email"],
       },
     ]);
     expect(await listPublicAuthProviders(testDb)).toEqual({ items: [] });
@@ -273,6 +360,71 @@ describe("OAuth login providers", () => {
     await expect(
       consumeOAuthLoginTicket(loginTicket.ticket, meta, { client: testDb })
     ).rejects.toThrow("第三方登录票据无效或已过期");
+  });
+
+  test("creates a Google authorization URL and turns a callback into a one-time login ticket", async () => {
+    await configureGoogleProvider({
+      clientId: "google-client-id-callback",
+      secret: "google-client-secret-callback",
+    });
+
+    const { state, url } = await createStartedGoogleState("/profile");
+    expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(url.searchParams.get("client_id")).toBe("google-client-id-callback");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://taolei.net/api/auth/oauth/google/callback"
+    );
+    expect(url.searchParams.get("scope")).toBe("openid profile email");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(state).toHaveLength(43);
+
+    const { fetcher } = googleOauthFetch();
+    const loginTicket = await completeOAuthLogin(
+      "google",
+      {
+        code: "google-code",
+        state,
+      },
+      meta,
+      {
+        client: testDb,
+        fetch: fetcher,
+      }
+    );
+
+    expect(loginTicket).toMatchObject({
+      provider: "google",
+      returnTo: "/profile",
+    });
+    expect(loginTicket.ticket).toHaveLength(43);
+
+    const session = await consumeOAuthLoginTicket(loginTicket.ticket, meta, {
+      client: testDb,
+    });
+    expect(session.user).toMatchObject({
+      avatarUrl: "https://lh3.googleusercontent.com/a/default-user",
+      blogUrl: null,
+      email: "reader-google@example.com",
+      name: "Google Reader",
+      role: "user",
+      username: "reader-google",
+    });
+
+    const [linkedAccount] = await testDb<{
+      provider_email: string | null;
+      provider_user_id: string;
+      user_id: string;
+    }[]>`
+      SELECT user_id, provider_user_id, provider_email
+      FROM user_oauth_accounts
+      WHERE provider = 'google'
+    `;
+    expect(linkedAccount).toEqual({
+      provider_email: "reader-google@example.com",
+      provider_user_id: "google-sub-1",
+      user_id: session.user.id,
+    });
   });
 
   test("binds a verified GitHub email to an existing normal user", async () => {

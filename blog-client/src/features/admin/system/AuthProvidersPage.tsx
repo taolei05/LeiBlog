@@ -26,7 +26,10 @@ type AuthProviderFormState = {
   scopes: string;
 };
 
-const defaultScopes = ["read:user", "user:email"];
+const providerDefaultScopes: Record<string, string[]> = {
+  github: ["read:user", "user:email"],
+  google: ["openid", "profile", "email"],
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -79,6 +82,14 @@ function createDefaultRedirectUri(provider: string) {
   return `${getAdminApiBaseUrl()}/auth/oauth/${provider}/callback`;
 }
 
+function getDefaultScopes(provider: string) {
+  return providerDefaultScopes[provider] ?? [];
+}
+
+function getProviderIcon(provider: string) {
+  return provider === "github" ? "codeSlash" : "key";
+}
+
 function createFormState(provider: AuthProviderSettingsItem): AuthProviderFormState {
   return {
     clientId: provider.clientId ?? "",
@@ -86,7 +97,9 @@ function createFormState(provider: AuthProviderSettingsItem): AuthProviderFormSt
     displayName: provider.displayName,
     enabled: provider.enabled,
     redirectUri: provider.redirectUri ?? createDefaultRedirectUri(provider.provider),
-    scopes: (provider.scopes.length ? provider.scopes : defaultScopes).join(", "),
+    scopes: (provider.scopes.length ? provider.scopes : getDefaultScopes(provider.provider)).join(
+      ", ",
+    ),
   };
 }
 
@@ -209,6 +222,7 @@ export function AuthProvidersPage() {
         {providers.map((provider) => {
           const form = forms[provider.provider] ?? createFormState(provider);
           const isSaving = savingProvider === provider.provider;
+          const defaultScopeText = getDefaultScopes(provider.provider).join("、");
 
           return (
             <section className="auth-provider-panel" key={provider.provider}>
@@ -216,7 +230,7 @@ export function AuthProvidersPage() {
                 <div>
                   <p className="eyebrow">{provider.provider}</p>
                   <h3>
-                    <AppIcon name={provider.provider === "github" ? "codeSlash" : "key"} />
+                    <AppIcon name={getProviderIcon(provider.provider)} />
                     {provider.displayName}
                   </h3>
                 </div>
@@ -235,7 +249,7 @@ export function AuthProvidersPage() {
                     <Switch.Control>
                       <Switch.Thumb />
                     </Switch.Control>
-                    <strong>启用 GitHub 登录</strong>
+                    <strong>启用 {provider.displayName} 登录</strong>
                     <span>启用后仅前台登录页显示这个第三方登录方式。</span>
                   </Switch.Content>
                 </Switch>
@@ -325,7 +339,9 @@ export function AuthProvidersPage() {
                       value={form.scopes}
                     />
                   </InputGroup>
-                  <Description>默认使用 read:user 和 user:email。</Description>
+                  <Description>
+                    {defaultScopeText ? `默认使用 ${defaultScopeText}。` : "未设置默认 Scope。"}
+                  </Description>
                 </TextField>
 
                 <div className="auth-provider-panel__actions">

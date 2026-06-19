@@ -20,13 +20,16 @@ describe("admin auth provider settings", () => {
     expect(routerSource).toContain('path="admin/system/auth-providers"');
   });
 
-  it("edits GitHub OAuth configuration without exposing OAuth on the admin login page", () => {
+  it("edits OAuth provider configuration without exposing OAuth on the admin login page", () => {
     expect(authProvidersPageSource).toContain("/admin/system/auth-providers");
     expect(authProvidersPageSource).toContain("Client Secret");
     expect(authProvidersPageSource).toContain("hasClientSecret");
-    expect(authProvidersPageSource).toContain("启用 GitHub 登录");
+    expect(authProvidersPageSource).toContain("providerDefaultScopes");
+    expect(authProvidersPageSource).toContain('google: ["openid", "profile", "email"]');
+    expect(authProvidersPageSource).toContain("启用 {provider.displayName} 登录");
     expect(adminLoginPageSource).not.toContain("/auth/oauth/");
     expect(adminLoginPageSource).not.toContain("GitHub 登录");
+    expect(adminLoginPageSource).not.toContain("Google 登录");
   });
 
   it("styles provider cards and secret state without nested cards", () => {

@@ -779,9 +779,7 @@ function AuthDialog({
                           variant="tertiary"
                         >
                           <AppIcon name={provider.provider === "github" ? "codeSlash" : "key"} />
-                          {provider.provider === "github"
-                            ? "使用 GitHub 登录"
-                            : `使用 ${provider.displayName} 登录`}
+                          使用 {provider.displayName} 登录
                         </Button>
                       ))}
                     </div>

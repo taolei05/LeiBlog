@@ -59,6 +59,23 @@ type GithubEmail = {
   verified?: boolean;
 };
 
+type GoogleUserInfo = {
+  email?: string;
+  email_verified?: boolean;
+  name?: string;
+  picture?: string;
+  sub?: string;
+};
+
+type OAuthIdentity = {
+  avatarUrl: string | null;
+  email: string | null;
+  name: string;
+  profileUrl: string | null;
+  providerUserId: string;
+  username: string;
+};
+
 export type OAuthAuthorizationInput = {
   returnTo?: string | null;
 };
@@ -154,7 +171,7 @@ async function readJsonResponse<T>(response: Response, message: string) {
   return (await response.json()) as T;
 }
 
-function cleanGithubUsername(value: string | undefined, fallback: string) {
+function cleanOAuthUsername(value: string | undefined, fallback: string) {
   const cleaned = (value ?? fallback)
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
@@ -220,7 +237,7 @@ async function readUserProfileById(userId: string, client: DbClient) {
 }
 
 async function createUniqueUsername(baseValue: string, client: DbClient) {
-  const base = cleanGithubUsername(baseValue, "github-user");
+  const base = cleanOAuthUsername(baseValue, "oauth-user");
 
   for (let index = 0; index < 50; index += 1) {
     const suffix = index === 0 ? "" : `-${index + 1}`;
@@ -238,17 +255,21 @@ async function createUniqueUsername(baseValue: string, client: DbClient) {
   return `${base.slice(0, 51)}-${createRandomToken(4).slice(0, 8)}`;
 }
 
+type AuthProviderConfig = Awaited<ReturnType<typeof getProviderConfig>>;
+
+type FetchGithubIdentityParameters = {
+  code: string;
+  codeVerifier: string;
+  config: AuthProviderConfig;
+  fetcher: FetchLike;
+};
+
 async function fetchGithubIdentity({
   code,
   codeVerifier,
   config,
   fetcher,
-}: {
-  code: string;
-  codeVerifier: string;
-  config: Awaited<ReturnType<typeof getProviderConfig>>;
-  fetcher: FetchLike;
-}) {
+}: FetchGithubIdentityParameters): Promise<OAuthIdentity> {
   const tokenResponse = await fetcher("https://github.com/login/oauth/access_token", {
     body: new URLSearchParams({
       client_id: config.clientId,
@@ -293,9 +314,92 @@ async function fetchGithubIdentity({
   };
 }
 
+type FetchGoogleIdentityParameters = {
+  code: string;
+  codeVerifier: string;
+  config: AuthProviderConfig;
+  fetcher: FetchLike;
+};
+
+async function fetchGoogleIdentity({
+  code,
+  codeVerifier,
+  config,
+  fetcher,
+}: FetchGoogleIdentityParameters): Promise<OAuthIdentity> {
+  const tokenResponse = await fetcher("https://oauth2.googleapis.com/token", {
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      code,
+      code_verifier: codeVerifier,
+      grant_type: "authorization_code",
+      redirect_uri: config.redirectUri,
+    }),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    method: "POST",
+  });
+  const tokenPayload = await readJsonResponse<{ access_token?: string }>(
+    tokenResponse,
+    "Google 授权失败"
+  );
+  const accessToken = ensureString(tokenPayload.access_token, "Google 授权失败");
+  const userPayload = await fetcher("https://openidconnect.googleapis.com/v1/userinfo", {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }).then((response) => readJsonResponse<GoogleUserInfo>(response, "Google 用户资料读取失败"));
+
+  const providerUserId = ensureString(userPayload.sub, "Google 用户资料无效");
+  const email = normalizeEmail(ensureString(userPayload.email, "Google 用户资料无效"));
+  if (!userPayload.email_verified) throw validationError("Google 用户邮箱未验证");
+
+  const username = cleanOAuthUsername(email.split("@")[0], "google-user");
+
+  return {
+    avatarUrl: userPayload.picture?.trim() || null,
+    email,
+    name: userPayload.name?.trim() || username,
+    profileUrl: null,
+    providerUserId,
+    username,
+  };
+}
+
+type FetchOAuthIdentityParameters = {
+  code: string;
+  codeVerifier: string;
+  config: AuthProviderConfig;
+  fetcher: FetchLike;
+  provider: AuthProvider;
+};
+
+async function fetchOAuthIdentity({
+  code,
+  codeVerifier,
+  config,
+  fetcher,
+  provider,
+}: FetchOAuthIdentityParameters) {
+  switch (provider) {
+    case "github":
+      return fetchGithubIdentity({ code, codeVerifier, config, fetcher });
+    case "google":
+      return fetchGoogleIdentity({ code, codeVerifier, config, fetcher });
+    default: {
+      const exhaustive: never = provider;
+      throw validationError(`不支持的登录方式：${exhaustive}`);
+    }
+  }
+}
+
 async function findOrCreateOAuthUser(
   provider: AuthProvider,
-  identity: Awaited<ReturnType<typeof fetchGithubIdentity>>,
+  identity: OAuthIdentity,
   client: DbClient
 ) {
   const [linked] = await client<OAuthAccountUserRow[]>`
@@ -432,8 +536,12 @@ export async function createOAuthAuthorization(
   const config = await getProviderConfig(provider, client);
   const state = createRandomToken(32);
   const codeVerifier = createRandomToken(32);
-  const authorizationUrl = new URL("https://github.com/login/oauth/authorize");
+  const authorizationUrl =
+    provider === "google"
+      ? new URL("https://accounts.google.com/o/oauth2/v2/auth")
+      : new URL("https://github.com/login/oauth/authorize");
 
+  if (provider === "google") authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("client_id", config.clientId);
   authorizationUrl.searchParams.set("redirect_uri", config.redirectUri);
   authorizationUrl.searchParams.set("scope", config.scopes.join(" "));
@@ -493,11 +601,12 @@ export async function completeOAuthLogin(
 
     return row;
   }, client);
-  const identity = await fetchGithubIdentity({
+  const identity = await fetchOAuthIdentity({
     code: input.code,
     codeVerifier: state.code_verifier,
     config,
     fetcher,
+    provider,
   });
 
   const { ticket, user } = await withTransaction(async (tx) => {

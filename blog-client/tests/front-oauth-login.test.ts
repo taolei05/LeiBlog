@@ -18,7 +18,7 @@ describe("front OAuth login", () => {
   });
 
   it("renders provider login actions only on the front login dialog", () => {
-    expect(authPagesSource).toContain("使用 GitHub 登录");
+    expect(authPagesSource).toContain("provider.displayName");
     expect(authPagesSource).toContain("front-oauth-actions");
     expect(authPagesSource).toContain("onStartOAuth");
     expect(layoutsCss).toContain(".front-oauth-actions");

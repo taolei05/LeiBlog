@@ -1,4 +1,4 @@
-export type AuthProvider = "github";
+export type AuthProvider = "github" | "google";
 
 export type AuthProviderPublicItem = {
   displayName: string;
@@ -24,12 +24,18 @@ export const authProviderDefaults: Record<
     displayName: "GitHub",
     scopes: ["read:user", "user:email"],
   },
+  google: {
+    displayName: "Google",
+    scopes: ["openid", "profile", "email"],
+  },
 };
 
 export const supportedAuthProviders = Object.keys(authProviderDefaults) as AuthProvider[];
 
 export function readAuthProvider(value: string): AuthProvider | null {
-  return value === "github" ? value : null;
+  if (value === "github" || value === "google") return value;
+
+  return null;
 }
 
 export function requireAuthProvider(value: string): AuthProvider {

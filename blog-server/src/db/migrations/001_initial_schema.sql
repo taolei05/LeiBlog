@@ -127,7 +127,9 @@ BEFORE UPDATE ON auth_provider_settings
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 INSERT INTO auth_provider_settings (provider, display_name, enabled, scopes)
-VALUES ('github', 'GitHub', false, ARRAY['read:user', 'user:email'])
+VALUES
+  ('github', 'GitHub', false, ARRAY['read:user', 'user:email']),
+  ('google', 'Google', false, ARRAY['openid', 'profile', 'email'])
 ON CONFLICT (provider) DO NOTHING;
 
 CREATE TABLE user_oauth_accounts (
