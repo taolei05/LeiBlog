@@ -159,6 +159,20 @@ describe("comment notification emails", () => {
     expect(html).toContain("word-break:break-word");
   });
 
+  test("renders a comment action link like article notification emails", () => {
+    const html = renderCommentNotificationEmailHtml({
+      commentUrl: "https://example.com/guestbook?comment=abc&from=<mail>",
+      content: "回复内容",
+      description: "有人回复了你的评论：",
+      title: "评论回复通知",
+    });
+
+    expect(html).toContain("前往查看");
+    expect(html).toContain(
+      'href="https://example.com/guestbook?comment=abc&amp;from=&lt;mail&gt;"'
+    );
+  });
+
   test("uses the configured site logo by Shanghai day and night, and falls back to the site initial", () => {
     const dayBranding = resolveEmailBranding(
       {
@@ -249,6 +263,9 @@ describe("comment notification emails", () => {
     expect(adminNotifications[0]?.description).toBe("张三在《评论通知文章》文章评论了：");
     expect(adminNotifications[0]?.subject).toContain("新评论通知");
     expect(adminNotifications[0]?.subject).toContain("评论通知文章");
+    expect(adminNotifications[0]?.commentUrl).toBe(
+      `http://localhost:3000/articles/comment-notification-article?comment=${commentId}#comments`
+    );
   });
 
   test("resolves only the direct parent author for reply notifications", async () => {
@@ -289,6 +306,9 @@ describe("comment notification emails", () => {
     expect(replyNotifications[0]?.description).toBe("赵六在《评论通知文章》文章中回复了你的评论：");
     expect(replyNotifications[0]?.subject).toContain("评论回复通知");
     expect(replyNotifications[0]?.subject).toContain("评论通知文章");
+    expect(replyNotifications[0]?.commentUrl).toBe(
+      `http://localhost:3000/articles/comment-notification-article?comment=${replyId}#comments`
+    );
     expect(notifications.some((notification) => notification.to === "other@example.com")).toBe(false);
   });
 
@@ -468,6 +488,9 @@ describe("comment notification emails", () => {
     expect(guestbookNotifications[0]?.description).toBe("guest-reply在留言板评论了：");
     expect(guestbookNotifications[0]?.subject).toContain("新评论通知");
     expect(guestbookNotifications[0]?.subject).toContain("留言板");
+    expect(guestbookNotifications[0]?.commentUrl).toBe(
+      `http://localhost:3000/guestbook?comment=${guestbookCommentId}#comments`
+    );
     expect(replyNotifications.find((notification) => notification.kind === "admin")?.description).toBe(
       "guest-reply在留言板回复了评论："
     );
@@ -485,6 +508,7 @@ describe("comment notification emails", () => {
   test("merge helper defensively deduplicates normalized recipient emails", () => {
     const merged = mergeCommentNotificationRecipients([
       {
+        commentUrl: "https://example.com/comments/1",
         content: "第一封",
         description: "管理员通知",
         kind: "admin",
@@ -492,6 +516,7 @@ describe("comment notification emails", () => {
         to: " User@Example.COM ",
       },
       {
+        commentUrl: "https://example.com/comments/2",
         content: "第二封",
         description: "回复通知",
         kind: "reply",
@@ -499,6 +524,7 @@ describe("comment notification emails", () => {
         to: "user@example.com",
       },
       {
+        commentUrl: "https://example.com/comments/3",
         content: "无效邮箱",
         description: "无效",
         kind: "admin",
@@ -509,6 +535,7 @@ describe("comment notification emails", () => {
 
     expect(merged).toEqual([
       {
+        commentUrl: "https://example.com/comments/1",
         content: "第一封",
         description: "管理员通知",
         kind: "admin",
@@ -563,11 +590,20 @@ describe("comment notification emails", () => {
 
     globalThis.fetch = Object.assign(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as { from: string; html: string; to: string[] };
+        const body = JSON.parse(String(init?.body)) as {
+          from: string;
+          html: string;
+          text: string;
+          to: string[];
+        };
+        const commentUrl = `http://localhost:3000/articles/comment-notification-article?comment=${commentId}#comments`;
         fetchCalls.push(body.to[0] ?? "");
         expect(body.from).toBe("Moon Blog <no-reply@mail.example.com>");
         expect(body.html).toContain("Moon Blog");
         expect(body.html).toContain("http://localhost:3000/uploads/site/mail-logo.png");
+        expect(body.html).toContain("前往查看");
+        expect(body.html).toContain(commentUrl);
+        expect(body.text).toContain(commentUrl);
 
         return new Response("{}", {
           status: fetchCalls.length === 1 ? 500 : 200,

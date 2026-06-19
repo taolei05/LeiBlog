@@ -244,7 +244,10 @@ export async function updateUserByAdmin(
           role = COALESCE(${input.role ?? null}, role),
           avatar_url = COALESCE(${cleanOptional(input.avatarUrl)}, avatar_url),
           social_links = COALESCE(${socialLinks ? JSON.stringify(socialLinks) : null}::jsonb, social_links),
-          blog_url = COALESCE(${cleanOptional(input.blogUrl)}, blog_url),
+          blog_url = CASE
+            WHEN ${input.blogUrl !== undefined} THEN ${cleanOptional(input.blogUrl)}
+            ELSE blog_url
+          END,
           password_hash = COALESCE(${passwordHash}, password_hash)
       WHERE id = ${userId}
     `;

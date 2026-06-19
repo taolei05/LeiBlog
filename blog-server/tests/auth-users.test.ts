@@ -525,6 +525,26 @@ describe("auth and user services", () => {
     expect(updated.role).toBe("user");
     expect(updated.name).toBe("普通用户");
 
+    const withBlogUrl = await updateUserByAdmin(
+      currentAdmin,
+      created.id,
+      {
+        blogUrl: "https://reader.example.com",
+      },
+      testDb
+    );
+    expect(withBlogUrl.blogUrl).toBe("https://reader.example.com");
+
+    const withoutBlogUrl = await updateUserByAdmin(
+      currentAdmin,
+      created.id,
+      {
+        blogUrl: null,
+      },
+      testDb
+    );
+    expect(withoutBlogUrl.blogUrl).toBeNull();
+
     await expect(
       createUserByAdmin(
         {

@@ -10,6 +10,7 @@ import {
   Card,
   Chip,
   Label,
+  Link,
   Popover,
   ScrollShadow,
   Separator,
@@ -204,6 +205,22 @@ function sortComments(comments: BlogComment[], sortOrder: CommentSortOrder) {
 
 function commentTargetName(target: CommentTarget) {
   return target === "guestbook" ? "留言" : "评论";
+}
+
+function getCommentAvatarInitials(name: string) {
+  const compactName = name.trim();
+  if (!compactName) return "?";
+
+  const nameParts = compactName.split(/\s+/).filter(Boolean);
+  if (nameParts.length > 1) {
+    return nameParts
+      .slice(0, 2)
+      .map((part) => Array.from(part)[0] ?? "")
+      .join("")
+      .toUpperCase();
+  }
+
+  return Array.from(compactName.replace(/\s+/g, "")).slice(0, 2).join("").toUpperCase();
 }
 
 type CommentContentProps = {
@@ -694,14 +711,29 @@ export function CommentThread({ articleId, description, target, title }: Comment
         }
         id={`comment-${comment.id}`}
       >
-        <Avatar className="comment-item__avatar" size="sm">
-          {comment.author.avatarUrl ? <Avatar.Image src={comment.author.avatarUrl} /> : null}
-          <Avatar.Fallback>{authorName.slice(0, 1).toUpperCase()}</Avatar.Fallback>
+        <Avatar className="comment-item__avatar" color="accent" size="sm" variant="soft">
+          {comment.author.avatarUrl ? (
+            <Avatar.Image alt={authorName} src={comment.author.avatarUrl} />
+          ) : null}
+          <Avatar.Fallback className="comment-item__avatar-fallback">
+            {getCommentAvatarInitials(authorName)}
+          </Avatar.Fallback>
         </Avatar>
         <div className="comment-item__body">
           <header className="comment-item__header">
             <div className="comment-item__headline">
-              <strong>{authorName}</strong>
+              {comment.author.blogUrl ? (
+                <Link
+                  className="comment-item__author-link"
+                  href={comment.author.blogUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {authorName}
+                </Link>
+              ) : (
+                <strong>{authorName}</strong>
+              )}
               {comment.author.tags.length > 0 ? (
                 <div className="comment-item__tags">
                   {comment.author.tags.map((tag) => (

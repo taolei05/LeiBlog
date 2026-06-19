@@ -3,12 +3,14 @@ import {
   renderCommentNotificationEmailHtml,
   sendResendEmail,
 } from "../../auth/service";
+import { appConfig } from "../../shared/config";
 import type { DbClient } from "../../shared/db";
 import { db } from "../../shared/db";
 
 export type CommentNotificationKind = "admin" | "reply";
 
 export type CommentEmailNotification = {
+  commentUrl: string;
   content: string;
   description: string;
   kind: CommentNotificationKind;
@@ -18,11 +20,13 @@ export type CommentEmailNotification = {
 
 type CommentNotificationCommentRow = {
   article_id: string | null;
+  article_slug: string | null;
   article_title: string | null;
   author_id: string;
   author_name: string | null;
   author_username: string;
   content: string;
+  id: string;
   parent_id: string | null;
   target_type: "article" | "guestbook";
 };
@@ -46,6 +50,29 @@ function normalizeNotificationEmail(email: string | null | undefined) {
 
 function getDisplayName(row: { author_name: string | null; author_username: string }) {
   return row.author_name?.trim() || row.author_username;
+}
+
+function getPublicSiteBaseUrl() {
+  const preferredOrigin = appConfig.corsOrigins[0]?.trim();
+  if (preferredOrigin) return preferredOrigin.replace(/\/+$/, "");
+
+  const host = appConfig.host === "0.0.0.0" ? "localhost" : appConfig.host;
+  return `http://${host}:${appConfig.port}`;
+}
+
+function createCommentUrl(comment: CommentNotificationCommentRow) {
+  const commentQuery = `comment=${encodeURIComponent(comment.id)}`;
+
+  if (comment.target_type === "article") {
+    const articleSlug = comment.article_slug?.trim();
+    const articlePath = articleSlug
+      ? `/articles/${encodeURIComponent(articleSlug)}`
+      : "/articles";
+
+    return `${getPublicSiteBaseUrl()}${articlePath}?${commentQuery}#comments`;
+  }
+
+  return `${getPublicSiteBaseUrl()}/guestbook?${commentQuery}#comments`;
 }
 
 type CreateNotificationDescriptionParameters = {
@@ -111,6 +138,7 @@ function createCommentNotification({
   to,
 }: CreateCommentNotificationParameters): CommentEmailNotification {
   return {
+    commentUrl: createCommentUrl(comment),
     content: comment.content,
     description: createNotificationDescription({
       articleTitle: comment.article_title,
@@ -155,9 +183,9 @@ export async function resolveCommentNotifications(
   client: DbClient = db
 ) {
   const [comment] = await client<CommentNotificationCommentRow[]>`
-    SELECT c.target_type, c.article_id, c.parent_id, c.content,
+    SELECT c.id, c.target_type, c.article_id, c.parent_id, c.content,
            u.id AS author_id, u.username AS author_username, u.name AS author_name,
-           a.title AS article_title
+           a.title AS article_title, a.slug AS article_slug
     FROM comments c
     JOIN users u ON u.id = c.user_id
     LEFT JOIN articles a ON a.id = c.article_id
@@ -226,12 +254,13 @@ export async function sendCommentEmailNotifications(
         branding,
         html: renderCommentNotificationEmailHtml({
           branding,
+          commentUrl: notification.commentUrl,
           content: notification.content,
           description: notification.description,
           title: notification.subject,
         }),
         subject: notification.subject,
-        text: `${notification.description}\n\n${notification.content}`,
+        text: `${notification.description}\n\n${notification.content}\n\n${notification.commentUrl}`,
         to: notification.to,
       });
       sentAnyEmail = sentAnyEmail || sent;

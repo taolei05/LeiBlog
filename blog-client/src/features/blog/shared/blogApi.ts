@@ -67,6 +67,7 @@ export type BlogArchiveGroup = {
 export type BlogComment = {
   author: {
     avatarUrl: string | null;
+    blogUrl: string | null;
     name: string | null;
     role: "admin" | "user";
     tags: string[];
@@ -137,6 +138,7 @@ type ApiArticleDetail = ApiArticleSummary & {
 type ApiCommentItem = {
   author: {
     avatarUrl: string | null;
+    blogUrl: string | null;
     name: string | null;
     role: "admin" | "user";
     tags: string[];
@@ -243,6 +245,7 @@ function toCommentItem(value: unknown): ApiCommentItem {
   return {
     author: {
       avatarUrl: resolveApiAssetUrl(readNullableString(authorValue, "avatarUrl")) ?? null,
+      blogUrl: readNullableString(authorValue, "blogUrl"),
       name: readNullableString(authorValue, "name"),
       role: readRole(authorValue.role),
       tags: readArray(authorValue, "tags").map((tag) => {

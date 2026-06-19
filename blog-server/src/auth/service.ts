@@ -364,6 +364,7 @@ export function renderNoticeEmailHtml({
 
 type RenderCommentNotificationEmailHtmlParameters = {
   branding?: EmailBranding;
+  commentUrl?: string;
   content: string;
   description: string;
   title: string;
@@ -371,14 +372,20 @@ type RenderCommentNotificationEmailHtmlParameters = {
 
 export function renderCommentNotificationEmailHtml({
   branding,
+  commentUrl,
   content,
   description,
   title,
 }: RenderCommentNotificationEmailHtmlParameters) {
+  const actionHtml = commentUrl
+    ? `<p style="margin:20px 0 0;"><a href="${escapeHtml(commentUrl)}" style="display:inline-block;padding:11px 16px;border-radius:12px;background:#ec4899;color:#ffffff;font-size:14px;font-weight:800;line-height:1.2;text-decoration:none;">前往查看</a></p>`
+    : "";
+
   return renderLeiBlogEmailHtml({
     bodyHtml: `
       <p style="margin:0 0 14px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
       <div style="margin:18px 0 0;padding:16px 18px;border:1px solid #e4e4e7;border-radius:18px;background:#fafafa;color:#27272a;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word;">${escapeHtml(content)}</div>
+      ${actionHtml}
     `,
     branding,
     preheader: description,
