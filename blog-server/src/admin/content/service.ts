@@ -1,7 +1,5 @@
 import type { AuthUser } from "../../shared/auth";
 import { requireAdmin } from "../../shared/auth";
-import type { StoredEncryptedSecret } from "../../shared/crypto";
-import { decryptSecret } from "../../shared/crypto";
 import {
   clearAllArticleCache,
   clearArticleCache,
@@ -10,7 +8,12 @@ import type { DbClient } from "../../shared/db";
 import { db, withTransaction } from "../../shared/db";
 import { conflict, notFound, validationError } from "../../shared/errors";
 import { createArticleSummary } from "../../shared/mdx/summary";
-import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
+import {
+  createDeepLPreferredSlug,
+  createPinyinSlug,
+  normalizeSlug,
+  withSlugSuffix,
+} from "../../shared/slug";
 import {
   scheduleArticleEmailNotifications,
   sendArticleEmailNotifications,
@@ -43,6 +46,10 @@ export interface CategoryInput {
 
 export interface TagInput extends CategoryInput {
   color?: string | null;
+}
+
+export interface TagBatchInput {
+  items: TagInput[];
 }
 
 export interface ContributorInput {
@@ -119,10 +126,6 @@ interface RelationItem {
   linkUrl?: string | null;
 }
 
-interface DeepLConfigRow {
-  deepl_api_key_encrypted: StoredEncryptedSecret | null;
-}
-
 function toIso(value: Date | string | null) {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
@@ -137,6 +140,44 @@ function cleanOptional(value: string | null | undefined) {
 
 function cleanIdList(values: string[] | undefined) {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+const randomTagColors = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#0ea5e9",
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
+  "#f43f5e",
+];
+
+function randomTagColor() {
+  return randomTagColors[Math.floor(Math.random() * randomTagColors.length)] ?? "#ec4899";
+}
+
+function cleanBatchTagItems(items: TagInput[]) {
+  const seenNames = new Set<string>();
+  const cleaned: TagInput[] = [];
+
+  for (const item of items) {
+    const name = item.name.trim();
+    const key = name.toLocaleLowerCase("zh-CN");
+
+    if (!name || seenNames.has(key)) continue;
+
+    seenNames.add(key);
+    cleaned.push({
+      color: cleanOptional(item.color) ?? randomTagColor(),
+      name,
+      slug: cleanOptional(item.slug) ?? undefined,
+    });
+  }
+
+  return cleaned;
 }
 
 type ParseDateParameters = {
@@ -334,9 +375,12 @@ async function createUniqueManagedSlug(
   client: DbClient,
   table: SlugTable,
   baseValue: string,
-  exceptId?: string
+  exceptId?: string,
+  shouldTranslate = true
 ) {
-  const baseSlug = normalizeSlug(baseValue) || createPinyinSlug(baseValue) || "item";
+  const baseSlug = shouldTranslate
+    ? await createDeepLPreferredSlug(baseValue, client, "item")
+    : normalizeSlug(baseValue) || createPinyinSlug(baseValue) || "item";
 
   for (let index = 1; index < 1000; index += 1) {
     const candidate = withSlugSuffix(baseSlug, index);
@@ -346,43 +390,6 @@ async function createUniqueManagedSlug(
   throw conflict("slug 已存在");
 }
 
-async function translateTitleForSlug(title: string, client: DbClient) {
-  const [config] = await client<DeepLConfigRow[]>`
-    SELECT deepl_api_key_encrypted
-    FROM site_config
-    WHERE id = 1
-  `;
-  const apiKey = decryptSecret(config?.deepl_api_key_encrypted);
-  if (!apiKey) return null;
-
-  const endpoint = apiKey.endsWith(":fx")
-    ? "https://api-free.deepl.com/v2/translate"
-    : "https://api.deepl.com/v2/translate";
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `DeepL-Auth-Key ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text: [title],
-        target_lang: "EN",
-      }),
-    });
-
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as {
-      translations?: Array<{ text?: string }>;
-    };
-    return data.translations?.[0]?.text ?? null;
-  } catch {
-    return null;
-  }
-}
-
 async function createArticleSlugBase(
   title: string,
   explicitSlug: string | undefined,
@@ -390,8 +397,7 @@ async function createArticleSlugBase(
 ) {
   if (explicitSlug?.trim()) return normalizeSlug(explicitSlug);
 
-  const translated = await translateTitleForSlug(title, client);
-  return normalizeSlug(translated ?? createPinyinSlug(title)) || "article";
+  return createDeepLPreferredSlug(title, client, "article");
 }
 
 async function getCategoryById(id: string, client: DbClient = db) {
@@ -479,7 +485,9 @@ export async function createCategory(
   client: DbClient = db
 ) {
   requireAdmin(currentUser);
-  const slug = await createUniqueManagedSlug(client, "article_categories", input.slug ?? input.name);
+  const slug = input.slug?.trim()
+    ? await createUniqueManagedSlug(client, "article_categories", input.slug, undefined, false)
+    : await createUniqueManagedSlug(client, "article_categories", input.name);
   const [row] = await client<TaxonomyRow[]>`
     INSERT INTO article_categories (name, slug)
     VALUES (${input.name.trim()}, ${slug})
@@ -498,7 +506,7 @@ export async function updateCategory(
   requireAdmin(currentUser);
   await getCategoryById(id, client);
   const slug = input.slug
-    ? await createUniqueManagedSlug(client, "article_categories", input.slug, id)
+    ? await createUniqueManagedSlug(client, "article_categories", input.slug, id, false)
     : undefined;
 
   await client`
@@ -554,10 +562,12 @@ export async function listTags(currentUser: AuthUser, query: ListQuery, client: 
 
 export async function createTag(currentUser: AuthUser, input: TagInput, client: DbClient = db) {
   requireAdmin(currentUser);
-  const slug = await createUniqueManagedSlug(client, "article_tags", input.slug ?? input.name);
+  const slug = input.slug?.trim()
+    ? await createUniqueManagedSlug(client, "article_tags", input.slug, undefined, false)
+    : await createUniqueManagedSlug(client, "article_tags", input.name);
   const [row] = await client<TaxonomyRow[]>`
     INSERT INTO article_tags (name, slug, color)
-    VALUES (${input.name.trim()}, ${slug}, ${cleanOptional(input.color)})
+    VALUES (${input.name.trim()}, ${slug}, ${cleanOptional(input.color) ?? randomTagColor()})
     RETURNING id, name, slug, color, created_at, updated_at
   `;
   await clearAllArticleCache();
@@ -573,7 +583,7 @@ export async function updateTag(
   requireAdmin(currentUser);
   await getTagById(id, client);
   const slug = input.slug
-    ? await createUniqueManagedSlug(client, "article_tags", input.slug, id)
+    ? await createUniqueManagedSlug(client, "article_tags", input.slug, id, false)
     : undefined;
 
   await client`
@@ -585,6 +595,38 @@ export async function updateTag(
   `;
   await clearAllArticleCache();
   return getTagById(id, client);
+}
+
+export async function createTags(
+  currentUser: AuthUser,
+  input: TagBatchInput,
+  client: DbClient = db
+) {
+  requireAdmin(currentUser);
+  const items = cleanBatchTagItems(input.items);
+  if (items.length === 0) throw validationError("标签名称不能为空");
+
+  const rows = await withTransaction(async (tx) => {
+    const createdRows: TaxonomyRow[] = [];
+
+    for (const item of items) {
+      const slug = item.slug?.trim()
+        ? await createUniqueManagedSlug(tx, "article_tags", item.slug, undefined, false)
+        : await createUniqueManagedSlug(tx, "article_tags", item.name);
+      const [row] = await tx<TaxonomyRow[]>`
+        INSERT INTO article_tags (name, slug, color)
+        VALUES (${item.name.trim()}, ${slug}, ${cleanOptional(item.color)})
+        RETURNING id, name, slug, color, created_at, updated_at
+      `;
+
+      createdRows.push(row);
+    }
+
+    return createdRows;
+  }, client);
+
+  await clearAllArticleCache();
+  return { ok: true, items: rows.map(toTag) };
 }
 
 export async function deleteTag(currentUser: AuthUser, id: string, client: DbClient = db) {
@@ -888,7 +930,7 @@ export async function createArticle(
   let articleId = "";
 
   await withTransaction(async (tx) => {
-    const slug = await createUniqueManagedSlug(tx, "articles", baseSlug);
+    const slug = await createUniqueManagedSlug(tx, "articles", baseSlug, undefined, false);
     const [row] = await tx<{ id: string }[]>`
       INSERT INTO articles (
         author_id, title, slug, summary, content_mdx, cover_image_url,
@@ -969,7 +1011,7 @@ export async function updateArticle(
   const wasPublic = isPublicArticleState(existing.status, existing.publishedAt);
   const slug =
     input.slug?.trim()
-      ? await createUniqueManagedSlug(client, "articles", input.slug, id)
+      ? await createUniqueManagedSlug(client, "articles", input.slug, id, false)
       : undefined;
 
   await withTransaction(async (tx) => {

@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
+  createMediaFolder,
   deleteMediaFolder,
   deleteMedia,
   getMediaById,
@@ -19,6 +20,7 @@ import {
 } from "../src/admin/media/service";
 import { hashPassword, type AuthUser } from "../src/shared/auth";
 import { loadConfig } from "../src/shared/config";
+import { encryptSecret } from "../src/shared/crypto";
 
 const POSTGRES_ADMIN_URL =
   process.env.TEST_POSTGRES_ADMIN_URL ??
@@ -229,5 +231,55 @@ describe("admin media service", () => {
     await expect(
       deleteMediaFolder(currentAdmin, websiteIcons!.id, { client: testDb, config })
     ).rejects.toThrow("系统媒体文件夹禁止删除");
+  });
+
+  test("uses DeepL for generated media folder slugs when configured", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      UPLOADS_DIR: uploadRoot,
+      UPLOADS_URL_PREFIX: "/uploads",
+      UPLOAD_MAX_FILE_SIZE_BYTES: "1024",
+    });
+    const encryptedDeepLApiKey = encryptSecret("deepl-secret");
+    const originalFetch = globalThis.fetch;
+
+    await testDb`
+      INSERT INTO site_config (id, deepl_api_key_encrypted)
+      VALUES (1, ${JSON.stringify(encryptedDeepLApiKey)}::jsonb)
+      ON CONFLICT (id) DO UPDATE
+      SET deepl_api_key_encrypted = EXCLUDED.deepl_api_key_encrypted
+    `;
+
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("api-free.deepl.com") || url.includes("api.deepl.com")) {
+          const body = JSON.parse(String(init?.body)) as { target_lang: string; text: string[] };
+          expect(body).toEqual({ target_lang: "EN", text: ["部署资料"] });
+
+          return Response.json({ translations: [{ text: "deployment files" }] });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      },
+      originalFetch,
+    );
+
+    try {
+      const folder = await createMediaFolder(
+        currentAdmin,
+        { name: "部署资料" },
+        { client: testDb, config },
+      );
+
+      expect(folder.item.slug).toBe("deployment-files");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await testDb`
+        UPDATE site_config
+        SET deepl_api_key_encrypted = null
+        WHERE id = 1
+      `;
+    }
   });
 });

@@ -11,7 +11,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { AdminDataPage } from "../shared/AdminDataPage";
-import { AdminFormModal, AdminInputGroupField } from "../shared/admin-form-modal";
+import {
+  AdminFormModal,
+  AdminInputGroupField,
+  AdminTextAreaGroupField,
+} from "../shared/admin-form-modal";
 import type {
   DataTableBulkAction,
   DataTableColumn,
@@ -55,6 +59,10 @@ type TagEditorModalState =
       setNotice: (message: string) => void;
     };
 
+type BatchTagModalState = {
+  setNotice: (message: string) => void;
+};
+
 type TagFormState = {
   color: string;
   name: string;
@@ -83,6 +91,15 @@ function optionalFormValue(value: string) {
   const trimmed = value.trim();
 
   return trimmed ? trimmed : null;
+}
+
+function parseBatchTagNames(value: string) {
+  const names = value
+    .split(/[\n,，;；]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return [...new Set(names)];
 }
 
 const tagColumns: DataTableColumn<TagRow>[] = [
@@ -192,6 +209,8 @@ export function TagsPage() {
   const navigate = useNavigate();
   const [tagRows, setTagRows] = useState<TagRow[]>([]);
   const [tagModalState, setTagModalState] = useState<TagEditorModalState | null>(null);
+  const [batchTagModalState, setBatchTagModalState] = useState<BatchTagModalState | null>(null);
+  const [batchTagNames, setBatchTagNames] = useState("");
   const [tagForm, setTagForm] = useState<TagFormState>({
     color: defaultTagColor,
     name: "",
@@ -199,6 +218,7 @@ export function TagsPage() {
   });
   const [tagColor, setTagColor] = useState(parseColor(defaultTagColor));
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isBatchCreating, setIsBatchCreating] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   async function loadTags() {
@@ -214,7 +234,6 @@ export function TagsPage() {
     if (!tagModalState) return;
 
     const name = tagForm.name.trim();
-    const color = tagColor.toString("hex");
     if (!name) {
       tagModalState.setNotice("标签名称不能为空");
       return;
@@ -225,11 +244,13 @@ export function TagsPage() {
 
       if (tagModalState.mode === "create") {
         await adminFetch("/admin/content/tags", {
-          body: { color, name, slug: optionalFormValue(tagForm.slug) ?? undefined },
+          body: { name, slug: optionalFormValue(tagForm.slug) ?? undefined },
           method: "POST",
         });
         tagModalState.setNotice("标签已创建");
       } else {
+        const color = tagColor.toString("hex");
+
         await adminFetch(`/admin/content/tags/${tagModalState.row.id}`, {
           body: { color, name, slug: optionalFormValue(tagForm.slug) ?? undefined },
           method: "PATCH",
@@ -248,6 +269,33 @@ export function TagsPage() {
     }
   }
 
+  async function submitBatchTags() {
+    if (!batchTagModalState) return;
+
+    const names = parseBatchTagNames(batchTagNames);
+    if (names.length === 0) {
+      batchTagModalState.setNotice("标签名称不能为空");
+      return;
+    }
+
+    try {
+      setIsBatchCreating(true);
+      const response = await adminFetch<{ items: AdminTagItem[] }>("/admin/content/tags/batch", {
+        body: { items: names.map((name) => ({ name })) },
+        method: "POST",
+      });
+
+      setBatchTagModalState(null);
+      setBatchTagNames("");
+      setReloadKey((key) => key + 1);
+      batchTagModalState.setNotice(`已创建 ${response.items.length} 个标签`);
+    } catch (error) {
+      batchTagModalState.setNotice(error instanceof Error ? error.message : "批量创建标签失败");
+    } finally {
+      setIsBatchCreating(false);
+    }
+  }
+
   const tagToolbarActions: DataTableToolbarAction<TagRow>[] = [
     {
       confirmation: "none",
@@ -257,6 +305,15 @@ export function TagsPage() {
         setTagForm({ color: defaultTagColor, name: "", slug: "" });
         setTagColor(parseColor(defaultTagColor));
         setTagModalState({ mode: "create", setNotice });
+      },
+    },
+    {
+      confirmation: "none",
+      icon: "pricetags",
+      label: "批量创建",
+      onPress: ({ setNotice }) => {
+        setBatchTagNames("");
+        setBatchTagModalState({ setNotice });
       },
     },
     {
@@ -333,6 +390,7 @@ export function TagsPage() {
   ];
   const featuredCount = tagRows.filter((row) => row.status === "featured").length;
   const cleanupCount = tagRows.filter((row) => row.status === "cleanup").length;
+  const isTagColorEditable = tagModalState !== null && tagModalState.mode === "rename";
 
   return (
     <AdminDataPage
@@ -360,8 +418,8 @@ export function TagsPage() {
           setTagColor(parseColor(defaultTagColor));
         }}
         onSubmit={submitTagName}
-        submitLabel={tagModalState?.mode === "rename" ? "保存标签" : "创建标签"}
-        title={tagModalState?.mode === "rename" ? "编辑标签" : "新建标签"}
+        submitLabel={isTagColorEditable ? "保存标签" : "创建标签"}
+        title={isTagColorEditable ? "编辑标签" : "新建标签"}
       >
         <AdminInputGroupField
           icon="pricetags"
@@ -379,33 +437,61 @@ export function TagsPage() {
           placeholder="tools"
           value={tagForm.slug}
         />
-        <div className="admin-tag-color-field">
-          <Label>标签颜色</Label>
-          <ColorPicker value={tagColor} onChange={setTagColor}>
-            <ColorPicker.Trigger className="admin-tag-color-trigger">
-              <ColorSwatch className="admin-tag-color-trigger__swatch" />
-              <span>{tagColor.toString("hex")}</span>
-            </ColorPicker.Trigger>
-            <ColorPicker.Popover className="admin-tag-color-popover">
-              <ColorArea colorSpace="hsb" xChannel="saturation" yChannel="brightness">
-                <ColorArea.Thumb />
-              </ColorArea>
-              <ColorSlider aria-label="色相" channel="hue" colorSpace="hsb">
-                <ColorSlider.Track>
-                  <ColorSlider.Thumb />
-                </ColorSlider.Track>
-              </ColorSlider>
-              <ColorField aria-label="标签颜色值">
-                <ColorField.Group variant="secondary">
-                  <ColorField.Prefix>
-                    <ColorSwatch size="xs" />
-                  </ColorField.Prefix>
-                  <ColorField.Input />
-                </ColorField.Group>
-              </ColorField>
-            </ColorPicker.Popover>
-          </ColorPicker>
-        </div>
+        {isTagColorEditable ? (
+          <div className="admin-tag-color-field">
+            <Label>标签颜色</Label>
+            <ColorPicker value={tagColor} onChange={setTagColor}>
+              <ColorPicker.Trigger className="admin-tag-color-trigger">
+                <ColorSwatch className="admin-tag-color-trigger__swatch" />
+                <span>{tagColor.toString("hex")}</span>
+              </ColorPicker.Trigger>
+              <ColorPicker.Popover className="admin-tag-color-popover">
+                <ColorArea colorSpace="hsb" xChannel="saturation" yChannel="brightness">
+                  <ColorArea.Thumb />
+                </ColorArea>
+                <ColorSlider aria-label="色相" channel="hue" colorSpace="hsb">
+                  <ColorSlider.Track>
+                    <ColorSlider.Thumb />
+                  </ColorSlider.Track>
+                </ColorSlider>
+                <ColorField aria-label="标签颜色值">
+                  <ColorField.Group variant="secondary">
+                    <ColorField.Prefix>
+                      <ColorSwatch size="xs" />
+                    </ColorField.Prefix>
+                    <ColorField.Input />
+                  </ColorField.Group>
+                </ColorField>
+              </ColorPicker.Popover>
+            </ColorPicker>
+          </div>
+        ) : null}
+      </AdminFormModal>
+      <AdminFormModal
+        confirmDescription="将按输入顺序创建多个标签，Slug 由后端自动生成，颜色由系统随机分配。"
+        description="支持每行一个标签，也支持用逗号分隔。"
+        icon="pricetags"
+        isOpen={batchTagModalState !== null}
+        isSubmitting={isBatchCreating}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          setBatchTagModalState(null);
+          setBatchTagNames("");
+        }}
+        onSubmit={submitBatchTags}
+        submitLabel="批量创建"
+        title="批量创建标签"
+      >
+        <AdminTextAreaGroupField
+          description="重复名称会自动忽略。"
+          icon="pricetags"
+          isRequired
+          label="标签名称"
+          onChange={setBatchTagNames}
+          placeholder={"Docker\nNginx\nPostgreSQL"}
+          rows={8}
+          value={batchTagNames}
+        />
       </AdminFormModal>
       <DataTable
         ariaLabel="标签管理表格"

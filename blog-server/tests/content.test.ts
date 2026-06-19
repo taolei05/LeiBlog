@@ -8,6 +8,7 @@ import {
   createCategory,
   createContributor,
   createTag,
+  createTags,
   deleteArticle,
   listArticles,
   listCategories,
@@ -18,6 +19,7 @@ import {
 } from "../src/admin/content/service";
 import { listPublishedArticles } from "../src/public/articles/service";
 import { hashPassword, type AuthUser } from "../src/shared/auth";
+import { encryptSecret } from "../src/shared/crypto";
 
 const POSTGRES_ADMIN_URL =
   process.env.TEST_POSTGRES_ADMIN_URL ??
@@ -201,6 +203,91 @@ describe("admin content service", () => {
         testDb
       )
     ).rejects.toThrow("需要管理员权限");
+  });
+
+  test("uses DeepL for generated category and tag slugs when configured", async () => {
+    const encryptedDeepLApiKey = encryptSecret("deepl-secret");
+    const originalFetch = globalThis.fetch;
+    const translatedTexts: string[] = [];
+    const translations = new Map([
+      ["部署运维", "deployment operations"],
+      ["云服务器", "cloud server"],
+      ["LeiBlog 部署指南", "LeiBlog deployment guide"],
+    ]);
+
+    await testDb`
+      INSERT INTO site_config (id, deepl_api_key_encrypted)
+      VALUES (1, ${JSON.stringify(encryptedDeepLApiKey)}::jsonb)
+      ON CONFLICT (id) DO UPDATE
+      SET deepl_api_key_encrypted = EXCLUDED.deepl_api_key_encrypted
+    `;
+
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("api-free.deepl.com") || url.includes("api.deepl.com")) {
+          const body = JSON.parse(String(init?.body)) as { target_lang: string; text: string[] };
+          expect(body.target_lang).toBe("EN");
+          translatedTexts.push(body.text[0] ?? "");
+
+          return Response.json({
+            translations: [{ text: translations.get(body.text[0] ?? "") ?? body.text[0] }],
+          });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      },
+      originalFetch,
+    );
+
+    try {
+      const category = await createCategory(currentAdmin, { name: "部署运维" }, testDb);
+      const tag = await createTag(currentAdmin, { name: "云服务器" }, testDb);
+      const article = await createArticle(
+        currentAdmin,
+        {
+          contentMdx: "部署正文",
+          status: "draft",
+          title: "LeiBlog 部署指南",
+        },
+        testDb,
+      );
+
+      expect(category.slug).toBe("deployment-operations");
+      expect(tag.slug).toBe("cloud-server");
+      expect(article.slug).toBe("leiblog-deployment-guide");
+      expect(translatedTexts).toEqual(["部署运维", "云服务器", "LeiBlog 部署指南"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await testDb`
+        UPDATE site_config
+        SET deepl_api_key_encrypted = null
+        WHERE id = 1
+      `;
+    }
+  });
+
+  test("creates multiple tags with server-assigned colors", async () => {
+    const singleTag = await createTag(currentAdmin, { name: "单个随机标签" }, testDb);
+
+    expect(singleTag.color).toMatch(/^#[0-9a-f]{6}$/i);
+
+    const result = await createTags(
+      currentAdmin,
+      {
+        items: [
+          { name: "批量标签一" },
+          { name: "批量标签二" },
+        ],
+      },
+      testDb,
+    );
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.name)).toEqual(["批量标签一", "批量标签二"]);
+    for (const item of result.items) {
+      expect(item.color).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 
   test("keeps future scheduled articles private until the publisher promotes them", async () => {

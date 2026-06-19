@@ -95,13 +95,8 @@ describe("admin article form relations", () => {
     expect(articleEditPageSource).toContain("setIsCategoryModalOpen(true)");
     expect(articleEditPageSource).toContain("setIsTagModalOpen(true)");
     expect(articleEditPageSource).toContain("categoryId: response.item.id");
-    expect(articleEditPageSource).toContain("ColorPicker");
-    expect(articleEditPageSource).toContain("ColorArea");
-    expect(articleEditPageSource).toContain("ColorSlider");
-    expect(articleEditPageSource).toContain("ColorField");
-    expect(articleEditPageSource).toContain("ColorSwatch");
-    expect(articleEditPageSource).toContain('tagColor.toString("hex")');
-    expect(articleEditPageSource).toContain("setTagColor(parseColor(defaultTagColor))");
+    expect(articleEditPageSource).not.toContain('tagColor.toString("hex")');
+    expect(articleEditPageSource).not.toMatch(/body:\s*\{[\s\S]*?color,[\s\S]*?name,[\s\S]*?slug:/);
     expect(articleEditPageSource).toMatch(
       /tagIds:\s+state\.tagIds\.includes\(response\.item\.id\)\s+\?\s+state\.tagIds\s+:\s+\[\.\.\.state\.tagIds,\s+response\.item\.id\]/,
     );
@@ -141,6 +136,23 @@ describe("admin taxonomy forms", () => {
     expect(tagsPageSource).toContain("slug: row.slug");
     expect(tagsPageSource).toContain("value={tagForm.slug}");
     expect(tagsPageSource).toContain("slug: optionalFormValue(tagForm.slug) ?? undefined");
+    expect(tagsPageSource).toContain('tagModalState.mode === "rename"');
+    const createTagBranchStart = tagsPageSource.indexOf('if (tagModalState.mode === "create")');
+    const createTagBranchEnd = tagsPageSource.indexOf("} else {", createTagBranchStart);
+    const createTagBranch = tagsPageSource.slice(createTagBranchStart, createTagBranchEnd);
+
+    expect(tagsPageSource).toMatch(
+      /body:\s*\{\s*name,\s*slug: optionalFormValue\(tagForm\.slug\) \?\? undefined\s*\}/,
+    );
+    expect(createTagBranch).not.toContain("color");
+  });
+
+  it("lets editors batch create tags from tag management", () => {
+    expect(tagsPageSource).toContain("批量创建");
+    expect(tagsPageSource).toContain("AdminTextAreaGroupField");
+    expect(tagsPageSource).toContain('"/admin/content/tags/batch"');
+    expect(tagsPageSource).toContain("batchTagNames");
+    expect(tagsPageSource).toContain("parseBatchTagNames");
   });
 });
 

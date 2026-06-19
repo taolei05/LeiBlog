@@ -10,7 +10,12 @@ import { appConfig } from "../../shared/config";
 import { db, withTransaction } from "../../shared/db";
 import { notFound, validationError } from "../../shared/errors";
 import { normalizeSvgBuffer } from "../../shared/media/svg";
-import { createPinyinSlug, normalizeSlug, withSlugSuffix } from "../../shared/slug";
+import {
+  createDeepLPreferredSlug,
+  createPinyinSlug,
+  normalizeSlug,
+  withSlugSuffix,
+} from "../../shared/slug";
 
 type MediaType = "image" | "video" | "document";
 type SortOrder = "asc" | "desc";
@@ -235,8 +240,10 @@ function cleanOptional(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
-function folderSlugFromName(value: string) {
-  return normalizeSlug(value) || createPinyinSlug(value) || "folder";
+async function folderSlugFromName(client: DbClient, value: string, shouldTranslate: boolean) {
+  return shouldTranslate
+    ? createDeepLPreferredSlug(value, client, "folder")
+    : normalizeSlug(value) || createPinyinSlug(value) || "folder";
 }
 
 async function ensureDefaultMediaFolders(client: DbClient) {
@@ -278,8 +285,13 @@ async function folderSlugExists(client: DbClient, slug: string, exceptId?: strin
   return Boolean(row);
 }
 
-async function createUniqueFolderSlug(client: DbClient, value: string, exceptId?: string) {
-  const baseSlug = folderSlugFromName(value);
+async function createUniqueFolderSlug(
+  client: DbClient,
+  value: string,
+  exceptId?: string,
+  shouldTranslate = true
+) {
+  const baseSlug = await folderSlugFromName(client, value, shouldTranslate);
 
   for (let index = 1; index < 1000; index += 1) {
     const candidate = withSlugSuffix(baseSlug, index);
@@ -488,7 +500,9 @@ export async function createMediaFolder(
   const client = getClient(options);
   await ensureDefaultMediaFolders(client);
 
-  const slug = await createUniqueFolderSlug(client, input.slug ?? input.name);
+  const slug = input.slug?.trim()
+    ? await createUniqueFolderSlug(client, input.slug, undefined, false)
+    : await createUniqueFolderSlug(client, input.name);
   const [row] = await client<MediaFolderRow[]>`
     INSERT INTO media_folders (name, slug, description)
     VALUES (${input.name.trim()}, ${slug}, ${cleanOptional(input.description) ?? ""})
@@ -510,7 +524,7 @@ export async function updateMediaFolder(
   const existing = await getFolderRow(id, client);
   const slug =
     !existing.is_protected && input.slug?.trim()
-      ? await createUniqueFolderSlug(client, input.slug, id)
+      ? await createUniqueFolderSlug(client, input.slug, id, false)
       : existing.slug;
 
   await client`

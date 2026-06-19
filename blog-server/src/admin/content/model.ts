@@ -40,6 +40,10 @@ export const TagBody = t.Object({
   color: t.Optional(t.Nullable(t.String({ maxLength: 32 }))),
 });
 
+export const TagBatchBody = t.Object({
+  items: t.Array(TagBody, { maxItems: 100, minItems: 1 }),
+});
+
 export const ContributorBody = t.Object({
   name: t.String({ minLength: 1, maxLength: 100 }),
   avatarUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
@@ -168,6 +172,11 @@ export const TagListResponse = t.Object({
   page: t.Number(),
   pageSize: t.Number(),
   total: t.Number(),
+});
+
+export const TagBatchResponse = t.Object({
+  ok: t.Boolean(),
+  items: t.Array(TagResponseItem),
 });
 
 export const ContributorListResponse = t.Object({

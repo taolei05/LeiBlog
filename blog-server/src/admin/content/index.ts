@@ -15,6 +15,8 @@ import {
   ContributorResponse,
   IdParams,
   OkResponse,
+  TagBatchBody,
+  TagBatchResponse,
   TagBody,
   TagListResponse,
   TagResponse,
@@ -25,6 +27,7 @@ import {
   createCategory,
   createContributor,
   createTag,
+  createTags,
   deleteArticle,
   deleteCategory,
   deleteContributor,
@@ -87,6 +90,10 @@ export const adminContentModule = new Elysia({ prefix: "/content" })
   }), {
     body: TagBody,
     response: { 200: TagResponse },
+  })
+  .post("/tags/batch", ({ currentUser, body }) => createTags(currentUser, body), {
+    body: TagBatchBody,
+    response: { 200: TagBatchResponse },
   })
   .get("/tags/:id", async ({ currentUser, params }) => {
     requireAdmin(currentUser);

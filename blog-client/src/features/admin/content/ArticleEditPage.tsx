@@ -4,11 +4,6 @@ import {
   Button,
   Card,
   Chip,
-  ColorArea,
-  ColorField,
-  ColorPicker,
-  ColorSlider,
-  ColorSwatch,
   Description,
   FieldError,
   Input,
@@ -20,7 +15,6 @@ import {
   TagGroup,
   TextArea,
   TextField,
-  parseColor,
 } from "@heroui/react";
 import type { Key } from "@react-types/shared";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
@@ -96,8 +90,6 @@ const emptyCategoryForm: CategoryFormState = {
   name: "",
   slug: "",
 };
-
-const defaultTagColor = "#ec4899";
 
 const emptyTagForm: TagFormState = {
   name: "",
@@ -195,7 +187,6 @@ export function ArticleEditPage() {
   const [tags, setTags] = useState<AdminTagItem[]>([]);
   const [categoryForm, setCategoryForm] = useState<CategoryFormState>(emptyCategoryForm);
   const [tagForm, setTagForm] = useState<TagFormState>(emptyTagForm);
-  const [tagColor, setTagColor] = useState(parseColor(defaultTagColor));
   const [contributorForm, setContributorForm] =
     useState<ContributorFormState>(emptyContributorForm);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -445,7 +436,6 @@ export function ArticleEditPage() {
 
   async function createTag() {
     const name = tagForm.name.trim();
-    const color = tagColor.toString("hex");
 
     if (!name) {
       updateNotice("标签名称不能为空");
@@ -456,7 +446,6 @@ export function ArticleEditPage() {
       setIsCreatingTag(true);
       const response = await adminFetch<{ item: AdminTagItem }>("/admin/content/tags", {
         body: {
-          color,
           name,
           slug: optionalFormValue(tagForm.slug) ?? undefined,
         },
@@ -471,7 +460,6 @@ export function ArticleEditPage() {
           : [...state.tagIds, response.item.id],
       }));
       setTagForm(emptyTagForm);
-      setTagColor(parseColor(defaultTagColor));
       setIsTagModalOpen(false);
       updateNotice("标签已创建并关联");
     } catch (error) {
@@ -569,7 +557,6 @@ export function ArticleEditPage() {
           setIsTagModalOpen(isOpen);
           if (!isOpen) {
             setTagForm(emptyTagForm);
-            setTagColor(parseColor(defaultTagColor));
           }
         }}
         onSubmit={createTag}
@@ -592,33 +579,6 @@ export function ArticleEditPage() {
           placeholder="tools"
           value={tagForm.slug}
         />
-        <div className="admin-tag-color-field">
-          <Label>标签颜色</Label>
-          <ColorPicker value={tagColor} onChange={setTagColor}>
-            <ColorPicker.Trigger className="admin-tag-color-trigger">
-              <ColorSwatch className="admin-tag-color-trigger__swatch" />
-              <span>{tagColor.toString("hex")}</span>
-            </ColorPicker.Trigger>
-            <ColorPicker.Popover className="admin-tag-color-popover">
-              <ColorArea colorSpace="hsb" xChannel="saturation" yChannel="brightness">
-                <ColorArea.Thumb />
-              </ColorArea>
-              <ColorSlider aria-label="色相" channel="hue" colorSpace="hsb">
-                <ColorSlider.Track>
-                  <ColorSlider.Thumb />
-                </ColorSlider.Track>
-              </ColorSlider>
-              <ColorField aria-label="标签颜色值">
-                <ColorField.Group variant="secondary">
-                  <ColorField.Prefix>
-                    <ColorSwatch size="xs" />
-                  </ColorField.Prefix>
-                  <ColorField.Input />
-                </ColorField.Group>
-              </ColorField>
-            </ColorPicker.Popover>
-          </ColorPicker>
-        </div>
       </AdminFormModal>
       <AdminFormModal
         confirmDescription="创建后会立即关联到当前文章草稿。"
