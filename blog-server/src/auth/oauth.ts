@@ -314,8 +314,6 @@ async function findOrCreateOAuthUser(
   `;
 
   if (linked) {
-    if (linked.role === "admin") throw validationError("管理员账号不能使用第三方登录");
-
     await client`
       UPDATE user_oauth_accounts
       SET provider_username = ${identity.username},
@@ -339,7 +337,6 @@ async function findOrCreateOAuthUser(
     `;
 
     if (existingUser) {
-      if (existingUser.role === "admin") throw validationError("管理员账号不能使用第三方登录");
       userId = existingUser.id;
     }
   }
@@ -567,7 +564,6 @@ export async function consumeOAuthLoginTicket(
     `;
 
     if (!row) throw validationError("第三方登录票据无效或已过期");
-    if (row.role === "admin") throw validationError("管理员账号不能使用第三方登录");
 
     const device = { userAgent: meta.userAgent };
     await tx`

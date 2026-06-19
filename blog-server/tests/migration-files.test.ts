@@ -19,6 +19,10 @@ const authProvidersMigration = readFileSync(
   join(migrationsDir, "003_auth_providers.sql"),
   "utf8"
 );
+const authSessionLoginMethodMigration = readFileSync(
+  join(migrationsDir, "004_auth_session_login_method.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("keeps a consolidated baseline migration", () => {
@@ -26,6 +30,7 @@ describe("initial database migration", () => {
       "001_initial_schema.sql",
       "002_article_scheduling_and_notifications.sql",
       "003_auth_providers.sql",
+      "004_auth_session_login_method.sql",
     ]);
   });
 
@@ -136,5 +141,14 @@ describe("initial database migration", () => {
     expect(migration).toContain("user_oauth_accounts_provider_user_unique");
     expect(migration).toContain("oauth_login_tickets_hash_unique");
     expect(authProvidersMigration).toContain("'github', 'GitHub'");
+  });
+
+  test("marks OAuth sessions as front-only for administrator accounts", () => {
+    expect(migration).toContain("login_method varchar(40) NOT NULL DEFAULT 'password'");
+    expect(migration).toContain("CHECK (login_method IN ('password', 'oauth'))");
+    expect(authSessionLoginMethodMigration).toContain(
+      "ADD COLUMN IF NOT EXISTS login_method varchar(40) NOT NULL DEFAULT 'password'"
+    );
+    expect(authSessionLoginMethodMigration).toContain("auth_sessions_login_method_check");
   });
 });

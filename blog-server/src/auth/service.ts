@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 
-import type { UserRole } from "../shared/auth";
+import type { AuthSessionLoginMethod, UserRole } from "../shared/auth";
 import {
   createNumericCode,
   createRandomToken,
@@ -85,6 +85,10 @@ interface AuthServiceOptions {
   emailHtml?: (code: string, validMinutes: number) => string;
   emailSubject?: string;
   emailText?: (code: string, validMinutes: number) => string;
+}
+
+interface CreateAuthSessionOptions extends AuthServiceOptions {
+  loginMethod?: AuthSessionLoginMethod;
 }
 
 export interface EmailBranding {
@@ -785,17 +789,20 @@ export async function createAuthSession(
   user: SignableUser,
   token: string,
   meta: RequestMeta,
-  options: AuthServiceOptions = {}
+  options: CreateAuthSessionOptions = {}
 ) {
   const client = options.client ?? db;
 
   await client`
-    INSERT INTO auth_sessions (user_id, token_hash, user_agent, ip, expires_at)
+    INSERT INTO auth_sessions (
+      user_id, token_hash, user_agent, ip, login_method, expires_at
+    )
     VALUES (
       ${user.id},
       ${hashToken(token)},
       ${meta.userAgent},
       ${meta.ip},
+      ${options.loginMethod ?? "password"},
       ${addDays(new Date(), SESSION_DAYS)}
     )
   `;

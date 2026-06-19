@@ -377,8 +377,8 @@ describe("OAuth login providers", () => {
     ).rejects.toThrow("该账号已绑定其他 GitHub 登录身份");
   });
 
-  test("rejects OAuth login for administrator accounts", async () => {
-    await testDb`
+  test("allows administrator accounts to use OAuth for front login sessions", async () => {
+    const [admin] = await testDb<{ id: string }[]>`
       INSERT INTO users (username, password_hash, email, role)
       VALUES (
         'oauth-admin',
@@ -386,6 +386,7 @@ describe("OAuth login providers", () => {
         'oauth-admin@example.com',
         'admin'
       )
+      RETURNING id
     `;
     await configureGithubProvider({
       clientId: "github-client-id-admin",
@@ -404,19 +405,27 @@ describe("OAuth login providers", () => {
       login: "oauth-admin",
     });
 
-    await expect(
-      completeOAuthLogin(
-        "github",
-        {
-          code: "github-code-admin",
-          state,
-        },
-        meta,
-        {
-          client: testDb,
-          fetch: fetcher,
-        }
-      )
-    ).rejects.toThrow("管理员账号不能使用第三方登录");
+    const ticket = await completeOAuthLogin(
+      "github",
+      {
+        code: "github-code-admin",
+        state,
+      },
+      meta,
+      {
+        client: testDb,
+        fetch: fetcher,
+      }
+    );
+    const session = await consumeOAuthLoginTicket(ticket.ticket, meta, {
+      client: testDb,
+    });
+
+    expect(session.user).toMatchObject({
+      email: "oauth-admin@example.com",
+      id: admin.id,
+      role: "admin",
+      username: "oauth-admin",
+    });
   });
 });

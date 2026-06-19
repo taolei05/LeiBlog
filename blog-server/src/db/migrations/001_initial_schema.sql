@@ -402,6 +402,8 @@ CREATE TABLE auth_sessions (
   token_hash text NOT NULL,
   user_agent text,
   ip inet,
+  login_method varchar(40) NOT NULL DEFAULT 'password'
+    CHECK (login_method IN ('password', 'oauth')),
   expires_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   revoked_at timestamptz

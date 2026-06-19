@@ -413,16 +413,16 @@ async function main() {
       return Response.json({
         avatar_url: "https://avatars.githubusercontent.com/u/123?v=4",
         email: null,
-        html_url: "https://github.com/route-octocat",
+        html_url: "https://github.com/route-admin",
         id: 123,
-        login: "route-octocat",
-        name: "Route Octocat",
+        login: "route-admin",
+        name: "Route Admin",
       });
     }
     if (url === "https://api.github.com/user/emails") {
       return Response.json([
         {
-          email: "route-oauth@example.com",
+          email: "route-admin@example.com",
           primary: true,
           verified: true,
         },
@@ -456,8 +456,21 @@ async function main() {
       })),
       200
     );
-    assert(oauthSession.user.role === "user", "OAuth 登录只能得到普通前台用户");
-    assert(oauthSession.user.id !== seeded.adminId, "OAuth 登录不能得到管理员用户");
+    assert(oauthSession.user.role === "admin", "管理员应能使用 GitHub 登录前台");
+    assert(oauthSession.user.id === seeded.adminId, "GitHub 管理员前台登录应绑定当前管理员");
+
+    await expectJson(
+      await app.handle(new Request("http://localhost/api/me/", {
+        headers: jsonHeaders(oauthSession.token),
+      })),
+      200
+    );
+    await expectJson(
+      await app.handle(new Request("http://localhost/api/admin/navigation", {
+        headers: jsonHeaders(oauthSession.token),
+      })),
+      403
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -38,6 +38,7 @@ import {
   enforcePasswordResetRateLimit,
 } from "./rate-limit";
 import { authContext, jwtPlugin } from "../shared/auth/plugin";
+import { createRandomToken } from "../shared/auth";
 import { requestContext } from "../shared/http/plugin";
 
 export const authModule = new Elysia({ prefix: "/api/auth" })
@@ -87,10 +88,13 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         role: result.user.role,
         username: result.user.username,
         type: "access",
+        jti: createRandomToken(16),
         exp: "7d",
       });
 
-      await createAuthSession(result.user, token, requestMeta);
+      await createAuthSession(result.user, token, requestMeta, {
+        loginMethod: "oauth",
+      });
 
       return {
         ok: true,
@@ -128,6 +132,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         role: user.role,
         username: user.username,
         type: "access",
+        jti: createRandomToken(16),
         exp: "7d",
       });
       await createAuthSession(user, token, requestMeta);
@@ -155,6 +160,7 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
         role: user.role,
         username: user.username,
         type: "access",
+        jti: createRandomToken(16),
         exp: "7d",
       });
 

@@ -4,6 +4,7 @@ import { db } from "../db";
 import { forbidden, unauthorized } from "../errors";
 
 export type UserRole = "admin" | "user";
+export type AuthSessionLoginMethod = "oauth" | "password";
 
 export interface AuthUser {
   id: string;
@@ -12,6 +13,7 @@ export interface AuthUser {
   email: string | null;
   name: string | null;
   avatarUrl: string | null;
+  loginMethod?: AuthSessionLoginMethod;
 }
 
 export interface JwtVerifier {
@@ -25,6 +27,7 @@ interface AuthUserRow {
   name: string | null;
   role: UserRole;
   avatar_url: string | null;
+  login_method: AuthSessionLoginMethod;
 }
 
 export async function hashPassword(password: string) {
@@ -64,6 +67,7 @@ export function toAuthUser(row: AuthUserRow): AuthUser {
     name: row.name,
     role: row.role,
     avatarUrl: row.avatar_url,
+    loginMethod: row.login_method,
   };
 }
 
@@ -76,7 +80,8 @@ export async function resolveAuthUser(token: string | undefined, jwt: JwtVerifie
   }
 
   const [row] = await db<AuthUserRow[]>`
-    SELECT u.id, u.username, u.email, u.name, u.role, u.avatar_url
+    SELECT u.id, u.username, u.email, u.name, u.role, u.avatar_url,
+           s.login_method
     FROM auth_sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ${hashToken(token)}
@@ -100,6 +105,9 @@ export function requireAdmin(user: AuthUser | null | undefined) {
   const currentUser = requireUser(user);
   if (currentUser.role !== "admin") {
     throw forbidden("需要管理员权限");
+  }
+  if (currentUser.loginMethod === "oauth") {
+    throw forbidden("GitHub 登录仅可用于前台");
   }
 
   return currentUser;
