@@ -1,6 +1,10 @@
 import { Elysia } from "elysia";
 
 import {
+  AuthProviderParams,
+  AuthProviderSettingsBody,
+  AuthProviderSettingsResponse,
+  AuthProvidersResponse,
   ApiKeyEmailCodeResponse,
   ApiKeysResponse,
   DeepLTestBody,
@@ -14,6 +18,10 @@ import {
   SystemSiteInfoBody,
   SystemSiteInfoResponse,
 } from "./model";
+import {
+  listAuthProviderSettings,
+  updateAuthProviderSettings,
+} from "./auth-providers";
 import {
   createApiKeyRevealCode,
   getSystemFiling,
@@ -59,6 +67,19 @@ export const adminSystemModule = new Elysia({ prefix: "/system" })
     body: SystemFilingBody,
     response: { 200: SystemFilingResponse },
   })
+  .get("/auth-providers", ({ currentUser }) => listAuthProviderSettings(currentUser), {
+    response: { 200: AuthProvidersResponse },
+  })
+  .patch(
+    "/auth-providers/:provider",
+    ({ currentUser, params, body }) =>
+      updateAuthProviderSettings(currentUser, params.provider, body),
+    {
+      body: AuthProviderSettingsBody,
+      params: AuthProviderParams,
+      response: { 200: AuthProviderSettingsResponse },
+    }
+  )
   .post("/api-keys/email-code", async ({ currentUser, requestMeta }) => {
     await enforceApiKeyEmailCodeRateLimit(currentUser.id, requestMeta);
     return createApiKeyRevealCode(currentUser);

@@ -24,6 +24,23 @@ export const LoginBody = t.Object({
   password: t.String({ minLength: 1, maxLength: 128 }),
 });
 
+export const OAuthProviderParams = t.Object({
+  provider: t.String({ minLength: 1, maxLength: 40 }),
+});
+
+export const OAuthStartQuery = t.Object({
+  returnTo: t.Optional(t.String({ maxLength: 2048 })),
+});
+
+export const OAuthCallbackQuery = t.Object({
+  code: t.String({ minLength: 1, maxLength: 2048 }),
+  state: t.String({ minLength: 16, maxLength: 512 }),
+});
+
+export const OAuthTicketBody = t.Object({
+  ticket: t.String({ minLength: 16, maxLength: 512 }),
+});
+
 export const ForgotPasswordBody = t.Object({
   email: t.String({ format: "email", maxLength: 254 }),
 });
@@ -44,6 +61,15 @@ export const AuthResponse = t.Object({
   ok: t.Boolean(),
   token: t.String(),
   user: UserProfileSchema,
+});
+
+export const PublicAuthProvidersResponse = t.Object({
+  items: t.Array(
+    t.Object({
+      displayName: t.String(),
+      provider: t.String(),
+    })
+  ),
 });
 
 export const EmailCodeResponse = t.Object({

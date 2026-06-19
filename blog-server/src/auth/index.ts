@@ -7,10 +7,21 @@ import {
   ForgotPasswordBody,
   LoginBody,
   OkResponse,
+  OAuthCallbackQuery,
+  OAuthProviderParams,
+  OAuthStartQuery,
+  OAuthTicketBody,
   PasswordResetResponse,
+  PublicAuthProvidersResponse,
   RegisterBody,
   ResetPasswordBody,
 } from "./model";
+import {
+  completeOAuthLogin,
+  consumeOAuthLoginTicket,
+  createOAuthAuthorization,
+  listPublicAuthProviders,
+} from "./oauth";
 import {
   createAuthSession,
   createEmailCode,
@@ -36,6 +47,64 @@ export const authModule = new Elysia({ prefix: "/api/auth" })
     ok: true,
     scope: "auth",
   }))
+  .get("/providers", () => listPublicAuthProviders(), {
+    response: {
+      200: PublicAuthProvidersResponse,
+    },
+  })
+  .get(
+    "/oauth/:provider/start",
+    async ({ params, query }) => {
+      const authorization = await createOAuthAuthorization(params.provider, {
+        returnTo: query.returnTo,
+      });
+
+      return Response.redirect(authorization.authorizationUrl, 302);
+    },
+    {
+      params: OAuthProviderParams,
+      query: OAuthStartQuery,
+    }
+  )
+  .get(
+    "/oauth/:provider/callback",
+    async ({ params, query, requestMeta }) => {
+      const result = await completeOAuthLogin(params.provider, query, requestMeta);
+
+      return Response.redirect(result.redirectUrl, 302);
+    },
+    {
+      params: OAuthProviderParams,
+      query: OAuthCallbackQuery,
+    }
+  )
+  .post(
+    "/oauth/ticket",
+    async ({ body, jwt, requestMeta }) => {
+      const result = await consumeOAuthLoginTicket(body.ticket, requestMeta);
+      const token = await jwt.sign({
+        sub: result.user.id,
+        role: result.user.role,
+        username: result.user.username,
+        type: "access",
+        exp: "7d",
+      });
+
+      await createAuthSession(result.user, token, requestMeta);
+
+      return {
+        ok: true,
+        token,
+        user: result.user,
+      };
+    },
+    {
+      body: OAuthTicketBody,
+      response: {
+        200: AuthResponse,
+      },
+    }
+  )
   .post(
     "/email-code",
     async ({ body, requestMeta }) => {

@@ -15,12 +15,17 @@ const articleSchedulingMigration = readFileSync(
   join(migrationsDir, "002_article_scheduling_and_notifications.sql"),
   "utf8"
 );
+const authProvidersMigration = readFileSync(
+  join(migrationsDir, "003_auth_providers.sql"),
+  "utf8"
+);
 
 describe("initial database migration", () => {
   test("keeps a consolidated baseline migration", () => {
     expect(migrationFiles).toEqual([
       "001_initial_schema.sql",
       "002_article_scheduling_and_notifications.sql",
+      "003_auth_providers.sql",
     ]);
   });
 
@@ -113,5 +118,23 @@ describe("initial database migration", () => {
       "ADD COLUMN IF NOT EXISTS scheduled_publish_at timestamptz"
     );
     expect(articleSchedulingMigration).toContain("articles_scheduled_publish_at_idx");
+  });
+
+  test("supports configurable OAuth login providers", () => {
+    for (const table of [
+      "auth_provider_settings",
+      "user_oauth_accounts",
+      "oauth_login_states",
+      "oauth_login_tickets",
+    ]) {
+      expect(migration).toContain(`CREATE TABLE ${table}`);
+      expect(authProvidersMigration).toContain(`CREATE TABLE IF NOT EXISTS ${table}`);
+    }
+
+    expect(migration).toContain("client_secret_encrypted jsonb");
+    expect(migration).toContain("auth_provider_settings_set_updated_at");
+    expect(migration).toContain("user_oauth_accounts_provider_user_unique");
+    expect(migration).toContain("oauth_login_tickets_hash_unique");
+    expect(authProvidersMigration).toContain("'github', 'GitHub'");
   });
 });

@@ -52,6 +52,25 @@ interface MeBody {
   };
 }
 
+interface AuthProvidersBody {
+  items: Array<{
+    displayName: string;
+    provider: string;
+  }>;
+}
+
+interface AuthProviderSettingsBody {
+  items: Array<{
+    clientId: string | null;
+    displayName: string;
+    enabled: boolean;
+    hasClientSecret: boolean;
+    provider: string;
+    redirectUri: string | null;
+    scopes: string[];
+  }>;
+}
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -308,6 +327,140 @@ async function main() {
   assert(adminAuth.user.id === seeded.adminId, "管理员登录用户不正确");
   const userAuth = await login(app, "route-user", "user-password");
   assert(userAuth.user.id === seeded.userId, "普通用户登录用户不正确");
+
+  const initialPublicProviders = await expectJson<AuthProvidersBody>(
+    await app.handle(new Request("http://localhost/api/auth/providers")),
+    200
+  );
+  assert(initialPublicProviders.items.length === 0, "未启用时公开登录方式应为空");
+
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/admin/system/auth-providers/github", {
+      method: "PATCH",
+      headers: jsonHeaders(userAuth.token),
+      body: JSON.stringify({
+        clientId: "route-github-client",
+        clientSecret: "route-github-secret",
+        displayName: "GitHub",
+        enabled: true,
+        redirectUri: "http://localhost/api/auth/oauth/github/callback",
+        scopes: ["read:user", "user:email"],
+      }),
+    })),
+    403
+  );
+
+  await expectJson(
+    await app.handle(new Request("http://localhost/api/admin/system/auth-providers/github", {
+      method: "PATCH",
+      headers: jsonHeaders(adminAuth.token),
+      body: JSON.stringify({
+        clientId: "route-github-client",
+        clientSecret: "route-github-secret",
+        displayName: "GitHub",
+        enabled: true,
+        redirectUri: "http://localhost/api/auth/oauth/github/callback",
+        scopes: ["read:user", "user:email"],
+      }),
+    })),
+    200
+  );
+
+  const providerSettings = await expectJson<AuthProviderSettingsBody>(
+    await app.handle(new Request("http://localhost/api/admin/system/auth-providers", {
+      headers: jsonHeaders(adminAuth.token),
+    })),
+    200
+  );
+  const githubSettings = providerSettings.items.find((item) => item.provider === "github");
+  assert(githubSettings?.enabled === true, "后台登录方式配置应返回已启用的 GitHub");
+  assert(githubSettings.hasClientSecret === true, "后台登录方式配置应隐藏并标记 Client Secret");
+
+  const publicProviders = await expectJson<AuthProvidersBody>(
+    await app.handle(new Request("http://localhost/api/auth/providers")),
+    200
+  );
+  assert(publicProviders.items[0]?.provider === "github", "公开登录方式应返回 GitHub");
+
+  const oauthStart = await app.handle(
+    new Request("http://localhost/api/auth/oauth/github/start?returnTo=/login")
+  );
+  assert(oauthStart.status === 302, "GitHub OAuth start 应重定向到 GitHub");
+  const githubAuthorizeUrl = new URL(oauthStart.headers.get("location") ?? "");
+  assert(
+    githubAuthorizeUrl.origin + githubAuthorizeUrl.pathname ===
+      "https://github.com/login/oauth/authorize",
+    "GitHub OAuth start 应使用 GitHub 授权地址"
+  );
+  assert(
+    githubAuthorizeUrl.searchParams.get("client_id") === "route-github-client",
+    "GitHub OAuth start 应包含配置的 Client ID"
+  );
+  const oauthState = githubAuthorizeUrl.searchParams.get("state");
+  assert(oauthState, "GitHub OAuth start 应包含 state");
+
+  const originalFetch = globalThis.fetch;
+  const routeOauthFetch = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "https://github.com/login/oauth/access_token") {
+      return Response.json({
+        access_token: "route-github-access-token",
+        scope: "read:user,user:email",
+        token_type: "bearer",
+      });
+    }
+    if (url === "https://api.github.com/user") {
+      return Response.json({
+        avatar_url: "https://avatars.githubusercontent.com/u/123?v=4",
+        email: null,
+        html_url: "https://github.com/route-octocat",
+        id: 123,
+        login: "route-octocat",
+        name: "Route Octocat",
+      });
+    }
+    if (url === "https://api.github.com/user/emails") {
+      return Response.json([
+        {
+          email: "route-oauth@example.com",
+          primary: true,
+          verified: true,
+        },
+      ]);
+    }
+    throw new Error(`Unexpected route OAuth fetch URL: ${url}`);
+  };
+  globalThis.fetch = Object.assign(routeOauthFetch, {
+    preconnect: originalFetch.preconnect,
+  });
+  try {
+    const oauthCallback = await app.handle(
+      new Request(
+        `http://localhost/api/auth/oauth/github/callback?code=route-code&state=${oauthState}`
+      )
+    );
+    assert(oauthCallback.status === 302, "GitHub OAuth callback 应重定向回前台");
+    const callbackLocation = new URL(oauthCallback.headers.get("location") ?? "");
+    const oauthTicket = callbackLocation.searchParams.get("oauth_ticket");
+    assert(oauthTicket, "GitHub OAuth callback 应携带一次性登录票据");
+    assert(
+      callbackLocation.searchParams.get("oauth_provider") === "github",
+      "GitHub OAuth callback 应携带 provider"
+    );
+
+    const oauthSession = await expectJson<AuthBody>(
+      await app.handle(new Request("http://localhost/api/auth/oauth/ticket", {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ ticket: oauthTicket }),
+      })),
+      200
+    );
+    assert(oauthSession.user.role === "user", "OAuth 登录只能得到普通前台用户");
+    assert(oauthSession.user.id !== seeded.adminId, "OAuth 登录不能得到管理员用户");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   await expectJson(
     await app.handle(new Request("http://localhost/api/me/preferences", {

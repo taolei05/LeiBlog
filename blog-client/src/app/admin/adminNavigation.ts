@@ -105,6 +105,13 @@ export const adminNavigationGroups: Array<{
         section: "系统",
       },
       {
+        description: "前台第三方登录方式、OAuth 密钥和启停状态。",
+        icon: "key",
+        label: "登录方式",
+        path: "/admin/system/auth-providers",
+        section: "系统",
+      },
+      {
         description: "站点信息、SEO、备案和集成密钥。",
         icon: "settings",
         label: "站点设置",

@@ -36,6 +36,16 @@ const SystemFilingItem = t.Object({
   policeUrl: t.Nullable(t.String()),
 });
 
+const AuthProviderSettingsItem = t.Object({
+  clientId: t.Nullable(t.String()),
+  displayName: t.String(),
+  enabled: t.Boolean(),
+  hasClientSecret: t.Boolean(),
+  provider: t.String(),
+  redirectUri: t.Nullable(t.String()),
+  scopes: t.Array(t.String()),
+});
+
 export const SystemSiteInfoBody = t.Object({
   siteName: t.String({ minLength: 1, maxLength: 120 }),
   description: t.Optional(t.String({ maxLength: 2000 })),
@@ -75,6 +85,19 @@ export const SystemFilingBody = t.Object({
   policeUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
 });
 
+export const AuthProviderParams = t.Object({
+  provider: t.String({ minLength: 1, maxLength: 40 }),
+});
+
+export const AuthProviderSettingsBody = t.Object({
+  clientId: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+  clientSecret: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+  displayName: t.Optional(t.String({ maxLength: 80 })),
+  enabled: t.Boolean(),
+  redirectUri: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+  scopes: t.Optional(t.Array(t.String({ maxLength: 100 }), { maxItems: 20 })),
+});
+
 export const RevealApiKeysBody = t.Object({
   emailCode: t.String({ minLength: 4, maxLength: 12 }),
 });
@@ -103,6 +126,16 @@ export const SystemSiteConfigResponse = t.Object({
 export const SystemFilingResponse = t.Object({
   ok: t.Boolean(),
   item: t.Nullable(SystemFilingItem),
+});
+
+export const AuthProvidersResponse = t.Object({
+  ok: t.Boolean(),
+  items: t.Array(AuthProviderSettingsItem),
+});
+
+export const AuthProviderSettingsResponse = t.Object({
+  ok: t.Boolean(),
+  item: AuthProviderSettingsItem,
 });
 
 export const ApiKeyEmailCodeResponse = t.Object({

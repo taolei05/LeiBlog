@@ -21,6 +21,7 @@ import { TagsPage } from "../features/admin/content/TagsPage";
 import { AdminLoginPage } from "../features/admin/auth/AdminLoginPage";
 import { AdminDashboardPage } from "../features/admin/dashboard/AdminDashboardPage";
 import { SetupPage } from "../features/admin/setup/SetupPage";
+import { AuthProvidersPage } from "../features/admin/system/AuthProvidersPage";
 import { ProfilePage } from "../features/admin/system/ProfilePage";
 import { SiteSettingsPage } from "../features/admin/system/SiteSettingsPage";
 import { ThemeSettingsPage } from "../features/admin/system/ThemeSettingsPage";
@@ -130,6 +131,7 @@ export function AppRouter() {
           <Route path="admin/system/users" element={<UsersPage />} />
           <Route path="admin/system/profile" element={<ProfilePage />} />
           <Route path="admin/system/settings" element={<ThemeSettingsPage />} />
+          <Route path="admin/system/auth-providers" element={<AuthProvidersPage />} />
           <Route path="admin/system/site" element={<SiteSettingsPage />} />
         </Route>
         <Route path="500" element={<ServerErrorPage />} />

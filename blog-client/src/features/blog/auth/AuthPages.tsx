@@ -66,6 +66,11 @@ type BlogSession = {
   user: BlogAuthUser;
 };
 
+type AuthProviderItem = {
+  displayName: string;
+  provider: string;
+};
+
 type EmailCodeResponse = {
   devCode?: string;
   expiresAt: string;
@@ -107,8 +112,10 @@ type AuthShellProps = {
 };
 
 type AuthDialogProps = {
+  authProviders: AuthProviderItem[];
   emailCodeStatus: string;
   isOpen: boolean;
+  isOAuthCompleting: boolean;
   isRegisterCodeSending: boolean;
   isSubmitting: boolean;
   loginForm: {
@@ -124,6 +131,7 @@ type AuthDialogProps = {
     value: string,
   ) => void;
   onRequestRegisterCode: () => void;
+  onStartOAuth: (provider: AuthProviderItem) => void;
   onSubmitLogin: (event: FormEvent<HTMLFormElement>) => void;
   onSubmitRegister: (event: FormEvent<HTMLFormElement>) => void;
   registerCodeCountdownSeconds: number;
@@ -257,6 +265,23 @@ function parseBlogSession(value: unknown): BlogSession | null {
   return { token, user };
 }
 
+function parseAuthProvider(value: unknown): AuthProviderItem | null {
+  if (!isRecord(value)) return null;
+  const provider = readString(value.provider);
+  const displayName = readString(value.displayName);
+  if (!provider || !displayName) return null;
+
+  return { displayName, provider };
+}
+
+function parseAuthProviders(payload: unknown) {
+  if (!isRecord(payload) || !Array.isArray(payload.items)) return [];
+
+  return payload.items
+    .map(parseAuthProvider)
+    .filter((item): item is AuthProviderItem => Boolean(item));
+}
+
 function readBlogSession() {
   const storage = getBrowserStorage();
   if (!storage) return null;
@@ -380,6 +405,28 @@ async function loginBlogUser(identifier: string, password: string) {
 
   if (!session) {
     throw new Error("登录响应格式不正确");
+  }
+
+  return session;
+}
+
+async function fetchAuthProviders() {
+  const payload = await authJsonRequest<unknown>("/auth/providers", {
+    method: "GET",
+  });
+
+  return parseAuthProviders(payload);
+}
+
+async function consumeOAuthTicket(ticket: string) {
+  const payload = await authJsonRequest<unknown>("/auth/oauth/ticket", {
+    body: { ticket },
+    method: "POST",
+  });
+  const session = parseBlogSession(payload);
+
+  if (!session) {
+    throw new Error("第三方登录响应格式不正确");
   }
 
   return session;
@@ -648,8 +695,10 @@ function AuthShell({ children, description, icon, title }: AuthShellProps) {
 }
 
 function AuthDialog({
+  authProviders,
   emailCodeStatus,
   isOpen,
+  isOAuthCompleting,
   isRegisterCodeSending,
   isSubmitting,
   loginForm,
@@ -659,6 +708,7 @@ function AuthDialog({
   onModeChange,
   onRegisterChange,
   onRequestRegisterCode,
+  onStartOAuth,
   onSubmitLogin,
   onSubmitRegister,
   registerCodeCountdownSeconds,
@@ -668,6 +718,7 @@ function AuthDialog({
   registerSendRemainingSeconds,
 }: AuthDialogProps) {
   const isLoginMode = mode === "login";
+  const disabledByOAuth = isSubmitting || isOAuthCompleting;
 
   return (
     <Modal.Backdrop
@@ -715,6 +766,26 @@ function AuthDialog({
                       value={loginForm.password}
                     />
                   </TextField>
+                  {authProviders.length > 0 ? (
+                    <div className="front-oauth-actions">
+                      <span>第三方登录</span>
+                      {authProviders.map((provider) => (
+                        <Button
+                          fullWidth
+                          isDisabled={disabledByOAuth}
+                          key={provider.provider}
+                          onPress={() => onStartOAuth(provider)}
+                          type="button"
+                          variant="tertiary"
+                        >
+                          <AppIcon name={provider.provider === "github" ? "codeSlash" : "key"} />
+                          {provider.provider === "github"
+                            ? "使用 GitHub 登录"
+                            : `使用 ${provider.displayName} 登录`}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
                   <p className="front-auth-modal__switch">
                     <span>还没有账号？</span>
                     <button onClick={() => onModeChange("register")} type="button">
@@ -821,7 +892,7 @@ function AuthDialog({
               </Button>
               <Button
                 form={isLoginMode ? "front-login-form" : "front-register-form"}
-                isDisabled={isSubmitting}
+                isDisabled={disabledByOAuth}
                 type="submit"
               >
                 <AppIcon name={isLoginMode ? "logIn" : "personAdd"} />
@@ -1087,6 +1158,7 @@ export function ForgotPasswordPage() {
 export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [session, setSession] = useState<BlogSession | null>(() => readBlogSession());
+  const [authProviders, setAuthProviders] = useState<AuthProviderItem[]>([]);
   const [dialogMode, setDialogMode] = useState<AuthDialogMode | null>(initialDialog ?? null);
   const [profileAccordionKeys, setProfileAccordionKeys] = useState<Set<Key>>(() => {
     const initialPanelMode = readProfilePanelMode(searchParams.get("panel"));
@@ -1094,6 +1166,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
     return initialPanelMode ? new Set([initialPanelMode]) : new Set();
   });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
+  const [isOAuthCompleting, setIsOAuthCompleting] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [commentEmailNotificationsDraft, setCommentEmailNotificationsDraft] = useState(true);
@@ -1148,6 +1221,70 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
       setDialogMode(initialDialog);
     }
   }, [initialDialog]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadAuthProviders() {
+      try {
+        const providers = await fetchAuthProviders();
+        if (isActive) setAuthProviders(providers);
+      } catch (error) {
+        if (!isActive) return;
+        showOperationToast(
+          error instanceof Error ? `登录方式加载失败：${error.message}` : "登录方式加载失败",
+          "danger",
+        );
+      }
+    }
+
+    void loadAuthProviders();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const oauthTicket = searchParams.get("oauth_ticket");
+    if (!oauthTicket) return undefined;
+
+    const ticket = oauthTicket;
+    let isActive = true;
+    setIsOAuthCompleting(true);
+    setDialogMode("login");
+
+    async function completeOAuthLogin() {
+      try {
+        const nextSession = await consumeOAuthTicket(ticket);
+        if (!isActive) return;
+
+        writeBlogSession(nextSession);
+        setSession(nextSession);
+        setDialogMode(null);
+        showOperationToast(`登录成功，欢迎你 ${getDisplayName(nextSession.user)}`, "success");
+
+        const nextSearchParams = new URLSearchParams(searchParams);
+        nextSearchParams.delete("oauth_ticket");
+        nextSearchParams.delete("oauth_provider");
+        setSearchParams(nextSearchParams, { replace: true });
+      } catch (error) {
+        if (!isActive) return;
+        showOperationToast(
+          error instanceof Error ? `第三方登录失败：${error.message}` : "第三方登录失败",
+          "danger",
+        );
+      } finally {
+        if (isActive) setIsOAuthCompleting(false);
+      }
+    }
+
+    void completeOAuthLogin();
+
+    return () => {
+      isActive = false;
+    };
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     function syncProfileSession() {
@@ -1456,6 +1593,20 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
     } finally {
       setIsSubmittingAuth(false);
     }
+  }
+
+  function startOAuth(provider: AuthProviderItem) {
+    if (typeof window === "undefined") return;
+    const nextSearchParams = new URLSearchParams(window.location.search);
+    nextSearchParams.delete("oauth_ticket");
+    nextSearchParams.delete("oauth_provider");
+    const search = nextSearchParams.toString();
+    const returnTo = `${window.location.pathname}${search ? `?${search}` : ""}`;
+    const url = new URL(
+      `${AUTH_API_BASE_URL}/auth/oauth/${encodeURIComponent(provider.provider)}/start`,
+    );
+    url.searchParams.set("returnTo", returnTo || "/login");
+    window.location.assign(url.toString());
   }
 
   async function requestRegisterCode() {
@@ -2254,8 +2405,10 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
       ) : null}
 
       <AuthDialog
+        authProviders={authProviders}
         emailCodeStatus={emailCodeStatus}
         isOpen={dialogMode !== null}
+        isOAuthCompleting={isOAuthCompleting}
         isRegisterCodeSending={isRegisterCodeSending}
         isSubmitting={isSubmittingAuth}
         loginForm={loginForm}
@@ -2265,6 +2418,7 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
         onModeChange={setDialogMode}
         onRegisterChange={updateRegisterForm}
         onRequestRegisterCode={requestRegisterCode}
+        onStartOAuth={startOAuth}
         onSubmitLogin={submitLogin}
         onSubmitRegister={submitRegister}
         registerCodeCountdownSeconds={registerCodeCountdownSeconds}
