@@ -760,19 +760,48 @@ async function ensureSeedCompatibleSchema(client: DbClient) {
     CREATE INDEX IF NOT EXISTS media_assets_folder_created_at_idx
     ON media_assets (folder_id, created_at DESC)
   `);
+  await client.unsafe(`
+    ALTER TABLE site_config
+    ADD COLUMN IF NOT EXISTS r2_enabled boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS r2_account_id text,
+    ADD COLUMN IF NOT EXISTS r2_bucket text,
+    ADD COLUMN IF NOT EXISTS r2_access_key_id text,
+    ADD COLUMN IF NOT EXISTS r2_secret_access_key_encrypted jsonb,
+    ADD COLUMN IF NOT EXISTS r2_public_base_url text
+  `);
+  await client.unsafe(`
+    ALTER TABLE media_assets
+    ADD COLUMN IF NOT EXISTS storage_provider varchar(20) NOT NULL DEFAULT 'local',
+    ADD COLUMN IF NOT EXISTS storage_key text,
+    ADD COLUMN IF NOT EXISTS storage_bucket text
+  `);
+  await client.unsafe(`
+    ALTER TABLE media_assets
+    DROP CONSTRAINT IF EXISTS media_assets_storage_provider_check
+  `);
+  await client.unsafe(`
+    ALTER TABLE media_assets
+    ADD CONSTRAINT media_assets_storage_provider_check
+    CHECK (storage_provider IN ('local', 'r2'))
+  `);
+  await client.unsafe(`
+    CREATE INDEX IF NOT EXISTS media_assets_storage_provider_created_at_idx
+    ON media_assets (storage_provider, created_at DESC)
+  `);
   await client`
     INSERT INTO media_folders (name, slug, description, system_key, is_protected)
     VALUES
       ('文章封面', 'article-covers', '文章封面只能存储到这里。', 'article-covers', true),
       ('头像', 'avatars', '所有用户头像只能存储到这里。', 'avatars', true),
       ('评论', 'comments', '评论图片只能存储到这里。', 'comments', true),
-      ('站点', 'site', '站点深浅色 Logo 和 favicon 只能存储到这里。', 'site', true)
+      ('站点', 'site', '站点深浅色 Logo 和 favicon 只能存储到这里。', 'site', true),
+      ('网址图标', 'website-icons', '导航页网站图标只能存储到这里。', 'website-icons', true)
     ON CONFLICT DO NOTHING
   `;
   await client.unsafe(`
     UPDATE media_folders
     SET is_protected = true
-    WHERE slug IN ('article-covers', 'avatars', 'comments', 'site')
+    WHERE slug IN ('article-covers', 'avatars', 'comments', 'site', 'website-icons')
   `);
 }
 

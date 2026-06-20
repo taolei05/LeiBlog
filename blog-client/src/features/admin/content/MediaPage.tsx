@@ -24,6 +24,7 @@ type MediaRow = {
   kind: "document" | "image" | "video";
   size: string;
   status: "linked" | "unused";
+  storageProvider: "local" | "r2";
   uploadedAt: string;
   url: string;
   usage: string;
@@ -41,6 +42,9 @@ type AdminMediaItem = {
   folderSlug: string | null;
   folderSystemKey: string | null;
   id: string;
+  storageBucket: string | null;
+  storageKey: string | null;
+  storageProvider: MediaRow["storageProvider"];
   updatedAt: string;
 };
 
@@ -76,8 +80,29 @@ type MediaUploadEditState = {
   kind: LocalImageEditorKind;
 };
 
+type StorageProviderFilter = "all" | "local" | "r2";
+
 const MEDIA_GRID_INITIAL_LIMIT = 60;
 const MEDIA_GRID_BATCH_SIZE = 60;
+const STORAGE_PROVIDER_FILTERS = [
+  {
+    icon: "filter",
+    label: "全部存储",
+    value: "all",
+  },
+  {
+    icon: "server",
+    label: "服务器文件",
+    storageProvider: "local",
+    value: "local",
+  },
+  {
+    icon: "cloudUpload",
+    label: "Cloudflare R2 文件",
+    storageProvider: "r2",
+    value: "r2",
+  },
+] as const;
 
 function formatFileSize(bytes: number) {
   const units = ["B", "KB", "MB", "GB"] as const;
@@ -113,6 +138,7 @@ function toMediaRow(item: AdminMediaItem): MediaRow {
     kind: item.fileType,
     size: formatFileSize(item.fileSizeBytes),
     status: "linked",
+    storageProvider: item.storageProvider,
     uploadedAt: new Date(item.createdAt).toLocaleString("zh-CN"),
     url: resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl,
     usage: item.fileFormat,
@@ -211,6 +237,12 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
                     <dd>{item?.usage ?? "暂无"}</dd>
                   </div>
                   <div>
+                    <dt>存储位置</dt>
+                    <dd>
+                      {item ? (item.storageProvider === "r2" ? "Cloudflare R2" : "服务器") : "暂无"}
+                    </dd>
+                  </div>
+                  <div>
                     <dt>大小</dt>
                     <dd>{item?.size ?? "暂无"}</dd>
                   </div>
@@ -248,6 +280,7 @@ export function MediaPage() {
   const [mediaRows, setMediaRows] = useState<MediaRow[]>([]);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [activeFolderSlug, setActiveFolderSlug] = useState("all");
+  const [storageProviderFilter, setStorageProviderFilter] = useState<StorageProviderFilter>("all");
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(() => new Set());
   const [folderModalState, setFolderModalState] = useState<FolderModalState | null>(null);
   const [folderForm, setFolderForm] = useState({ description: "", name: "", slug: "" });
@@ -278,18 +311,33 @@ export function MediaPage() {
   }
 
   async function loadMedia() {
-    const [mediaResponse, folderResponse] = await Promise.all([
-      adminFetch<{ items: AdminMediaItem[] }>("/admin/media/"),
-      adminFetch<{ items: MediaFolder[] }>("/admin/media/folders"),
-    ]);
-    const nextRows = mediaResponse.items.map(toMediaRow);
-    const nextRowIds = new Set(nextRows.map((row) => row.id));
+    const mediaParams = new URLSearchParams();
+    if (storageProviderFilter !== "all") mediaParams.set("storageProvider", storageProviderFilter);
+    const mediaPath = mediaParams.size
+      ? `/admin/media/?${mediaParams.toString()}`
+      : "/admin/media/";
 
-    setFolders(folderResponse.items);
-    setMediaRows(nextRows);
-    setSelectedMediaIds(
-      (selectedIds) => new Set([...selectedIds].filter((id) => nextRowIds.has(id))),
-    );
+    try {
+      const folderResponse = await adminFetch<{ items: MediaFolder[] }>("/admin/media/folders");
+      setFolders(folderResponse.items);
+    } catch (error) {
+      setPageNotice(error instanceof Error ? error.message : "媒体文件夹加载失败");
+    }
+
+    try {
+      const mediaResponse = await adminFetch<{ items: AdminMediaItem[] }>(mediaPath);
+      const nextRows = mediaResponse.items.map(toMediaRow);
+      const nextRowIds = new Set(nextRows.map((row) => row.id));
+
+      setMediaRows(nextRows);
+      setSelectedMediaIds(
+        (selectedIds) => new Set([...selectedIds].filter((id) => nextRowIds.has(id))),
+      );
+    } catch (error) {
+      setMediaRows([]);
+      setSelectedMediaIds(new Set());
+      setPageNotice(error instanceof Error ? error.message : "媒体列表加载失败");
+    }
   }
 
   const activeFolder = useMemo(
@@ -323,11 +371,11 @@ export function MediaPage() {
 
   useEffect(() => {
     void loadMedia();
-  }, [reloadKey]);
+  }, [reloadKey, storageProviderFilter]);
 
   useEffect(() => {
     setMediaRenderLimit(MEDIA_GRID_INITIAL_LIMIT);
-  }, [activeFolderSlug]);
+  }, [activeFolderSlug, storageProviderFilter]);
 
   function getUploadEditorKind(file: File, folderSlug: string): LocalImageEditorKind | null {
     if (!file.type.startsWith("image/")) return null;
@@ -434,6 +482,11 @@ export function MediaPage() {
     setSelectedMediaIds(new Set());
   }
 
+  function selectStorageProviderFilter(value: StorageProviderFilter) {
+    setStorageProviderFilter(value);
+    setSelectedMediaIds(new Set());
+  }
+
   function updateMediaSelection(rowId: string, isSelected: boolean) {
     setSelectedMediaIds((selectedIds) => {
       const nextSelectedIds = new Set(selectedIds);
@@ -498,6 +551,29 @@ export function MediaPage() {
       setReloadKey((key) => key + 1);
     } catch (error) {
       setPageNotice(error instanceof Error ? error.message : "媒体删除失败");
+    }
+  }
+
+  async function migrateSelectedMedia(targetProvider: Exclude<StorageProviderFilter, "all">) {
+    if (selectedMediaRows.length === 0) return;
+
+    try {
+      await adminFetch("/admin/media/storage/migrate", {
+        body: {
+          ids: selectedMediaRows.map((row) => row.id),
+          targetProvider,
+        },
+        method: "POST",
+      });
+      setSelectedMediaIds(new Set());
+      setPageNotice(
+        targetProvider === "r2"
+          ? `已迁移 ${selectedMediaRows.length} 个文件到 Cloudflare R2`
+          : `已迁移 ${selectedMediaRows.length} 个文件到服务器`,
+      );
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setPageNotice(error instanceof Error ? error.message : "媒体迁移失败");
     }
   }
 
@@ -719,6 +795,26 @@ export function MediaPage() {
                 <span>
                   已显示 {renderedMediaRows.length} / {visibleMediaRows.length} 项
                 </span>
+                <Button
+                  isDisabled={selectedMediaRows.length === 0}
+                  onPress={() => void migrateSelectedMedia("local")}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="server" />
+                  迁移到服务器
+                </Button>
+                <Button
+                  isDisabled={selectedMediaRows.length === 0}
+                  onPress={() => void migrateSelectedMedia("r2")}
+                  size="sm"
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="cloudUpload" />
+                  迁移到 Cloudflare R2
+                </Button>
                 <AlertDialog>
                   <Button
                     isDisabled={selectedMediaRows.length === 0}
@@ -757,6 +853,20 @@ export function MediaPage() {
                   </AlertDialog.Backdrop>
                 </AlertDialog>
               </div>
+            </div>
+            <div className="media-storage-filter" aria-label="媒体存储位置筛选">
+              {STORAGE_PROVIDER_FILTERS.map((filter) => (
+                <Button
+                  key={filter.value}
+                  onPress={() => selectStorageProviderFilter(filter.value)}
+                  size="sm"
+                  type="button"
+                  variant={storageProviderFilter === filter.value ? "primary" : "tertiary"}
+                >
+                  <AppIcon name={filter.icon} />
+                  {filter.label}
+                </Button>
+              ))}
             </div>
             <div className="media-folder-list" aria-label="媒体文件夹">
               <Button
@@ -890,7 +1000,8 @@ export function MediaPage() {
                   </div>
                   <strong title={row.fileName}>{row.fileName}</strong>
                   <span>
-                    {row.folderName} · {row.size}
+                    {row.folderName} · {row.size} ·{" "}
+                    {row.storageProvider === "r2" ? "Cloudflare R2" : "服务器"}
                   </span>
                   <div className="media-grid-card__actions">
                     <Button

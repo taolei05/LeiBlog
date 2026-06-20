@@ -31,6 +31,7 @@ const authSessionLoginMethodMigration = readFileSync(
   "utf8"
 );
 const googleAuthProviderMigration = readMigration("005_google_auth_provider.sql");
+const seedSource = readFileSync(join(import.meta.dir, "../src/db/seed.ts"), "utf8");
 
 describe("initial database migration", () => {
   test("keeps a consolidated baseline migration", () => {
@@ -40,6 +41,7 @@ describe("initial database migration", () => {
       "003_auth_providers.sql",
       "004_auth_session_login_method.sql",
       "005_google_auth_provider.sql",
+      "006_r2_media_storage.sql",
     ]);
   });
 
@@ -87,6 +89,16 @@ describe("initial database migration", () => {
     expect(migration).toContain("comments");
     expect(migration).toContain("site");
     expect(migration).toContain("website-icons");
+  });
+
+  test("keeps seed-compatible protected media folders in sync", () => {
+    for (const slug of ["article-covers", "avatars", "comments", "site", "website-icons"]) {
+      expect(seedSource).toContain(slug);
+    }
+
+    expect(seedSource).toContain(
+      "WHERE slug IN ('article-covers', 'avatars', 'comments', 'site', 'website-icons')"
+    );
   });
 
   test("creates ordered navigation groups and items", () => {
@@ -162,5 +174,27 @@ describe("initial database migration", () => {
       "ADD COLUMN IF NOT EXISTS login_method varchar(40) NOT NULL DEFAULT 'password'"
     );
     expect(authSessionLoginMethodMigration).toContain("auth_sessions_login_method_check");
+  });
+
+  test("supports optional Cloudflare R2 media storage", () => {
+    const r2Migration = readMigration("006_r2_media_storage.sql");
+
+    for (const column of [
+      "r2_enabled boolean NOT NULL DEFAULT false",
+      "r2_account_id text",
+      "r2_bucket text",
+      "r2_access_key_id text",
+      "r2_secret_access_key_encrypted jsonb",
+      "r2_public_base_url text",
+      "storage_provider varchar(20) NOT NULL DEFAULT 'local'",
+      "storage_key text",
+      "storage_bucket text",
+    ]) {
+      expect(migration).toContain(column);
+      expect(r2Migration).toContain(column.replace(" NOT NULL DEFAULT 'local'", ""));
+    }
+
+    expect(r2Migration).toContain("media_assets_storage_provider_check");
+    expect(r2Migration).toContain("CHECK (storage_provider IN ('local', 'r2'))");
   });
 });

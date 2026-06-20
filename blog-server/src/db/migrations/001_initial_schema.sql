@@ -46,6 +46,12 @@ CREATE TABLE site_config (
   deepl_api_key_encrypted jsonb,
   ipgeolocation_api_key_encrypted jsonb,
   comments_enabled boolean NOT NULL DEFAULT true,
+  r2_enabled boolean NOT NULL DEFAULT false,
+  r2_account_id text,
+  r2_bucket text,
+  r2_access_key_id text,
+  r2_secret_access_key_encrypted jsonb,
+  r2_public_base_url text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -352,13 +358,18 @@ CREATE TABLE media_assets (
   uploaded_by uuid REFERENCES users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  folder_id uuid REFERENCES media_folders(id) ON DELETE SET NULL
+  folder_id uuid REFERENCES media_folders(id) ON DELETE SET NULL,
+  storage_provider varchar(20) NOT NULL DEFAULT 'local',
+  storage_key text,
+  storage_bucket text,
+  CONSTRAINT media_assets_storage_provider_check CHECK (storage_provider IN ('local', 'r2'))
 );
 
 CREATE UNIQUE INDEX media_assets_access_url_unique ON media_assets (access_url);
 CREATE INDEX media_assets_type_created_at_idx ON media_assets (file_type, created_at DESC);
 CREATE INDEX media_assets_uploaded_by_idx ON media_assets (uploaded_by);
 CREATE INDEX media_assets_folder_created_at_idx ON media_assets (folder_id, created_at DESC);
+CREATE INDEX media_assets_storage_provider_created_at_idx ON media_assets (storage_provider, created_at DESC);
 
 CREATE TRIGGER media_assets_set_updated_at
 BEFORE UPDATE ON media_assets

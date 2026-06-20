@@ -20,7 +20,13 @@ const SystemSiteConfigItem = t.Object({
   hasResendApiKey: t.Boolean(),
   hasDeepLApiKey: t.Boolean(),
   hasIpgeolocationApiKey: t.Boolean(),
+  hasR2SecretAccessKey: t.Boolean(),
   commentsEnabled: t.Boolean(),
+  r2AccessKeyId: t.Nullable(t.String()),
+  r2AccountId: t.Nullable(t.String()),
+  r2Bucket: t.Nullable(t.String()),
+  r2Enabled: t.Boolean(),
+  r2PublicBaseUrl: t.Nullable(t.String()),
 });
 
 const SystemFilingItem = t.Object({
@@ -66,6 +72,12 @@ export const SystemSiteConfigBody = t.Object({
   resendApiKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
   deeplApiKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
   ipgeolocationApiKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+  r2AccessKeyId: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
+  r2AccountId: t.Optional(t.Nullable(t.String({ maxLength: 100 }))),
+  r2Bucket: t.Optional(t.Nullable(t.String({ maxLength: 255 }))),
+  r2Enabled: t.Optional(t.Boolean()),
+  r2PublicBaseUrl: t.Optional(t.Nullable(t.String({ maxLength: 2048 }))),
+  r2SecretAccessKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
   commentsEnabled: t.Boolean(),
 });
 
@@ -156,6 +168,7 @@ export const ApiKeysResponse = t.Object({
     resendApiKey: t.Nullable(t.String()),
     deeplApiKey: t.Nullable(t.String()),
     ipgeolocationApiKey: t.Nullable(t.String()),
+    r2SecretAccessKey: t.Nullable(t.String()),
   }),
 });
 

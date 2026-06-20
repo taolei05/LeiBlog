@@ -7,10 +7,12 @@ import {
   MediaFolderListResponse,
   MediaFolderParams,
   MediaFolderResponse,
+  MediaMigrationResponse,
   MediaParams,
   MediaPreviewResponse,
   MediaQuery,
   MediaResponse,
+  MigrateMediaStorageBody,
   OkResponse,
   RenameMediaBody,
   UploadMediaBody,
@@ -25,6 +27,7 @@ import {
   getMediaPreview,
   listMediaFolders,
   listMedia,
+  migrateMediaStorage,
   updateMediaFolder,
   renameMedia,
   uploadMedia,
@@ -74,6 +77,14 @@ export const adminMediaModule = new Elysia({ prefix: "/media" })
       response: { 200: MediaResponse },
     }
   )
+  .post(
+    "/storage/migrate",
+    ({ currentUser, body }) => migrateMediaStorage(currentUser, body),
+    {
+      body: MigrateMediaStorageBody,
+      response: { 200: MediaMigrationResponse },
+    }
+  )
   .get(
     "/:id",
     async ({ currentUser, params }) => ({
@@ -102,6 +113,8 @@ export const adminMediaModule = new Elysia({ prefix: "/media" })
     set.headers["content-type"] = download.contentType;
     set.headers["content-disposition"] =
       `attachment; filename="${encodeURIComponent(download.fileName)}"`;
+
+    if ("data" in download) return download.data;
 
     return Bun.file(download.filePath);
   }, {

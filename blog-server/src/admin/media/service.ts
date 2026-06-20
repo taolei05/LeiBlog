@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
-import { basename, extname, resolve, sep } from "node:path";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import { basename, dirname, extname, resolve, sep } from "node:path";
 
 import type { AuthUser } from "../../shared/auth";
 import type { AppConfig } from "../../shared/config";
 import type { DbClient } from "../../shared/db";
 import { requireAdmin } from "../../shared/auth";
 import { appConfig } from "../../shared/config";
+import { decryptSecret, type StoredEncryptedSecret } from "../../shared/crypto";
 import { db, withTransaction } from "../../shared/db";
 import { notFound, validationError } from "../../shared/errors";
 import { normalizeSvgBuffer } from "../../shared/media/svg";
@@ -16,8 +17,16 @@ import {
   normalizeSlug,
   withSlugSuffix,
 } from "../../shared/slug";
+import {
+  buildR2ObjectUrl,
+  deleteR2Object,
+  getR2Object,
+  putR2Object,
+  type R2StorageSettings,
+} from "./r2-storage";
 
 type MediaType = "image" | "video" | "document";
+type MediaStorageProvider = "local" | "r2";
 type SortOrder = "asc" | "desc";
 type MediaSystemFolderKey =
   | "article-covers"
@@ -34,6 +43,7 @@ export interface MediaListQuery {
   folderSlug?: string;
   fileType?: MediaType;
   fileFormat?: string;
+  storageProvider?: MediaStorageProvider;
   page?: number;
   pageSize?: number;
   sortBy?: "createdAt" | "fileName" | "fileSize" | "fileType";
@@ -58,6 +68,11 @@ export interface MediaServiceOptions {
   config?: AppConfig;
 }
 
+export interface MigrateMediaStorageInput {
+  ids: string[];
+  targetProvider: MediaStorageProvider;
+}
+
 interface StoreMediaAssetInput extends UploadMediaInput {
   allowedFileTypes?: MediaType[];
   uploadedBy: string | null;
@@ -75,9 +90,35 @@ interface MediaRow {
   folder_slug: string | null;
   folder_system_key: string | null;
   id: string;
+  storage_bucket: string | null;
+  storage_key: string | null;
+  storage_provider: MediaStorageProvider;
   updated_at: Date | string;
   uploaded_by: string | null;
 }
+
+interface R2ConfigRow {
+  r2_access_key_id: string | null;
+  r2_account_id: string | null;
+  r2_bucket: string | null;
+  r2_enabled: boolean;
+  r2_public_base_url: string | null;
+  r2_secret_access_key_encrypted: StoredEncryptedSecret | null;
+}
+
+type MediaDownloadResult =
+  | {
+      contentType: string;
+      data: Uint8Array;
+      fileName: string;
+      filePath?: never;
+    }
+  | {
+      contentType: string;
+      data?: never;
+      fileName: string;
+      filePath: string;
+    };
 
 interface MediaFolderRow {
   article_count: string | number | bigint;
@@ -171,6 +212,9 @@ function toMediaItem(row: MediaRow) {
     folderName: row.folder_name,
     folderSlug: row.folder_slug,
     folderSystemKey: row.folder_system_key,
+    storageBucket: row.storage_bucket,
+    storageKey: row.storage_key,
+    storageProvider: row.storage_provider,
     uploadedBy: row.uploaded_by,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
@@ -397,6 +441,25 @@ function toAccessUrl(config: AppConfig, subdir: string, storageName: string) {
   return `${config.uploadsUrlPrefix.replace(/\/$/, "")}/${subdir}/${storageName}`;
 }
 
+function toAccessUrlFromStorageKey(config: AppConfig, storageKey: string) {
+  return `${config.uploadsUrlPrefix.replace(/\/$/, "")}/${storageKey}`;
+}
+
+function toStorageKey(subdir: string, storageName: string) {
+  return `${subdir}/${storageName}`;
+}
+
+function pathForStorageKey(config: AppConfig, storageKey: string) {
+  const root = resolveUploadsDir(config);
+  const filePath = resolve(root, storageKey);
+
+  if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
+    throw validationError("媒体存储路径无效");
+  }
+
+  return filePath;
+}
+
 function pathForAccessUrl(config: AppConfig, accessUrl: string) {
   const prefix = config.uploadsUrlPrefix.replace(/\/$/, "");
   if (!accessUrl.startsWith(`${prefix}/`)) {
@@ -414,11 +477,95 @@ function pathForAccessUrl(config: AppConfig, accessUrl: string) {
   return filePath;
 }
 
+function storageKeyForRow(config: AppConfig, row: MediaRow) {
+  if (row.storage_key) return row.storage_key;
+
+  const prefix = config.uploadsUrlPrefix.replace(/\/$/, "");
+  if (!row.access_url.startsWith(`${prefix}/`)) {
+    throw validationError("媒体访问地址无效");
+  }
+
+  return row.access_url.slice(prefix.length + 1);
+}
+
+function localPathForRow(config: AppConfig, row: MediaRow) {
+  return row.storage_key ? pathForStorageKey(config, row.storage_key) : pathForAccessUrl(config, row.access_url);
+}
+
+async function readMediaBytes({
+  client,
+  config,
+  row,
+}: {
+  client: DbClient;
+  config: AppConfig;
+  row: MediaRow;
+}) {
+  if (row.storage_provider === "r2") {
+    const settings = await getR2StorageSettings(client, { requireEnabled: false });
+    if (!settings) throw validationError("Cloudflare R2 存储配置不完整");
+    return getR2Object(settings, storageKeyForRow(config, row));
+  }
+
+  return new Uint8Array(await readFile(localPathForRow(config, row)));
+}
+
+async function getR2StorageSettings(
+  client: DbClient,
+  { requireEnabled }: { requireEnabled: boolean }
+): Promise<R2StorageSettings | null> {
+  const [row] = await client<R2ConfigRow[]>`
+    SELECT r2_enabled, r2_account_id, r2_bucket, r2_access_key_id,
+           r2_secret_access_key_encrypted, r2_public_base_url
+    FROM site_config
+    WHERE id = 1
+  `;
+
+  if (!row) return null;
+  if (requireEnabled && !row.r2_enabled) return null;
+
+  const settings = {
+    accessKeyId: cleanOptional(row.r2_access_key_id),
+    accountId: cleanOptional(row.r2_account_id),
+    bucket: cleanOptional(row.r2_bucket),
+    publicBaseUrl: cleanOptional(row.r2_public_base_url),
+    secretAccessKey: decryptSecret(row.r2_secret_access_key_encrypted),
+  };
+  const hasAnySetting = Object.values(settings).some(Boolean);
+
+  if (!hasAnySetting) {
+    if (requireEnabled && row.r2_enabled) {
+      throw validationError("Cloudflare R2 存储配置不完整");
+    }
+
+    return null;
+  }
+
+  if (
+    !settings.accessKeyId ||
+    !settings.accountId ||
+    !settings.bucket ||
+    !settings.publicBaseUrl ||
+    !settings.secretAccessKey
+  ) {
+    throw validationError("Cloudflare R2 存储配置不完整");
+  }
+
+  return {
+    accessKeyId: settings.accessKeyId,
+    accountId: settings.accountId,
+    bucket: settings.bucket,
+    publicBaseUrl: settings.publicBaseUrl,
+    secretAccessKey: settings.secretAccessKey,
+  };
+}
+
 async function getMediaRow(id: string, client: DbClient = db) {
   const [row] = await client<MediaRow[]>`
     SELECT ma.id, ma.file_name, ma.file_format, ma.file_type, ma.file_size_bytes,
            ma.access_url, ma.folder_id, mf.name AS folder_name, mf.slug AS folder_slug,
-           mf.system_key AS folder_system_key, ma.uploaded_by, ma.created_at, ma.updated_at
+           mf.system_key AS folder_system_key, ma.storage_provider, ma.storage_key,
+           ma.storage_bucket, ma.uploaded_by, ma.created_at, ma.updated_at
     FROM media_assets ma
     LEFT JOIN media_folders mf ON mf.id = ma.folder_id
     WHERE ma.id = ${id}
@@ -580,6 +727,7 @@ export async function listMedia(
   const folderSlug = query.folderSlug?.trim().toLowerCase() || null;
   const fileType = query.fileType ?? null;
   const fileFormat = query.fileFormat?.trim().toLowerCase() || null;
+  const storageProvider = query.storageProvider ?? null;
   const createdFrom = parseDateFilter(query.createdFrom);
   const createdTo = parseDateFilter(query.createdTo);
   const orderBy = orderClause(query.sortBy, query.sortOrder);
@@ -588,7 +736,8 @@ export async function listMedia(
     `
       SELECT ma.id, ma.file_name, ma.file_format, ma.file_type, ma.file_size_bytes,
              ma.access_url, ma.folder_id, mf.name AS folder_name, mf.slug AS folder_slug,
-             mf.system_key AS folder_system_key, ma.uploaded_by, ma.created_at, ma.updated_at
+             mf.system_key AS folder_system_key, ma.storage_provider, ma.storage_key,
+             ma.storage_bucket, ma.uploaded_by, ma.created_at, ma.updated_at
       FROM media_assets ma
       LEFT JOIN media_folders mf ON mf.id = ma.folder_id
       WHERE ($1::text IS NULL OR lower(ma.file_name) LIKE $1 OR lower(ma.access_url) LIKE $1 OR lower(coalesce(mf.name, '')) LIKE $1)
@@ -598,10 +747,22 @@ export async function listMedia(
         AND ($5::timestamptz IS NULL OR ma.created_at < $5)
         AND ($6::uuid IS NULL OR ma.folder_id = $6)
         AND ($7::text IS NULL OR lower(mf.slug) = $7)
+        AND ($8::text IS NULL OR ma.storage_provider = $8)
       ORDER BY ${orderBy}
-      LIMIT $8 OFFSET $9
+      LIMIT $9 OFFSET $10
     `,
-    [search, fileType, fileFormat, createdFrom, createdTo, folderId, folderSlug, pageSize, offset]
+    [
+      search,
+      fileType,
+      fileFormat,
+      createdFrom,
+      createdTo,
+      folderId,
+      folderSlug,
+      storageProvider,
+      pageSize,
+      offset,
+    ]
   );
 
   const [count] = await client.unsafe<{ total: string }[]>(
@@ -616,8 +777,9 @@ export async function listMedia(
         AND ($5::timestamptz IS NULL OR ma.created_at < $5)
         AND ($6::uuid IS NULL OR ma.folder_id = $6)
         AND ($7::text IS NULL OR lower(mf.slug) = $7)
+        AND ($8::text IS NULL OR ma.storage_provider = $8)
     `,
-    [search, fileType, fileFormat, createdFrom, createdTo, folderId, folderSlug]
+    [search, fileType, fileFormat, createdFrom, createdTo, folderId, folderSlug, storageProvider]
   );
 
   return {
@@ -711,19 +873,32 @@ async function storeMediaAsset(
   const id = randomUUID();
   const subdir = folder ? `${folder.slug}/${storageSubdir()}` : storageSubdir();
   const storageName = mediaStorageName(id, fileInfo.format);
-  const uploadsDir = resolveUploadsDir(config);
-  const targetDir = resolve(uploadsDir, subdir);
-  const targetPath = resolve(targetDir, storageName);
+  const storageKey = toStorageKey(subdir, storageName);
+  const targetPath = pathForStorageKey(config, storageKey);
   const displayName = safeDisplayName(input.fileName || input.file.name);
-  const accessUrl = toAccessUrl(config, subdir, storageName);
+  const r2Settings = await getR2StorageSettings(client, { requireEnabled: true });
+  const storageProvider: MediaStorageProvider = r2Settings ? "r2" : "local";
+  const accessUrl = r2Settings
+    ? buildR2ObjectUrl(r2Settings, storageKey)
+    : toAccessUrl(config, subdir, storageName);
 
-  await mkdir(targetDir, { recursive: true });
-  await Bun.write(targetPath, fileInfo.buffer);
+  if (r2Settings) {
+    await putR2Object({
+      body: fileInfo.buffer,
+      contentType: mediaContentType(fileInfo.format),
+      key: storageKey,
+      settings: r2Settings,
+    });
+  } else {
+    await mkdir(dirname(targetPath), { recursive: true });
+    await Bun.write(targetPath, fileInfo.buffer);
+  }
 
   try {
     await client`
       INSERT INTO media_assets (
-        id, file_name, file_format, file_type, file_size_bytes, access_url, folder_id, uploaded_by
+        id, file_name, file_format, file_type, file_size_bytes, access_url, folder_id,
+        storage_provider, storage_key, storage_bucket, uploaded_by
       )
       VALUES (
         ${id},
@@ -733,11 +908,18 @@ async function storeMediaAsset(
         ${fileInfo.buffer.byteLength},
         ${accessUrl},
         ${folder?.id ?? null},
+        ${storageProvider},
+        ${storageKey},
+        ${r2Settings?.bucket ?? null},
         ${input.uploadedBy}
       )
     `;
   } catch (error) {
-    await rm(targetPath, { force: true });
+    if (r2Settings) {
+      await deleteR2Object(r2Settings, storageKey).catch(() => undefined);
+    } else {
+      await rm(targetPath, { force: true });
+    }
     throw error;
   }
 
@@ -773,14 +955,97 @@ export async function deleteMedia(
   const config = getConfig(options);
   const client = getClient(options);
   const row = await getMediaRow(id, client);
-  const filePath = pathForAccessUrl(config, row.access_url);
 
-  await withTransaction(async (tx) => {
-    await tx`DELETE FROM media_assets WHERE id = ${id}`;
-  }, client);
-  await rm(filePath, { force: true });
+  if (row.storage_provider === "r2") {
+    const settings = await getR2StorageSettings(client, { requireEnabled: false });
+    if (!settings) throw validationError("Cloudflare R2 存储配置不完整");
+    await deleteR2Object(settings, storageKeyForRow(config, row));
+    await withTransaction(async (tx) => {
+      await tx`DELETE FROM media_assets WHERE id = ${id}`;
+    }, client);
+  } else {
+    const filePath = localPathForRow(config, row);
+
+    await withTransaction(async (tx) => {
+      await tx`DELETE FROM media_assets WHERE id = ${id}`;
+    }, client);
+    await rm(filePath, { force: true });
+  }
 
   return { ok: true };
+}
+
+export async function migrateMediaStorage(
+  currentUser: AuthUser,
+  input: MigrateMediaStorageInput,
+  options: MediaServiceOptions = {}
+) {
+  requireAdmin(currentUser);
+  const config = getConfig(options);
+  const client = getClient(options);
+  const ids = [...new Set(input.ids.map((id) => id.trim()).filter(Boolean))];
+
+  if (ids.length === 0) throw validationError("请选择要迁移的媒体文件");
+
+  const migratedItems = [];
+
+  for (const id of ids) {
+    const row = await getMediaRow(id, client);
+    if (row.storage_provider === input.targetProvider) {
+      migratedItems.push(toMediaItem(row));
+      continue;
+    }
+
+    const storageKey = storageKeyForRow(config, row);
+    const body = await readMediaBytes({ client, config, row });
+
+    if (input.targetProvider === "r2") {
+      const settings = await getR2StorageSettings(client, { requireEnabled: true });
+      if (!settings) throw validationError("请先启用 Cloudflare R2 存储配置");
+      const accessUrl = buildR2ObjectUrl(settings, storageKey);
+      await putR2Object({
+        body,
+        contentType: mediaContentType(row.file_format),
+        key: storageKey,
+        settings,
+      });
+      await client`
+        UPDATE media_assets
+        SET access_url = ${accessUrl},
+            storage_provider = 'r2',
+            storage_key = ${storageKey},
+            storage_bucket = ${settings.bucket}
+        WHERE id = ${id}
+      `;
+
+      if (row.storage_provider === "local") {
+        await rm(localPathForRow(config, row), { force: true });
+      }
+    } else {
+      const localPath = pathForStorageKey(config, storageKey);
+      const accessUrl = toAccessUrlFromStorageKey(config, storageKey);
+
+      await mkdir(dirname(localPath), { recursive: true });
+      await Bun.write(localPath, body);
+      await client`
+        UPDATE media_assets
+        SET access_url = ${accessUrl},
+            storage_provider = 'local',
+            storage_key = ${storageKey},
+            storage_bucket = null
+        WHERE id = ${id}
+      `;
+
+      if (row.storage_provider === "r2") {
+        const settings = await getR2StorageSettings(client, { requireEnabled: false });
+        if (settings) await deleteR2Object(settings, storageKey).catch(() => undefined);
+      }
+    }
+
+    migratedItems.push(toMediaItem(await getMediaRow(id, client)));
+  }
+
+  return { ok: true, items: migratedItems };
 }
 
 export async function getMediaLink(
@@ -814,15 +1079,25 @@ export async function getMediaDownload(
   currentUser: AuthUser,
   id: string,
   options: MediaServiceOptions = {}
-) {
+): Promise<MediaDownloadResult> {
   requireAdmin(currentUser);
   const config = getConfig(options);
-  const row = await getMediaRow(id, getClient(options));
+  const client = getClient(options);
+  const row = await getMediaRow(id, client);
+  const contentType = mediaContentType(row.file_format);
+
+  if (row.storage_provider === "r2") {
+    return {
+      data: await readMediaBytes({ client, config, row }),
+      fileName: row.file_name,
+      contentType,
+    };
+  }
 
   return {
-    filePath: pathForAccessUrl(config, row.access_url),
+    filePath: localPathForRow(config, row),
     fileName: row.file_name,
-    contentType: mediaContentType(row.file_format),
+    contentType,
   };
 }
 

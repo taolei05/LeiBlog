@@ -42,6 +42,12 @@ type SiteConfigState = {
   copyright: string;
   deeplApiKey: string;
   ipgeolocationApiKey: string;
+  r2AccessKeyId: string;
+  r2AccountId: string;
+  r2Bucket: string;
+  r2Enabled: boolean;
+  r2PublicBaseUrl: string;
+  r2SecretAccessKey: string;
   resendApiKey: string;
   resendDomain: string;
   seoDescription: string;
@@ -82,7 +88,13 @@ type SiteConfigItem = {
   copyright: string;
   hasDeepLApiKey: boolean;
   hasIpgeolocationApiKey: boolean;
+  hasR2SecretAccessKey: boolean;
   hasResendApiKey: boolean;
+  r2AccessKeyId: string | null;
+  r2AccountId: string | null;
+  r2Bucket: string | null;
+  r2Enabled: boolean;
+  r2PublicBaseUrl: string | null;
   resendDomain: string | null;
   seoDescription: string;
   seoKeywords: string[];
@@ -100,6 +112,7 @@ type FilingItem = {
 type ApiKeyItem = {
   deeplApiKey: string | null;
   ipgeolocationApiKey: string | null;
+  r2SecretAccessKey: string | null;
   resendApiKey: string | null;
 };
 
@@ -109,9 +122,14 @@ type ApiKeyEmailCodeResult = {
   validMinutes: number;
 };
 
-type SecretFieldKey = "deeplApiKey" | "ipgeolocationApiKey" | "resendApiKey" | "resendDomain";
+type SecretFieldKey =
+  | "deeplApiKey"
+  | "ipgeolocationApiKey"
+  | "r2SecretAccessKey"
+  | "resendApiKey"
+  | "resendDomain";
 
-type SiteSettingsSaveKind = "filing" | "site-config" | "site-info";
+type SiteSettingsSaveKind = "filing" | "r2-storage" | "site-config" | "site-info";
 
 type TestModalState =
   | {
@@ -147,6 +165,11 @@ const secretRevealCopy: Record<
     description: "正在查看 IPGeolocation API Key。查看前需要通过管理员邮箱验证码。",
     title: "查看 IPGeolocation API Key",
     valueLabel: "IPGeolocation API Key",
+  },
+  r2SecretAccessKey: {
+    description: "正在查看 Cloudflare R2 Secret Access Key。查看前需要通过管理员邮箱验证码。",
+    title: "查看 R2 Secret Access Key",
+    valueLabel: "R2 Secret Access Key",
   },
   resendApiKey: {
     description:
@@ -185,6 +208,11 @@ const saveConfirmationCopy: Record<
     description: "保存后，SEO、集成配置和评论开关会立即按最新设置生效。",
     title: "确认保存站点配置？",
   },
+  "r2-storage": {
+    confirmLabel: "确认保存",
+    description: "保存后，新上传媒体会按 Cloudflare R2 存储开关写入对应位置。",
+    title: "确认保存 Cloudflare R2 存储配置？",
+  },
   "site-info": {
     confirmLabel: "确认保存",
     description: "保存后，站点名称、Logo、favicon、首页封面和首页文案会更新。",
@@ -208,6 +236,12 @@ const defaultSiteConfig: SiteConfigState = {
   copyright: "",
   deeplApiKey: "",
   ipgeolocationApiKey: "",
+  r2AccessKeyId: "",
+  r2AccountId: "",
+  r2Bucket: "",
+  r2Enabled: false,
+  r2PublicBaseUrl: "",
+  r2SecretAccessKey: "",
   resendApiKey: "",
   resendDomain: "",
   seoDescription: "",
@@ -385,6 +419,7 @@ export function SiteSettingsPage() {
   const [keyFlags, setKeyFlags] = useState({
     hasDeepLApiKey: false,
     hasIpgeolocationApiKey: false,
+    hasR2SecretAccessKey: false,
     hasResendApiKey: false,
   });
   const [revealKey, setRevealKey] = useState<SecretFieldKey | null>(null);
@@ -445,6 +480,12 @@ export function SiteSettingsPage() {
         copyright: siteConfigResponse.item.copyright,
         deeplApiKey: "",
         ipgeolocationApiKey: "",
+        r2AccessKeyId: siteConfigResponse.item.r2AccessKeyId ?? "",
+        r2AccountId: siteConfigResponse.item.r2AccountId ?? "",
+        r2Bucket: siteConfigResponse.item.r2Bucket ?? "",
+        r2Enabled: siteConfigResponse.item.r2Enabled,
+        r2PublicBaseUrl: siteConfigResponse.item.r2PublicBaseUrl ?? "",
+        r2SecretAccessKey: "",
         resendApiKey: "",
         resendDomain: siteConfigResponse.item.resendDomain ?? "",
         seoDescription: siteConfigResponse.item.seoDescription,
@@ -454,6 +495,7 @@ export function SiteSettingsPage() {
       setKeyFlags({
         hasDeepLApiKey: siteConfigResponse.item.hasDeepLApiKey,
         hasIpgeolocationApiKey: siteConfigResponse.item.hasIpgeolocationApiKey,
+        hasR2SecretAccessKey: siteConfigResponse.item.hasR2SecretAccessKey,
         hasResendApiKey: siteConfigResponse.item.hasResendApiKey,
       });
     }
@@ -547,6 +589,9 @@ export function SiteSettingsPage() {
       case "site-config":
         void saveSiteConfig();
         return;
+      case "r2-storage":
+        void saveSiteConfig("Cloudflare R2 存储配置已保存");
+        return;
       case "site-info":
         void saveSiteInfo();
         return;
@@ -605,13 +650,18 @@ export function SiteSettingsPage() {
     }
   }
 
-  async function saveSiteConfig() {
+  async function saveSiteConfig(successMessage = "站点配置已保存") {
     setIsSaving(true);
 
     try {
       const body: Record<string, unknown> = {
         commentsEnabled: siteConfig.commentsEnabled,
         copyright: siteConfig.copyright,
+        r2AccessKeyId: toOptional(siteConfig.r2AccessKeyId),
+        r2AccountId: toOptional(siteConfig.r2AccountId),
+        r2Bucket: toOptional(siteConfig.r2Bucket),
+        r2Enabled: siteConfig.r2Enabled,
+        r2PublicBaseUrl: toOptional(siteConfig.r2PublicBaseUrl),
         resendDomain: toOptional(siteConfig.resendDomain),
         seoDescription: siteConfig.seoDescription,
         seoKeywords: splitKeywords(siteConfig.seoKeywords),
@@ -623,12 +673,15 @@ export function SiteSettingsPage() {
       if (siteConfig.ipgeolocationApiKey.trim()) {
         body.ipgeolocationApiKey = siteConfig.ipgeolocationApiKey.trim();
       }
+      if (siteConfig.r2SecretAccessKey.trim()) {
+        body.r2SecretAccessKey = siteConfig.r2SecretAccessKey.trim();
+      }
 
       await adminFetch("/admin/system/site-config", {
         body,
         method: "PATCH",
       });
-      updateNotice("站点配置已保存");
+      updateNotice(successMessage);
       await loadSettings();
     } catch (error) {
       updateNotice(error instanceof Error ? error.message : "站点配置保存失败");
@@ -1136,6 +1189,89 @@ export function SiteSettingsPage() {
             </Button>
           </Form>
         </SettingsAccordionItem>
+
+        <SettingsAccordionItem icon="cloudUpload" id="r2-storage" title="Cloudflare R2存储配置">
+          <Form className="settings-form" onSubmit={(event) => requestSave("r2-storage", event)}>
+            <Switch
+              className="settings-switch-row"
+              isSelected={siteConfig.r2Enabled}
+              onChange={(isSelected) =>
+                setSiteConfig((state) => ({
+                  ...state,
+                  r2Enabled: isSelected,
+                }))
+              }
+            >
+              <Switch.Content className="settings-switch-content">
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+                <strong>启用 Cloudflare R2 存储</strong>
+                <span>开启后新上传媒体会写入 R2；关闭后继续使用服务器本地文件。</span>
+              </Switch.Content>
+            </Switch>
+            <div className="secret-status">
+              <SecretChip active={keyFlags.hasR2SecretAccessKey} label="R2 Secret Access Key" />
+            </div>
+            <SettingsTextField
+              description="Cloudflare 账号的 Account ID。"
+              label="Account ID"
+              onChange={createInputHandler<SiteConfigState>({
+                key: "r2AccountId",
+                setState: setSiteConfig,
+              })}
+              type="text"
+              value={siteConfig.r2AccountId}
+            />
+            <SettingsTextField
+              description="R2 Bucket 名称。"
+              label="Bucket"
+              onChange={createInputHandler<SiteConfigState>({
+                key: "r2Bucket",
+                setState: setSiteConfig,
+              })}
+              type="text"
+              value={siteConfig.r2Bucket}
+            />
+            <SettingsTextField
+              description="R2 API Token 的 Access Key ID。"
+              label="Access Key ID"
+              onChange={createInputHandler<SiteConfigState>({
+                key: "r2AccessKeyId",
+                setState: setSiteConfig,
+              })}
+              type="text"
+              value={siteConfig.r2AccessKeyId}
+            />
+            <SecretSettingField
+              canReveal={keyFlags.hasR2SecretAccessKey}
+              configured={keyFlags.hasR2SecretAccessKey}
+              getUrl={ADMIN_API_KEY_URLS.r2}
+              label="Secret Access Key"
+              onChange={(value) =>
+                setSiteConfig((state) => ({ ...state, r2SecretAccessKey: value }))
+              }
+              onReveal={() => openRevealModal("r2SecretAccessKey")}
+              description="R2 API Token 的 Secret Access Key。留空则保留当前密钥。"
+              placeholder="留空则保留当前密钥"
+              value={siteConfig.r2SecretAccessKey}
+            />
+            <SettingsTextField
+              description="R2 自定义域名或公开访问地址，例如 https://media.example.com/assets。"
+              label="Public Base URL"
+              onChange={createInputHandler<SiteConfigState>({
+                key: "r2PublicBaseUrl",
+                setState: setSiteConfig,
+              })}
+              type="url"
+              value={siteConfig.r2PublicBaseUrl}
+            />
+            <Button className="settings-form__submit" isDisabled={isSaving} type="submit">
+              <AppIcon name="save" />
+              保存 Cloudflare R2 存储配置
+            </Button>
+          </Form>
+        </SettingsAccordionItem>
       </Accordion>
       {pendingSave ? (
         <AlertDialog>
@@ -1526,11 +1662,11 @@ type SecretSettingFieldProps = {
   label: string;
   onChange: (value: string) => void;
   onReveal?: () => void;
-  onTest: () => void;
+  onTest?: () => void;
   placeholder?: string;
   prefixIcon?: AppIconName;
   suffixAction?: "copy" | "reveal";
-  testLabel: string;
+  testLabel?: string;
   value: string;
 };
 
@@ -1645,10 +1781,12 @@ function SecretSettingField({
             )}
           </InputGroup.Suffix>
         </InputGroup>
-        <Button onPress={onTest} type="button" variant="tertiary">
-          <AppIcon name="sparkles" />
-          {testLabel}
-        </Button>
+        {onTest ? (
+          <Button onPress={onTest} type="button" variant="tertiary">
+            <AppIcon name="sparkles" />
+            {testLabel}
+          </Button>
+        ) : null}
       </div>
       {description ? <Description>{description}</Description> : null}
       <FieldError>{fieldError ?? `${label}格式不正确`}</FieldError>

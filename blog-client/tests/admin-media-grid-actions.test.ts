@@ -54,6 +54,15 @@ describe("admin media grid actions", () => {
     expect(layoutsCss).toContain("contain-intrinsic-size");
   });
 
+  it("loads folders independently from the media list request", () => {
+    expect(mediaPageSource).toContain(
+      'adminFetch<{ items: MediaFolder[] }>("/admin/media/folders")',
+    );
+    expect(mediaPageSource).not.toMatch(
+      /Promise\.all\(\[[\s\S]*adminFetch<\{ items: AdminMediaItem\[\] \}>[\s\S]*adminFetch<\{ items: MediaFolder\[\] \}>/,
+    );
+  });
+
   it("shows a clear empty state when the selected folder has no files", () => {
     expect(mediaPageSource).toContain("const isActiveFolderEmpty =");
     expect(mediaPageSource).toContain('className="media-folder-empty-card"');

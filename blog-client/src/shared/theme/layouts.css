@@ -6399,6 +6399,7 @@
 .media-library-toolbar,
 .media-library-toolbar__actions,
 .media-library-selection,
+.media-storage-filter,
 .media-folder-list,
 .media-folder-actions,
 .media-grid-card__actions,
@@ -6715,6 +6716,7 @@
   font-size: 0.8125rem;
 }
 
+.media-storage-filter,
 .media-folder-list {
   align-items: center;
   flex-wrap: nowrap;
@@ -6725,10 +6727,12 @@
   scrollbar-width: none;
 }
 
+.media-storage-filter::-webkit-scrollbar,
 .media-folder-list::-webkit-scrollbar {
   display: none;
 }
 
+.media-storage-filter button,
 .media-folder-list button {
   flex: 0 0 auto;
   white-space: nowrap;

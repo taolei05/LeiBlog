@@ -39,6 +39,12 @@ export interface SystemSiteConfigInput {
   resendApiKey?: string | null;
   deeplApiKey?: string | null;
   ipgeolocationApiKey?: string | null;
+  r2AccessKeyId?: string | null;
+  r2AccountId?: string | null;
+  r2Bucket?: string | null;
+  r2Enabled?: boolean;
+  r2PublicBaseUrl?: string | null;
+  r2SecretAccessKey?: string | null;
   commentsEnabled: boolean;
 }
 
@@ -71,6 +77,12 @@ interface SiteConfigRow {
   deepl_api_key_encrypted: StoredEncryptedSecret | null;
   ipgeolocation_api_key_encrypted: StoredEncryptedSecret | null;
   comments_enabled: boolean;
+  r2_access_key_id: string | null;
+  r2_account_id: string | null;
+  r2_bucket: string | null;
+  r2_enabled: boolean;
+  r2_public_base_url: string | null;
+  r2_secret_access_key_encrypted: StoredEncryptedSecret | null;
 }
 
 interface SiteFilingRow {
@@ -158,7 +170,13 @@ function toSiteConfig(row: SiteConfigRow) {
     hasResendApiKey: Boolean(row.resend_api_key_encrypted),
     hasDeepLApiKey: Boolean(row.deepl_api_key_encrypted),
     hasIpgeolocationApiKey: Boolean(row.ipgeolocation_api_key_encrypted),
+    hasR2SecretAccessKey: Boolean(row.r2_secret_access_key_encrypted),
     commentsEnabled: row.comments_enabled,
+    r2AccessKeyId: row.r2_access_key_id,
+    r2AccountId: row.r2_account_id,
+    r2Bucket: row.r2_bucket,
+    r2Enabled: row.r2_enabled,
+    r2PublicBaseUrl: row.r2_public_base_url,
   };
 }
 
@@ -181,6 +199,7 @@ function readStoredApiKeys(row: SiteConfigRow | undefined) {
   return {
     deeplApiKey: decryptSecret(row?.deepl_api_key_encrypted),
     ipgeolocationApiKey: decryptSecret(row?.ipgeolocation_api_key_encrypted),
+    r2SecretAccessKey: decryptSecret(row?.r2_secret_access_key_encrypted),
     resendApiKey: decryptSecret(row?.resend_api_key_encrypted),
     resendDomain: row?.resend_domain ?? null,
   };
@@ -198,9 +217,11 @@ function describeDevice(value: unknown) {
 
 async function getSiteConfigRow(client: DbClient) {
   const [row] = await client<SiteConfigRow[]>`
-    SELECT seo_title, seo_description, seo_keywords, copyright, resend_domain,
+      SELECT seo_title, seo_description, seo_keywords, copyright, resend_domain,
            resend_api_key_encrypted, deepl_api_key_encrypted,
-           ipgeolocation_api_key_encrypted, comments_enabled
+           ipgeolocation_api_key_encrypted, comments_enabled,
+           r2_enabled, r2_account_id, r2_bucket, r2_access_key_id,
+           r2_secret_access_key_encrypted, r2_public_base_url
     FROM site_config
     WHERE id = 1
   `;
@@ -342,9 +363,11 @@ export async function updateSystemSiteConfig(
 ) {
   requireAdmin(currentUser);
 
+  const existingRow = await getSiteConfigRow(client);
   const shouldUpdateResendApiKey = input.resendApiKey !== undefined;
   const shouldUpdateDeepLApiKey = input.deeplApiKey !== undefined;
   const shouldUpdateIpgeolocationApiKey = input.ipgeolocationApiKey !== undefined;
+  const shouldUpdateR2SecretAccessKey = input.r2SecretAccessKey !== undefined;
   const resendApiKey = shouldUpdateResendApiKey
     ? encryptSecret(cleanOptional(input.resendApiKey))
     : null;
@@ -354,12 +377,47 @@ export async function updateSystemSiteConfig(
   const ipgeolocationApiKey = shouldUpdateIpgeolocationApiKey
     ? encryptSecret(cleanOptional(input.ipgeolocationApiKey))
     : null;
+  const r2SecretAccessKey = shouldUpdateR2SecretAccessKey
+    ? encryptSecret(cleanOptional(input.r2SecretAccessKey))
+    : null;
+  const r2Enabled = input.r2Enabled ?? existingRow?.r2_enabled ?? false;
+  const r2AccountId =
+    input.r2AccountId === undefined
+      ? existingRow?.r2_account_id ?? null
+      : cleanOptional(input.r2AccountId);
+  const r2Bucket =
+    input.r2Bucket === undefined ? existingRow?.r2_bucket ?? null : cleanOptional(input.r2Bucket);
+  const r2AccessKeyId =
+    input.r2AccessKeyId === undefined
+      ? existingRow?.r2_access_key_id ?? null
+      : cleanOptional(input.r2AccessKeyId);
+  const r2PublicBaseUrl =
+    input.r2PublicBaseUrl === undefined
+      ? existingRow?.r2_public_base_url ?? null
+      : cleanOptional(input.r2PublicBaseUrl);
+  const existingR2SecretAccessKey = decryptSecret(existingRow?.r2_secret_access_key_encrypted);
+  const nextR2SecretAccessKey = shouldUpdateR2SecretAccessKey
+    ? cleanOptional(input.r2SecretAccessKey)
+    : existingR2SecretAccessKey;
+
+  if (
+    r2Enabled &&
+    (!r2AccountId ||
+      !r2Bucket ||
+      !r2AccessKeyId ||
+      !r2PublicBaseUrl ||
+      !nextR2SecretAccessKey)
+  ) {
+    throw validationError("启用 Cloudflare R2 存储前，请填写完整的 R2 配置");
+  }
 
   await client`
     INSERT INTO site_config (
       id, seo_title, seo_description, seo_keywords, copyright, resend_domain,
       resend_api_key_encrypted, deepl_api_key_encrypted,
-      ipgeolocation_api_key_encrypted, comments_enabled
+      ipgeolocation_api_key_encrypted, comments_enabled,
+      r2_enabled, r2_account_id, r2_bucket, r2_access_key_id,
+      r2_secret_access_key_encrypted, r2_public_base_url
     )
     VALUES (
       1,
@@ -371,7 +429,13 @@ export async function updateSystemSiteConfig(
       ${resendApiKey ? JSON.stringify(resendApiKey) : null}::jsonb,
       ${deeplApiKey ? JSON.stringify(deeplApiKey) : null}::jsonb,
       ${ipgeolocationApiKey ? JSON.stringify(ipgeolocationApiKey) : null}::jsonb,
-      ${input.commentsEnabled}
+      ${input.commentsEnabled},
+      ${r2Enabled},
+      ${r2AccountId},
+      ${r2Bucket},
+      ${r2AccessKeyId},
+      ${r2SecretAccessKey ? JSON.stringify(r2SecretAccessKey) : null}::jsonb,
+      ${r2PublicBaseUrl}
     )
     ON CONFLICT (id) DO UPDATE
     SET seo_title = EXCLUDED.seo_title,
@@ -391,7 +455,16 @@ export async function updateSystemSiteConfig(
           WHEN ${shouldUpdateIpgeolocationApiKey} THEN EXCLUDED.ipgeolocation_api_key_encrypted
           ELSE site_config.ipgeolocation_api_key_encrypted
         END,
-        comments_enabled = EXCLUDED.comments_enabled
+        comments_enabled = EXCLUDED.comments_enabled,
+        r2_enabled = EXCLUDED.r2_enabled,
+        r2_account_id = EXCLUDED.r2_account_id,
+        r2_bucket = EXCLUDED.r2_bucket,
+        r2_access_key_id = EXCLUDED.r2_access_key_id,
+        r2_secret_access_key_encrypted = CASE
+          WHEN ${shouldUpdateR2SecretAccessKey} THEN EXCLUDED.r2_secret_access_key_encrypted
+          ELSE site_config.r2_secret_access_key_encrypted
+        END,
+        r2_public_base_url = EXCLUDED.r2_public_base_url
   `;
 
   await clearSiteCache();
@@ -517,6 +590,7 @@ export async function revealSystemApiKeys(
       resendApiKey: apiKeys.resendApiKey,
       deeplApiKey: apiKeys.deeplApiKey,
       ipgeolocationApiKey: apiKeys.ipgeolocationApiKey,
+      r2SecretAccessKey: apiKeys.r2SecretAccessKey,
     },
   };
 }

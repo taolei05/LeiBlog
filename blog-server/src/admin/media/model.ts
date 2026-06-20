@@ -6,12 +6,15 @@ const MediaTypeSchema = t.Union([
   t.Literal("document"),
 ]);
 
+const MediaStorageProviderSchema = t.Union([t.Literal("local"), t.Literal("r2")]);
+
 export const MediaQuery = t.Object({
   search: t.Optional(t.String({ maxLength: 160 })),
   folderId: t.Optional(t.String()),
   folderSlug: t.Optional(t.String({ maxLength: 100 })),
   fileType: t.Optional(MediaTypeSchema),
   fileFormat: t.Optional(t.String({ maxLength: 20 })),
+  storageProvider: t.Optional(MediaStorageProviderSchema),
   createdFrom: t.Optional(t.String()),
   createdTo: t.Optional(t.String()),
   page: t.Optional(t.Numeric({ minimum: 1, maximum: 10_000 })),
@@ -46,6 +49,11 @@ export const RenameMediaBody = t.Object({
   fileName: t.String({ minLength: 1, maxLength: 255 }),
 });
 
+export const MigrateMediaStorageBody = t.Object({
+  ids: t.Array(t.String(), { minItems: 1, maxItems: 200 }),
+  targetProvider: MediaStorageProviderSchema,
+});
+
 export const MediaFolderBody = t.Object({
   description: t.Optional(t.Nullable(t.String({ maxLength: 500 }))),
   name: t.String({ minLength: 1, maxLength: 80 }),
@@ -75,6 +83,9 @@ export const MediaItemSchema = t.Object({
   folderName: t.Nullable(t.String()),
   folderSlug: t.Nullable(t.String()),
   folderSystemKey: t.Nullable(t.String()),
+  storageBucket: t.Nullable(t.String()),
+  storageKey: t.Nullable(t.String()),
+  storageProvider: MediaStorageProviderSchema,
   uploadedBy: t.Nullable(t.String()),
   createdAt: t.String(),
   updatedAt: t.String(),
@@ -91,6 +102,11 @@ export const MediaListResponse = t.Object({
 export const MediaResponse = t.Object({
   ok: t.Boolean(),
   item: MediaItemSchema,
+});
+
+export const MediaMigrationResponse = t.Object({
+  ok: t.Boolean(),
+  items: t.Array(MediaItemSchema),
 });
 
 export const MediaFolderListResponse = t.Object({
