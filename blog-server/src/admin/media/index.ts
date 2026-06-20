@@ -12,6 +12,7 @@ import {
   MediaPreviewResponse,
   MediaQuery,
   MediaResponse,
+  MediaStorageSummaryResponse,
   MigrateMediaStorageBody,
   OkResponse,
   RenameMediaBody,
@@ -26,6 +27,7 @@ import {
   getMediaLink,
   getMediaPreview,
   listMediaFolders,
+  listMediaStorageSummary,
   listMedia,
   migrateMediaStorage,
   updateMediaFolder,
@@ -62,6 +64,9 @@ export const adminMediaModule = new Elysia({ prefix: "/media" })
   .get("/", ({ currentUser, query }) => listMedia(currentUser, query), {
     query: MediaQuery,
     response: { 200: MediaListResponse },
+  })
+  .get("/storage/summary", ({ currentUser }) => listMediaStorageSummary(currentUser), {
+    response: { 200: MediaStorageSummaryResponse },
   })
   .post(
     "/",

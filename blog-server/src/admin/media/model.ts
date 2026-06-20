@@ -107,11 +107,34 @@ export const MediaResponse = t.Object({
 export const MediaMigrationResponse = t.Object({
   ok: t.Boolean(),
   items: t.Array(MediaItemSchema),
+  updatedReferences: t.Number(),
 });
 
 export const MediaFolderListResponse = t.Object({
   ok: t.Boolean(),
   items: t.Array(MediaFolderItemSchema),
+});
+
+const MediaStorageCountsSchema = t.Object({
+  all: t.Number(),
+  local: t.Number(),
+  r2: t.Number(),
+});
+
+export const MediaStorageSummaryResponse = t.Object({
+  ok: t.Boolean(),
+  totals: MediaStorageCountsSchema,
+  folders: t.Array(
+    t.Object({
+      id: t.String(),
+      local: t.Number(),
+      name: t.String(),
+      r2: t.Number(),
+      slug: t.String(),
+      systemKey: t.Nullable(t.String()),
+      total: t.Number(),
+    })
+  ),
 });
 
 export const MediaFolderResponse = t.Object({

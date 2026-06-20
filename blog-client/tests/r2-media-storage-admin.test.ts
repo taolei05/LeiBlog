@@ -29,5 +29,9 @@ describe("admin Cloudflare R2 media storage", () => {
     expect(mediaPageSource).toContain("迁移到服务器");
     expect(mediaPageSource).toContain("迁移到 Cloudflare R2");
     expect(mediaPageSource).toContain("/admin/media/storage/migrate");
+    expect(mediaPageSource).toContain("/admin/media/storage/summary");
+    expect(mediaPageSource).toContain("storageSummary");
+    expect(mediaPageSource).toContain("storageProviderCount");
+    expect(mediaPageSource).toContain("folderStorageCounts");
   });
 });

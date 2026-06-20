@@ -6738,9 +6738,21 @@
   white-space: nowrap;
 }
 
+.media-storage-filter button span,
 .media-folder-list button span {
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.media-operation-progress {
+  display: grid;
+  min-width: 0;
+  border-top: 1px solid var(--separator);
+  padding-top: 0.75rem;
+}
+
+.media-operation-progress .progress-bar {
+  width: min(30rem, 100%);
 }
 
 .media-folder-actions {

@@ -1,4 +1,13 @@
-import { AlertDialog, Button, Card, Checkbox, Modal, ScrollShadow } from "@heroui/react";
+import {
+  AlertDialog,
+  Button,
+  Card,
+  Checkbox,
+  Label,
+  Modal,
+  ProgressBar,
+  ScrollShadow,
+} from "@heroui/react";
 import SVG from "react-inlinesvg";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -58,6 +67,28 @@ type MediaFolder = {
   systemKey: string | null;
 };
 
+type MediaStorageCounts = {
+  all: number;
+  local: number;
+  r2: number;
+};
+
+type MediaFolderStorageCounts = {
+  id: string;
+  local: number;
+  name: string;
+  r2: number;
+  slug: string;
+  systemKey: string | null;
+  total: number;
+};
+
+type MediaStorageSummary = {
+  folders: MediaFolderStorageCounts[];
+  ok: boolean;
+  totals: MediaStorageCounts;
+};
+
 type MediaRenameModalState = {
   row: MediaRow;
   setNotice: (message: string) => void;
@@ -80,10 +111,21 @@ type MediaUploadEditState = {
   kind: LocalImageEditorKind;
 };
 
+type MediaOperationProgress = {
+  label: string;
+  total: number;
+  value: number;
+};
+
 type StorageProviderFilter = "all" | "local" | "r2";
 
 const MEDIA_GRID_INITIAL_LIMIT = 60;
 const MEDIA_GRID_BATCH_SIZE = 60;
+const EMPTY_MEDIA_STORAGE_SUMMARY: MediaStorageSummary = {
+  folders: [],
+  ok: true,
+  totals: { all: 0, local: 0, r2: 0 },
+};
 const STORAGE_PROVIDER_FILTERS = [
   {
     icon: "filter",
@@ -143,6 +185,38 @@ function toMediaRow(item: AdminMediaItem): MediaRow {
     url: resolveApiAssetUrl(item.accessUrl) ?? item.accessUrl,
     usage: item.fileFormat,
   };
+}
+
+function storageProviderCount(summary: MediaStorageSummary, value: StorageProviderFilter) {
+  if (value === "local") return summary.totals.local;
+  if (value === "r2") return summary.totals.r2;
+  return summary.totals.all;
+}
+
+function folderStorageCounts(
+  summary: MediaStorageSummary,
+  folder: MediaFolder,
+): MediaFolderStorageCounts {
+  return (
+    summary.folders.find((item) => item.slug === folder.slug) ?? {
+      id: folder.id,
+      local: 0,
+      name: folder.name,
+      r2: 0,
+      slug: folder.slug,
+      systemKey: folder.systemKey,
+      total: folder.fileCount,
+    }
+  );
+}
+
+function folderCountForStorageFilter(
+  counts: MediaFolderStorageCounts,
+  value: StorageProviderFilter,
+) {
+  if (value === "local") return counts.local;
+  if (value === "r2") return counts.r2;
+  return counts.total;
 }
 
 function MediaThumb({ item }: { item: MediaRow }) {
@@ -279,6 +353,9 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
 export function MediaPage() {
   const [mediaRows, setMediaRows] = useState<MediaRow[]>([]);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [storageSummary, setStorageSummary] = useState<MediaStorageSummary>(
+    EMPTY_MEDIA_STORAGE_SUMMARY,
+  );
   const [activeFolderSlug, setActiveFolderSlug] = useState("all");
   const [storageProviderFilter, setStorageProviderFilter] = useState<StorageProviderFilter>("all");
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(() => new Set());
@@ -292,6 +369,7 @@ export function MediaPage() {
   const [deleteModalRow, setDeleteModalRow] = useState<MediaRow | null>(null);
   const [uploadEditState, setUploadEditState] = useState<MediaUploadEditState | null>(null);
   const [mediaRenderLimit, setMediaRenderLimit] = useState(MEDIA_GRID_INITIAL_LIMIT);
+  const [mediaProgress, setMediaProgress] = useState<MediaOperationProgress | null>(null);
   const [pageNotice, setPageNoticeState] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -322,6 +400,14 @@ export function MediaPage() {
       setFolders(folderResponse.items);
     } catch (error) {
       setPageNotice(error instanceof Error ? error.message : "媒体文件夹加载失败");
+    }
+
+    try {
+      const storageResponse = await adminFetch<MediaStorageSummary>("/admin/media/storage/summary");
+      setStorageSummary(storageResponse);
+    } catch (error) {
+      setStorageSummary(EMPTY_MEDIA_STORAGE_SUMMARY);
+      setPageNotice(error instanceof Error ? error.message : "媒体存储统计加载失败");
     }
 
     try {
@@ -386,21 +472,62 @@ export function MediaPage() {
     return null;
   }
 
-  async function uploadFile(file: File, folderSlug = activeFolder?.slug ?? "article-covers") {
+  async function uploadSingleFile(file: File, folderSlug: string) {
     const formData = new FormData();
     formData.set("file", file);
     formData.set("folderSlug", folderSlug);
 
+    await adminFetch("/admin/media/", {
+      body: formData,
+      method: "POST",
+    });
+  }
+
+  async function uploadFiles(files: File[], folderSlug = activeFolder?.slug ?? "article-covers") {
+    if (files.length === 0) return;
+
+    let uploadedCount = 0;
+    const failedFiles: string[] = [];
+
     try {
-      await adminFetch("/admin/media/", {
-        body: formData,
-        method: "POST",
-      });
-      setPageNotice(`已上传 ${file.name}`);
-      setReloadKey((key) => key + 1);
-    } catch (error) {
-      setPageNotice(error instanceof Error ? error.message : "媒体上传失败");
+      for (const [index, file] of files.entries()) {
+        setMediaProgress({
+          label: `正在上传 ${file.name} (${index + 1}/${files.length})`,
+          total: files.length,
+          value: index,
+        });
+
+        try {
+          await uploadSingleFile(file, folderSlug);
+          uploadedCount += 1;
+        } catch {
+          failedFiles.push(file.name);
+        } finally {
+          setMediaProgress({
+            label: `正在上传 ${file.name} (${index + 1}/${files.length})`,
+            total: files.length,
+            value: index + 1,
+          });
+        }
+      }
+
+      if (uploadedCount > 0) setReloadKey((key) => key + 1);
+      if (failedFiles.length > 0) {
+        setPageNotice(`已上传 ${uploadedCount} 个文件，${failedFiles.length} 个失败`);
+      } else {
+        setPageNotice(
+          uploadedCount === 1
+            ? `已上传 ${files[0]?.name ?? "文件"}`
+            : `已上传 ${uploadedCount} 个文件`,
+        );
+      }
+    } finally {
+      setMediaProgress(null);
     }
+  }
+
+  async function uploadFile(file: File, folderSlug = activeFolder?.slug ?? "article-covers") {
+    await uploadFiles([file], folderSlug);
   }
 
   async function submitRenameMedia() {
@@ -557,23 +684,52 @@ export function MediaPage() {
   async function migrateSelectedMedia(targetProvider: Exclude<StorageProviderFilter, "all">) {
     if (selectedMediaRows.length === 0) return;
 
+    let migratedCount = 0;
+    let updatedReferences = 0;
+    const failedFiles: string[] = [];
+
     try {
-      await adminFetch("/admin/media/storage/migrate", {
-        body: {
-          ids: selectedMediaRows.map((row) => row.id),
-          targetProvider,
-        },
-        method: "POST",
-      });
+      for (const [index, row] of selectedMediaRows.entries()) {
+        setMediaProgress({
+          label: `正在迁移 ${row.fileName} (${index + 1}/${selectedMediaRows.length})`,
+          total: selectedMediaRows.length,
+          value: index,
+        });
+
+        try {
+          const response = await adminFetch<{ updatedReferences: number }>(
+            "/admin/media/storage/migrate",
+            {
+              body: {
+                ids: [row.id],
+                targetProvider,
+              },
+              method: "POST",
+            },
+          );
+          migratedCount += 1;
+          updatedReferences += response.updatedReferences ?? 0;
+        } catch {
+          failedFiles.push(row.fileName);
+        } finally {
+          setMediaProgress({
+            label: `正在迁移 ${row.fileName} (${index + 1}/${selectedMediaRows.length})`,
+            total: selectedMediaRows.length,
+            value: index + 1,
+          });
+        }
+      }
+
       setSelectedMediaIds(new Set());
+      const targetLabel = targetProvider === "r2" ? "Cloudflare R2" : "服务器";
+      const referenceLabel = updatedReferences > 0 ? `，同步更新 ${updatedReferences} 处引用` : "";
+      const failureLabel = failedFiles.length > 0 ? `，${failedFiles.length} 个失败` : "";
       setPageNotice(
-        targetProvider === "r2"
-          ? `已迁移 ${selectedMediaRows.length} 个文件到 Cloudflare R2`
-          : `已迁移 ${selectedMediaRows.length} 个文件到服务器`,
+        `已迁移 ${migratedCount} 个文件到 ${targetLabel}${referenceLabel}${failureLabel}`,
       );
       setReloadKey((key) => key + 1);
-    } catch (error) {
-      setPageNotice(error instanceof Error ? error.message : "媒体迁移失败");
+    } finally {
+      setMediaProgress(null);
     }
   }
 
@@ -717,19 +873,21 @@ export function MediaPage() {
           ref={uploadInputRef}
           accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="visually-hidden"
+          multiple
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
+            const files = Array.from(event.target.files ?? []);
+            if (files.length === 0) return;
 
             const folderSlug = activeFolder?.slug ?? "article-covers";
-            const kind = getUploadEditorKind(file, folderSlug);
-            if (kind) {
+            const [file] = files;
+            const kind = file && files.length === 1 ? getUploadEditorKind(file, folderSlug) : null;
+            if (file && kind) {
               setUploadEditState({ file, folderSlug, kind });
               event.target.value = "";
               return;
             }
 
-            void uploadFile(file);
+            void uploadFiles(files, folderSlug);
             event.target.value = "";
           }}
           type="file"
@@ -854,6 +1012,21 @@ export function MediaPage() {
                 </AlertDialog>
               </div>
             </div>
+            {mediaProgress ? (
+              <div className="media-operation-progress">
+                <ProgressBar
+                  aria-label={mediaProgress.label}
+                  maxValue={mediaProgress.total}
+                  value={mediaProgress.value}
+                >
+                  <Label>{mediaProgress.label}</Label>
+                  <ProgressBar.Output />
+                  <ProgressBar.Track>
+                    <ProgressBar.Fill />
+                  </ProgressBar.Track>
+                </ProgressBar>
+              </div>
+            ) : null}
             <div className="media-storage-filter" aria-label="媒体存储位置筛选">
               {STORAGE_PROVIDER_FILTERS.map((filter) => (
                 <Button
@@ -865,6 +1038,7 @@ export function MediaPage() {
                 >
                   <AppIcon name={filter.icon} />
                   {filter.label}
+                  <span>{storageProviderCount(storageSummary, filter.value)}</span>
                 </Button>
               ))}
             </div>
@@ -877,20 +1051,25 @@ export function MediaPage() {
               >
                 <AppIcon name="images" />
                 全部
+                <span>{storageProviderCount(storageSummary, storageProviderFilter)}</span>
               </Button>
-              {folders.map((folder) => (
-                <Button
-                  key={folder.id}
-                  onPress={() => selectFolder(folder.slug)}
-                  size="sm"
-                  type="button"
-                  variant={activeFolderSlug === folder.slug ? "primary" : "tertiary"}
-                >
-                  <AppIcon name="folderOpen" />
-                  {folder.name}
-                  <span>{folder.fileCount}</span>
-                </Button>
-              ))}
+              {folders.map((folder) => {
+                const counts = folderStorageCounts(storageSummary, folder);
+
+                return (
+                  <Button
+                    key={folder.id}
+                    onPress={() => selectFolder(folder.slug)}
+                    size="sm"
+                    type="button"
+                    variant={activeFolderSlug === folder.slug ? "primary" : "tertiary"}
+                  >
+                    <AppIcon name="folderOpen" />
+                    {folder.name}
+                    <span>{folderCountForStorageFilter(counts, storageProviderFilter)}</span>
+                  </Button>
+                );
+              })}
             </div>
             {activeFolder ? (
               <div className="media-folder-actions">

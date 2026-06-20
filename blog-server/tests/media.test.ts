@@ -15,6 +15,7 @@ import {
   getMediaPreview,
   listMedia,
   listMediaFolders,
+  listMediaStorageSummary,
   migrateMediaStorage,
   renameMedia,
   uploadMedia,
@@ -401,6 +402,18 @@ describe("admin media service", () => {
       expect(r2Only.items.some((item) => item.id === r2Uploaded.id)).toBe(true);
       expect(r2Only.items.every((item) => item.storageProvider === "r2")).toBe(true);
 
+      const storageSummary = await listMediaStorageSummary(currentAdmin, {
+        client: testDb,
+        config,
+      });
+      expect(storageSummary.totals.r2).toBeGreaterThanOrEqual(1);
+      expect(storageSummary.totals.all).toBe(
+        storageSummary.totals.local + storageSummary.totals.r2
+      );
+      expect(storageSummary.folders.find((folder) => folder.slug === "site")?.r2).toBeGreaterThanOrEqual(
+        1
+      );
+
       const r2Download = await getMediaDownload(currentAdmin, r2Uploaded.id, {
         client: testDb,
         config,
@@ -444,6 +457,181 @@ describe("admin media service", () => {
       expect(calls.some((call) => call.method === "GET")).toBe(true);
       expect(calls.some((call) => call.method === "DELETE")).toBe(true);
       expect(calls.every((call) => call.url.includes("r2.cloudflarestorage.com"))).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await testDb`
+        UPDATE site_config
+        SET r2_enabled = false,
+            r2_account_id = null,
+            r2_bucket = null,
+            r2_access_key_id = null,
+            r2_secret_access_key_encrypted = null,
+            r2_public_base_url = null
+        WHERE id = 1
+      `;
+    }
+  });
+
+  test("migrates media to R2, updates known references, and keeps the original local file", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      UPLOADS_DIR: uploadRoot,
+      UPLOADS_URL_PREFIX: "/uploads",
+      UPLOAD_MAX_FILE_SIZE_BYTES: "2048",
+    });
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ method: string; url: string }> = [];
+
+    await updateSystemSiteConfig(
+      currentAdmin,
+      {
+        commentsEnabled: true,
+        r2AccessKeyId: null,
+        r2AccountId: null,
+        r2Bucket: null,
+        r2Enabled: false,
+        r2PublicBaseUrl: null,
+        r2SecretAccessKey: null,
+      },
+      testDb
+    );
+
+    const uploaded = await uploadMedia(
+      currentAdmin,
+      { file: pngFile("references.png"), fileName: "references.png", folderSlug: "article-covers" },
+      { client: testDb, config }
+    );
+    const oldUrl = uploaded.accessUrl;
+    const localDownload = await getMediaDownload(currentAdmin, uploaded.id, {
+      client: testDb,
+      config,
+    });
+
+    expect(uploaded.storageProvider).toBe("local");
+    expect("filePath" in localDownload).toBe(true);
+    if (!("filePath" in localDownload)) throw new Error("Expected local media file");
+    const originalLocalPath = localDownload.filePath!;
+
+    await testDb`
+      INSERT INTO site_info (
+        id, site_name, description, logo_dark_url, logo_light_url, favicon_url,
+        established_at, home_cover_urls
+      )
+      VALUES (
+        1, 'LeiBlog', '媒体引用测试', ${oldUrl}, ${oldUrl}, ${oldUrl},
+        now(), ARRAY[${oldUrl}, '/uploads/keep.png']::text[]
+      )
+      ON CONFLICT (id) DO UPDATE
+      SET logo_dark_url = EXCLUDED.logo_dark_url,
+          logo_light_url = EXCLUDED.logo_light_url,
+          favicon_url = EXCLUDED.favicon_url,
+          home_cover_urls = EXCLUDED.home_cover_urls
+    `;
+    await testDb`
+      UPDATE users
+      SET avatar_url = ${oldUrl}
+      WHERE id = ${currentAdmin.id}
+    `;
+    const [article] = await testDb<{ id: string }[]>`
+      INSERT INTO articles (author_id, title, slug, summary, content_mdx, cover_image_url)
+      VALUES (
+        ${currentAdmin.id}, '媒体迁移引用', ${`media-reference-${uploaded.id}`},
+        '媒体迁移引用', ${`![cover](${oldUrl})\n\n${oldUrl}`}, ${oldUrl}
+      )
+      RETURNING id
+    `;
+    await testDb`
+      INSERT INTO article_revisions (
+        article_id, editor_id, title, slug, summary, content_mdx, cover_image_url, status
+      )
+      VALUES (
+        ${article.id}, ${currentAdmin.id}, '媒体迁移引用', ${`media-reference-${uploaded.id}`},
+        '媒体迁移引用', ${`![cover](${oldUrl})`}, ${oldUrl}, 'draft'
+      )
+    `;
+    await testDb`
+      INSERT INTO article_contributors (name, avatar_url, link_url)
+      VALUES (${`媒体贡献者 ${uploaded.id}`}, ${oldUrl}, 'https://example.com')
+    `;
+    const [navigationGroup] = await testDb<{ id: string }[]>`
+      INSERT INTO navigation_groups (name)
+      VALUES (${`媒体导航 ${uploaded.id}`})
+      RETURNING id
+    `;
+    await testDb`
+      INSERT INTO navigation_items (group_id, name, url, icon_url)
+      VALUES (${navigationGroup.id}, '媒体链接', 'https://example.com', ${oldUrl})
+    `;
+    await testDb`
+      INSERT INTO comments (article_id, user_id, content)
+      VALUES (${article.id}, ${currentAdmin.id}, ${`评论图片 ${oldUrl}`})
+    `;
+
+    await updateSystemSiteConfig(
+      currentAdmin,
+      {
+        commentsEnabled: true,
+        r2AccessKeyId: "r2-access-key-id",
+        r2AccountId: "r2-account-id",
+        r2Bucket: "leiblog-media",
+        r2Enabled: true,
+        r2PublicBaseUrl: "https://media.example.com/assets/",
+        r2SecretAccessKey: "r2-secret-access-key",
+      },
+      testDb
+    );
+
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ method: init?.method ?? "GET", url: String(input) });
+        return new Response(null, { status: 204 });
+      },
+      originalFetch
+    );
+
+    try {
+      const migrated = await migrateMediaStorage(
+        currentAdmin,
+        { ids: [uploaded.id], targetProvider: "r2" },
+        { client: testDb, config }
+      );
+      const newUrl = migrated.items[0]?.accessUrl;
+
+      expect(migrated.items[0]?.storageProvider).toBe("r2");
+      expect(newUrl).toContain("https://media.example.com/assets/");
+      expect(newUrl).not.toBe(oldUrl);
+      expect(migrated.updatedReferences).toBeGreaterThanOrEqual(9);
+      expect((await stat(originalLocalPath)).isFile()).toBe(true);
+      expect(calls.some((call) => call.method === "PUT")).toBe(true);
+      expect(calls.some((call) => call.method === "DELETE")).toBe(false);
+
+      const [siteInfo] = await testDb<{
+        favicon_url: string;
+        home_cover_urls: string[];
+        logo_dark_url: string;
+        logo_light_url: string;
+      }[]>`
+        SELECT logo_dark_url, logo_light_url, favicon_url, home_cover_urls
+        FROM site_info
+        WHERE id = 1
+      `;
+      expect(siteInfo.logo_dark_url).toBe(newUrl);
+      expect(siteInfo.logo_light_url).toBe(newUrl);
+      expect(siteInfo.favicon_url).toBe(newUrl);
+      expect(siteInfo.home_cover_urls).toContain(newUrl);
+      expect(siteInfo.home_cover_urls).not.toContain(oldUrl);
+
+      const [referenceRows] = await testDb<{ stale_count: string }[]>`
+        SELECT (
+          (SELECT count(*) FROM users WHERE avatar_url = ${oldUrl}) +
+          (SELECT count(*) FROM articles WHERE cover_image_url = ${oldUrl} OR position(${oldUrl} in content_mdx) > 0) +
+          (SELECT count(*) FROM article_revisions WHERE cover_image_url = ${oldUrl} OR position(${oldUrl} in content_mdx) > 0) +
+          (SELECT count(*) FROM article_contributors WHERE avatar_url = ${oldUrl}) +
+          (SELECT count(*) FROM navigation_items WHERE icon_url = ${oldUrl}) +
+          (SELECT count(*) FROM comments WHERE position(${oldUrl} in content) > 0)
+        )::text AS stale_count
+      `;
+      expect(Number(referenceRows.stale_count)).toBe(0);
     } finally {
       globalThis.fetch = originalFetch;
       await testDb`

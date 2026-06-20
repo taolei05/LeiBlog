@@ -132,6 +132,22 @@ interface MediaFolderRow {
   updated_at: Date | string;
 }
 
+interface MediaStorageSummaryRow {
+  all_count: string | number | bigint;
+  id: string;
+  local_count: string | number | bigint;
+  name: string;
+  r2_count: string | number | bigint;
+  slug: string;
+  system_key: MediaSystemFolderKey | null;
+}
+
+interface MediaStorageTotalsRow {
+  all_count: string | number | bigint;
+  local_count: string | number | bigint;
+  r2_count: string | number | bigint;
+}
+
 const DEFAULT_MEDIA_FOLDERS = [
   {
     description: "文章封面只能存储到这里。",
@@ -232,6 +248,22 @@ function toMediaFolder(row: MediaFolderRow) {
     slug: row.slug,
     systemKey: row.system_key,
     updatedAt: toIso(row.updated_at),
+  };
+}
+
+function toCount(value: string | number | bigint | null | undefined) {
+  return Number(value ?? 0);
+}
+
+function toMediaStorageFolderSummary(row: MediaStorageSummaryRow) {
+  return {
+    id: row.id,
+    local: toCount(row.local_count),
+    name: row.name,
+    r2: toCount(row.r2_count),
+    slug: row.slug,
+    systemKey: row.system_key,
+    total: toCount(row.all_count),
   };
 }
 
@@ -638,6 +670,41 @@ export async function listMediaFolders(
   return { ok: true, items: rows.map(toMediaFolder) };
 }
 
+export async function listMediaStorageSummary(
+  currentUser: AuthUser,
+  options: MediaServiceOptions = {}
+) {
+  requireAdmin(currentUser);
+  const client = getClient(options);
+  await ensureDefaultMediaFolders(client);
+  const [totals] = await client<MediaStorageTotalsRow[]>`
+    SELECT count(ma.id) AS all_count,
+           count(ma.id) FILTER (WHERE ma.storage_provider = 'local') AS local_count,
+           count(ma.id) FILTER (WHERE ma.storage_provider = 'r2') AS r2_count
+    FROM media_assets ma
+  `;
+  const folders = await client<MediaStorageSummaryRow[]>`
+    SELECT mf.id, mf.name, mf.slug, mf.system_key,
+           count(ma.id) AS all_count,
+           count(ma.id) FILTER (WHERE ma.storage_provider = 'local') AS local_count,
+           count(ma.id) FILTER (WHERE ma.storage_provider = 'r2') AS r2_count
+    FROM media_folders mf
+    LEFT JOIN media_assets ma ON ma.folder_id = mf.id
+    GROUP BY mf.id
+    ORDER BY mf.is_protected DESC, mf.created_at ASC, lower(mf.name) ASC
+  `;
+
+  return {
+    ok: true,
+    totals: {
+      all: toCount(totals?.all_count),
+      local: toCount(totals?.local_count),
+      r2: toCount(totals?.r2_count),
+    },
+    folders: folders.map(toMediaStorageFolderSummary),
+  };
+}
+
 export async function createMediaFolder(
   currentUser: AuthUser,
   input: MediaFolderInput,
@@ -975,6 +1042,114 @@ export async function deleteMedia(
   return { ok: true };
 }
 
+async function updateMediaReferences(client: DbClient, oldUrl: string, newUrl: string) {
+  if (oldUrl === newUrl) return 0;
+
+  let updatedReferences = 0;
+  const countUpdatedRows = (rows: unknown[]) => {
+    updatedReferences += rows.length;
+  };
+
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE articles
+      SET cover_image_url = ${newUrl}
+      WHERE cover_image_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE articles
+      SET content_mdx = replace(content_mdx, ${oldUrl}, ${newUrl})
+      WHERE strpos(content_mdx, ${oldUrl}) > 0
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE article_revisions
+      SET cover_image_url = ${newUrl}
+      WHERE cover_image_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE article_revisions
+      SET content_mdx = replace(content_mdx, ${oldUrl}, ${newUrl})
+      WHERE strpos(content_mdx, ${oldUrl}) > 0
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: number }[]>`
+      UPDATE site_info
+      SET logo_dark_url = ${newUrl}
+      WHERE logo_dark_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: number }[]>`
+      UPDATE site_info
+      SET logo_light_url = ${newUrl}
+      WHERE logo_light_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: number }[]>`
+      UPDATE site_info
+      SET favicon_url = ${newUrl}
+      WHERE favicon_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: number }[]>`
+      UPDATE site_info
+      SET home_cover_urls = array_replace(home_cover_urls, ${oldUrl}, ${newUrl})
+      WHERE ${oldUrl} = ANY(home_cover_urls)
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE users
+      SET avatar_url = ${newUrl}
+      WHERE avatar_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE article_contributors
+      SET avatar_url = ${newUrl}
+      WHERE avatar_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE navigation_items
+      SET icon_url = ${newUrl}
+      WHERE icon_url = ${oldUrl}
+      RETURNING id
+    `
+  );
+  countUpdatedRows(
+    await client<{ id: string }[]>`
+      UPDATE comments
+      SET content = replace(content, ${oldUrl}, ${newUrl})
+      WHERE strpos(content, ${oldUrl}) > 0
+      RETURNING id
+    `
+  );
+
+  return updatedReferences;
+}
+
 export async function migrateMediaStorage(
   currentUser: AuthUser,
   input: MigrateMediaStorageInput,
@@ -988,6 +1163,7 @@ export async function migrateMediaStorage(
   if (ids.length === 0) throw validationError("请选择要迁移的媒体文件");
 
   const migratedItems = [];
+  let updatedReferences = 0;
 
   for (const id of ids) {
     const row = await getMediaRow(id, client);
@@ -1009,43 +1185,40 @@ export async function migrateMediaStorage(
         key: storageKey,
         settings,
       });
-      await client`
-        UPDATE media_assets
-        SET access_url = ${accessUrl},
-            storage_provider = 'r2',
-            storage_key = ${storageKey},
-            storage_bucket = ${settings.bucket}
-        WHERE id = ${id}
-      `;
-
-      if (row.storage_provider === "local") {
-        await rm(localPathForRow(config, row), { force: true });
-      }
+      await withTransaction(async (tx) => {
+        updatedReferences += await updateMediaReferences(tx, row.access_url, accessUrl);
+        await tx`
+          UPDATE media_assets
+          SET access_url = ${accessUrl},
+              storage_provider = 'r2',
+              storage_key = ${storageKey},
+              storage_bucket = ${settings.bucket}
+          WHERE id = ${id}
+        `;
+      }, client);
     } else {
       const localPath = pathForStorageKey(config, storageKey);
       const accessUrl = toAccessUrlFromStorageKey(config, storageKey);
 
       await mkdir(dirname(localPath), { recursive: true });
       await Bun.write(localPath, body);
-      await client`
-        UPDATE media_assets
-        SET access_url = ${accessUrl},
-            storage_provider = 'local',
-            storage_key = ${storageKey},
-            storage_bucket = null
-        WHERE id = ${id}
-      `;
-
-      if (row.storage_provider === "r2") {
-        const settings = await getR2StorageSettings(client, { requireEnabled: false });
-        if (settings) await deleteR2Object(settings, storageKey).catch(() => undefined);
-      }
+      await withTransaction(async (tx) => {
+        updatedReferences += await updateMediaReferences(tx, row.access_url, accessUrl);
+        await tx`
+          UPDATE media_assets
+          SET access_url = ${accessUrl},
+              storage_provider = 'local',
+              storage_key = ${storageKey},
+              storage_bucket = null
+          WHERE id = ${id}
+        `;
+      }, client);
     }
 
     migratedItems.push(toMediaItem(await getMediaRow(id, client)));
   }
 
-  return { ok: true, items: migratedItems };
+  return { ok: true, items: migratedItems, updatedReferences };
 }
 
 export async function getMediaLink(

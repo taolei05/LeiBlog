@@ -54,6 +54,16 @@ describe("admin media grid actions", () => {
     expect(layoutsCss).toContain("contain-intrinsic-size");
   });
 
+  it("supports batch uploads and visible upload or migration progress", () => {
+    expect(mediaPageSource).toContain("ProgressBar");
+    expect(mediaPageSource).toContain("mediaProgress");
+    expect(mediaPageSource).toContain("multiple");
+    expect(mediaPageSource).toContain("Array.from(event.target.files");
+    expect(mediaPageSource).toContain("uploadFiles");
+    expect(mediaPageSource).toContain("maxValue={mediaProgress.total}");
+    expect(layoutsCss).toContain(".media-operation-progress");
+  });
+
   it("loads folders independently from the media list request", () => {
     expect(mediaPageSource).toContain(
       'adminFetch<{ items: MediaFolder[] }>("/admin/media/folders")',
