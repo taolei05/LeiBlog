@@ -39,6 +39,12 @@ describe("admin media grid actions", () => {
     );
   });
 
+  it("keeps each media card selection checkbox inside Checkbox.Content", () => {
+    expect(mediaPageSource).toMatch(
+      /aria-label=\{`选择\$\{row\.fileName\}`\}[\s\S]*?<Checkbox\.Content>[\s\S]*?<Checkbox\.Control>[\s\S]*?<Checkbox\.Indicator \/>[\s\S]*?<\/Checkbox\.Control>[\s\S]*?<\/Checkbox\.Content>/,
+    );
+  });
+
   it("limits heavy media card work for large libraries", () => {
     expect(mediaPageSource).toContain("deleteModalRow");
     expect(mediaPageSource).toContain("setDeleteModalRow(row)");

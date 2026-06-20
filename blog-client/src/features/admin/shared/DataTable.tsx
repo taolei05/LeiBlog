@@ -886,9 +886,11 @@ export function DataTable<T extends DataTableRow>({
                     slot="selection"
                     variant="secondary"
                   >
-                    <Checkbox.Control>
-                      <Checkbox.Indicator />
-                    </Checkbox.Control>
+                    <Checkbox.Content>
+                      <Checkbox.Control>
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                    </Checkbox.Content>
                   </Checkbox>
                 </Table.Column>
               ) : null}
@@ -932,9 +934,11 @@ export function DataTable<T extends DataTableRow>({
                         slot="selection"
                         variant="secondary"
                       >
-                        <Checkbox.Control>
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
+                        <Checkbox.Content>
+                          <Checkbox.Control>
+                            <Checkbox.Indicator />
+                          </Checkbox.Control>
+                        </Checkbox.Content>
                       </Checkbox>
                     </Table.Cell>
                   ) : null}

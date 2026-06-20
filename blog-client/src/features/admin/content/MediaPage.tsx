@@ -872,9 +872,11 @@ export function MediaPage() {
                       onChange={(selected) => updateMediaSelection(row.id, selected)}
                       variant="secondary"
                     >
-                      <Checkbox.Control>
-                        <Checkbox.Indicator />
-                      </Checkbox.Control>
+                      <Checkbox.Content>
+                        <Checkbox.Control>
+                          <Checkbox.Indicator />
+                        </Checkbox.Control>
+                      </Checkbox.Content>
                     </Checkbox>
                     {row.kind === "image" ? (
                       row.isSvg ? (
