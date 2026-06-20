@@ -43,6 +43,7 @@ export const UploadMediaBody = t.Object({
   fileName: t.Optional(t.String({ maxLength: 255 })),
   folderId: t.Optional(t.String()),
   folderSlug: t.Optional(t.String({ maxLength: 100 })),
+  targetProvider: t.Optional(MediaStorageProviderSchema),
 });
 
 export const RenameMediaBody = t.Object({

@@ -472,6 +472,93 @@ describe("admin media service", () => {
     }
   });
 
+  test("honors explicit media upload storage targets", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      UPLOADS_DIR: uploadRoot,
+      UPLOADS_URL_PREFIX: "/uploads",
+      UPLOAD_MAX_FILE_SIZE_BYTES: "2048",
+    });
+    const calls: Array<{ method: string; url: string }> = [];
+    const originalFetch = globalThis.fetch;
+
+    await updateSystemSiteConfig(
+      currentAdmin,
+      {
+        commentsEnabled: true,
+        r2AccessKeyId: "r2-access-key-id",
+        r2AccountId: "r2-account-id",
+        r2Bucket: "leiblog-media",
+        r2Enabled: true,
+        r2PublicBaseUrl: "https://media.example.com/assets/",
+        r2SecretAccessKey: "r2-secret-access-key",
+      },
+      testDb
+    );
+
+    globalThis.fetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ method: init?.method ?? "GET", url: String(input) });
+        return new Response(null, { status: 204 });
+      },
+      originalFetch
+    );
+
+    try {
+      const localUploaded = await uploadMedia(
+        currentAdmin,
+        {
+          file: pngFile("forced-local.png"),
+          fileName: "forced-local.png",
+          folderSlug: "site",
+          targetProvider: "local",
+        },
+        { client: testDb, config }
+      );
+      const r2Uploaded = await uploadMedia(
+        currentAdmin,
+        {
+          file: pngFile("forced-r2.png"),
+          fileName: "forced-r2.png",
+          folderSlug: "site",
+          targetProvider: "r2",
+        },
+        { client: testDb, config }
+      );
+
+      expect(localUploaded.storageProvider).toBe("local");
+      expect(localUploaded.accessUrl.startsWith("/uploads/")).toBe(true);
+      expect(r2Uploaded.storageProvider).toBe("r2");
+      expect(r2Uploaded.accessUrl).toContain("https://media.example.com/assets/");
+      expect(calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await testDb`
+        UPDATE site_config
+        SET r2_enabled = false,
+            r2_account_id = null,
+            r2_bucket = null,
+            r2_access_key_id = null,
+            r2_secret_access_key_encrypted = null,
+            r2_public_base_url = null
+        WHERE id = 1
+      `;
+    }
+
+    await expect(
+      uploadMedia(
+        currentAdmin,
+        {
+          file: pngFile("disabled-r2.png"),
+          fileName: "disabled-r2.png",
+          folderSlug: "site",
+          targetProvider: "r2",
+        },
+        { client: testDb, config }
+      )
+    ).rejects.toThrow("请先启用 Cloudflare R2 存储配置");
+  });
+
   test("migrates media to R2, updates known references, and keeps the original local file", async () => {
     const config = loadConfig({
       NODE_ENV: "test",

@@ -55,6 +55,7 @@ export interface UploadMediaInput {
   fileName?: string;
   folderId?: string;
   folderSlug?: string;
+  targetProvider?: MediaStorageProvider;
 }
 
 export interface MediaFolderInput {
@@ -943,7 +944,7 @@ async function storeMediaAsset(
   const storageKey = toStorageKey(subdir, storageName);
   const targetPath = pathForStorageKey(config, storageKey);
   const displayName = safeDisplayName(input.fileName || input.file.name);
-  const r2Settings = await getR2StorageSettings(client, { requireEnabled: true });
+  const r2Settings = await resolveUploadR2StorageSettings(client, input.targetProvider);
   const storageProvider: MediaStorageProvider = r2Settings ? "r2" : "local";
   const accessUrl = r2Settings
     ? buildR2ObjectUrl(r2Settings, storageKey)
@@ -992,6 +993,20 @@ async function storeMediaAsset(
 
   const stored = await getMediaRow(id, client);
   return toMediaItem(stored);
+}
+
+async function resolveUploadR2StorageSettings(
+  client: DbClient,
+  targetProvider?: MediaStorageProvider
+) {
+  if (targetProvider === "local") return null;
+
+  const settings = await getR2StorageSettings(client, { requireEnabled: true });
+  if (targetProvider === "r2" && !settings) {
+    throw validationError("请先启用 Cloudflare R2 存储配置");
+  }
+
+  return settings;
 }
 
 export async function renameMedia(

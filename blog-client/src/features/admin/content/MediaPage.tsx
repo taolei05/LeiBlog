@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Dropdown,
   Label,
   Modal,
   ProgressBar,
@@ -109,6 +110,7 @@ type MediaUploadEditState = {
   file: File;
   folderSlug: string;
   kind: LocalImageEditorKind;
+  targetProvider: UploadTargetProvider;
 };
 
 type MediaOperationProgress = {
@@ -118,6 +120,7 @@ type MediaOperationProgress = {
 };
 
 type StorageProviderFilter = "all" | "local" | "r2";
+type UploadTargetProvider = "local" | "r2";
 
 const MEDIA_GRID_INITIAL_LIMIT = 60;
 const MEDIA_GRID_BATCH_SIZE = 60;
@@ -217,6 +220,10 @@ function folderCountForStorageFilter(
   if (value === "local") return counts.local;
   if (value === "r2") return counts.r2;
   return counts.total;
+}
+
+function uploadTargetProviderLabel(targetProvider: UploadTargetProvider) {
+  return targetProvider === "r2" ? "Cloudflare R2" : "服务器";
 }
 
 function MediaThumb({ item }: { item: MediaRow }) {
@@ -373,6 +380,7 @@ export function MediaPage() {
   const [pageNotice, setPageNoticeState] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetProviderRef = useRef<UploadTargetProvider>("local");
 
   function setPageNotice(message: string) {
     setPageNoticeState(message);
@@ -472,10 +480,21 @@ export function MediaPage() {
     return null;
   }
 
-  async function uploadSingleFile(file: File, folderSlug: string) {
+  function openUploadPicker(targetProvider: UploadTargetProvider) {
+    uploadTargetProviderRef.current = targetProvider;
+    uploadInputRef.current?.click();
+    setPageNotice(`请选择文件上传到${uploadTargetProviderLabel(targetProvider)}`);
+  }
+
+  async function uploadSingleFile(
+    file: File,
+    folderSlug: string,
+    targetProvider: UploadTargetProvider,
+  ) {
     const formData = new FormData();
     formData.set("file", file);
     formData.set("folderSlug", folderSlug);
+    formData.set("targetProvider", targetProvider);
 
     await adminFetch("/admin/media/", {
       body: formData,
@@ -483,28 +502,36 @@ export function MediaPage() {
     });
   }
 
-  async function uploadFiles(files: File[], folderSlug = activeFolder?.slug ?? "article-covers") {
+  async function uploadFiles(
+    files: File[],
+    folderSlug = activeFolder?.slug ?? "article-covers",
+    targetProvider: UploadTargetProvider = "local",
+  ) {
     if (files.length === 0) return;
 
     let uploadedCount = 0;
-    const failedFiles: string[] = [];
+    const failedFiles: Array<{ fileName: string; message: string }> = [];
+    const targetLabel = uploadTargetProviderLabel(targetProvider);
 
     try {
       for (const [index, file] of files.entries()) {
         setMediaProgress({
-          label: `正在上传 ${file.name} (${index + 1}/${files.length})`,
+          label: `正在上传到${targetLabel} ${file.name} (${index + 1}/${files.length})`,
           total: files.length,
           value: index,
         });
 
         try {
-          await uploadSingleFile(file, folderSlug);
+          await uploadSingleFile(file, folderSlug, targetProvider);
           uploadedCount += 1;
-        } catch {
-          failedFiles.push(file.name);
+        } catch (error) {
+          failedFiles.push({
+            fileName: file.name,
+            message: error instanceof Error ? error.message : "媒体上传失败",
+          });
         } finally {
           setMediaProgress({
-            label: `正在上传 ${file.name} (${index + 1}/${files.length})`,
+            label: `正在上传到${targetLabel} ${file.name} (${index + 1}/${files.length})`,
             total: files.length,
             value: index + 1,
           });
@@ -513,12 +540,16 @@ export function MediaPage() {
 
       if (uploadedCount > 0) setReloadKey((key) => key + 1);
       if (failedFiles.length > 0) {
-        setPageNotice(`已上传 ${uploadedCount} 个文件，${failedFiles.length} 个失败`);
+        setPageNotice(
+          uploadedCount === 0
+            ? (failedFiles[0]?.message ?? "媒体上传失败")
+            : `已上传 ${uploadedCount} 个文件到${targetLabel}，${failedFiles.length} 个失败`,
+        );
       } else {
         setPageNotice(
           uploadedCount === 1
-            ? `已上传 ${files[0]?.name ?? "文件"}`
-            : `已上传 ${uploadedCount} 个文件`,
+            ? `已上传 ${files[0]?.name ?? "文件"} 到${targetLabel}`
+            : `已上传 ${uploadedCount} 个文件到${targetLabel}`,
         );
       }
     } finally {
@@ -526,8 +557,12 @@ export function MediaPage() {
     }
   }
 
-  async function uploadFile(file: File, folderSlug = activeFolder?.slug ?? "article-covers") {
-    await uploadFiles([file], folderSlug);
+  async function uploadFile(
+    file: File,
+    folderSlug = activeFolder?.slug ?? "article-covers",
+    targetProvider: UploadTargetProvider = "local",
+  ) {
+    await uploadFiles([file], folderSlug, targetProvider);
   }
 
   async function submitRenameMedia() {
@@ -879,15 +914,16 @@ export function MediaPage() {
             if (files.length === 0) return;
 
             const folderSlug = activeFolder?.slug ?? "article-covers";
+            const targetProvider = uploadTargetProviderRef.current;
             const [file] = files;
             const kind = file && files.length === 1 ? getUploadEditorKind(file, folderSlug) : null;
             if (file && kind) {
-              setUploadEditState({ file, folderSlug, kind });
+              setUploadEditState({ file, folderSlug, kind, targetProvider });
               event.target.value = "";
               return;
             }
 
-            void uploadFiles(files, folderSlug);
+            void uploadFiles(files, folderSlug, targetProvider);
             event.target.value = "";
           }}
           type="file"
@@ -908,18 +944,28 @@ export function MediaPage() {
                   <AppIcon name="folderOpen" />
                   新建文件夹
                 </Button>
-                <Button
-                  onPress={() => {
-                    uploadInputRef.current?.click();
-                    setPageNotice("请选择文件上传到媒体库");
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="tertiary"
-                >
-                  <AppIcon name="cloudUpload" />
-                  上传
-                </Button>
+                <Dropdown>
+                  <Button aria-label="选择媒体上传目标" size="sm" type="button" variant="tertiary">
+                    <AppIcon name="cloudUpload" />
+                    上传
+                  </Button>
+                  <Dropdown.Popover placement="bottom start">
+                    <Dropdown.Menu
+                      onAction={(key) => {
+                        if (key === "local" || key === "r2") openUploadPicker(key);
+                      }}
+                    >
+                      <Dropdown.Item id="local" textValue="上传到服务器">
+                        <AppIcon name="server" />
+                        <Label>上传到服务器</Label>
+                      </Dropdown.Item>
+                      <Dropdown.Item id="r2" textValue="上传到 Cloudflare R2">
+                        <AppIcon name="cloudUpload" />
+                        <Label>上传到 Cloudflare R2</Label>
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown>
                 <Button
                   onPress={() => {
                     setReloadKey((key) => key + 1);
@@ -1267,7 +1313,7 @@ export function MediaPage() {
         onApply={(file) => {
           if (!uploadEditState) return;
 
-          void uploadFile(file, uploadEditState.folderSlug);
+          void uploadFile(file, uploadEditState.folderSlug, uploadEditState.targetProvider);
           setUploadEditState(null);
         }}
         onCancel={() => setUploadEditState(null)}

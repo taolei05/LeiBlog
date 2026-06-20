@@ -34,4 +34,13 @@ describe("admin Cloudflare R2 media storage", () => {
     expect(mediaPageSource).toContain("storageProviderCount");
     expect(mediaPageSource).toContain("folderStorageCounts");
   });
+
+  it("lets media uploads choose a target storage provider", () => {
+    expect(mediaPageSource).toContain("Dropdown");
+    expect(mediaPageSource).toContain("openUploadPicker");
+    expect(mediaPageSource).toContain("上传到服务器");
+    expect(mediaPageSource).toContain("上传到 Cloudflare R2");
+    expect(mediaPageSource).toContain("targetProvider");
+    expect(mediaPageSource).toContain('formData.set("targetProvider", targetProvider)');
+  });
 });
