@@ -1,7 +1,7 @@
 import type { ResolvedTheme } from "../theme/ThemeProviderLite";
 
 import { getPublicApiBaseUrl, resolveApiAssetUrl } from "../api/api-base-url";
-import { isSvgAssetUrl, toSvgDataUri } from "../media/svg";
+import { isSvgAssetUrl, shouldInlineSvgAssetUrl, toSvgDataUri } from "../media/svg";
 
 export type PublicSiteInfo = {
   description: string;
@@ -293,7 +293,7 @@ export function applyFavicon(faviconUrl: string | undefined) {
     document.head.append(link);
   }
 
-  if (!isSvgAssetUrl(faviconUrl) || faviconUrl.toLowerCase().startsWith("data:")) {
+  if (!shouldInlineSvgAssetUrl(faviconUrl) || faviconUrl.toLowerCase().startsWith("data:")) {
     delete link.dataset.leiblogFaviconSource;
     return;
   }

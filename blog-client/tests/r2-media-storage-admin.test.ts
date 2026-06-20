@@ -35,6 +35,15 @@ describe("admin Cloudflare R2 media storage", () => {
     expect(mediaPageSource).toContain("folderStorageCounts");
   });
 
+  it("requires confirmation before migrating selected media between storage providers", () => {
+    expect(mediaPageSource).toContain("MigrationConfirmationTarget");
+    expect(mediaPageSource).toContain('setMigrationConfirmationTarget("local")');
+    expect(mediaPageSource).toContain('setMigrationConfirmationTarget("r2")');
+    expect(mediaPageSource).toContain("确认迁移到服务器？");
+    expect(mediaPageSource).toContain("确认迁移到 Cloudflare R2？");
+    expect(mediaPageSource).toContain("void migrateSelectedMedia(migrationConfirmationTarget)");
+  });
+
   it("lets media uploads choose a target storage provider", () => {
     expect(mediaPageSource).toContain("Dropdown");
     expect(mediaPageSource).toContain("openUploadPicker");

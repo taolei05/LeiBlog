@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { extractSvgDocument, isSvgAssetUrl, toSvgDataUri } from "../src/shared/media/svg";
+import {
+  extractSvgDocument,
+  isSvgAssetUrl,
+  shouldInlineSvgAssetUrl,
+  toSvgDataUri,
+} from "../src/shared/media/svg";
 
 function source(path: string) {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -25,7 +30,20 @@ describe("site SVG assets", () => {
     expect(isSvgAssetUrl("/uploads/site/logo.png")).toBe(false);
   });
 
+  it("does not inline cross-origin SVG asset URLs", () => {
+    const siteOrigin = "https://taolei.net";
+
+    expect(shouldInlineSvgAssetUrl("/uploads/site/logo.svg", siteOrigin)).toBe(true);
+    expect(shouldInlineSvgAssetUrl("https://taolei.net/uploads/site/logo.svg", siteOrigin)).toBe(
+      true,
+    );
+    expect(
+      shouldInlineSvgAssetUrl("https://media.example.com/assets/site/logo.svg", siteOrigin),
+    ).toBe(false);
+  });
+
   it("renders front and admin site logos through the SVG asset component", () => {
+    expect(source("src/shared/media/svg-asset.tsx")).toContain("shouldInlineSvgAssetUrl");
     expect(source("src/app/blog/BlogLayout.tsx")).toContain("<SvgAsset");
     expect(source("src/app/admin/AdminLayout.tsx")).toContain("<SvgAsset");
   });

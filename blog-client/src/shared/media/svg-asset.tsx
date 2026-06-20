@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import SVG from "react-inlinesvg";
 
-import { extractSvgDocument, isSvgAssetUrl } from "./svg";
+import { extractSvgDocument, shouldInlineSvgAssetUrl } from "./svg";
 
 type SvgAssetProps = {
   alt: string;
@@ -25,7 +25,7 @@ export function SvgAsset({
 }: SvgAssetProps) {
   const [activeSrc, setActiveSrc] = useState(src);
   const [hasFailed, setHasFailed] = useState(false);
-  const shouldInlineSvg = isSvg ?? isSvgAssetUrl(activeSrc);
+  const shouldInlineSvg = isSvg ?? shouldInlineSvgAssetUrl(activeSrc);
 
   useEffect(() => {
     setActiveSrc(src);

@@ -121,6 +121,7 @@ type MediaOperationProgress = {
 
 type StorageProviderFilter = "all" | "local" | "r2";
 type UploadTargetProvider = "local" | "r2";
+type MigrationConfirmationTarget = Exclude<StorageProviderFilter, "all">;
 
 const MEDIA_GRID_INITIAL_LIMIT = 60;
 const MEDIA_GRID_BATCH_SIZE = 60;
@@ -224,6 +225,10 @@ function folderCountForStorageFilter(
 
 function uploadTargetProviderLabel(targetProvider: UploadTargetProvider) {
   return targetProvider === "r2" ? "Cloudflare R2" : "服务器";
+}
+
+function migrationConfirmationTitle(targetProvider: MigrationConfirmationTarget) {
+  return targetProvider === "r2" ? "确认迁移到 Cloudflare R2？" : "确认迁移到服务器？";
 }
 
 function MediaThumb({ item }: { item: MediaRow }) {
@@ -377,6 +382,8 @@ export function MediaPage() {
   const [uploadEditState, setUploadEditState] = useState<MediaUploadEditState | null>(null);
   const [mediaRenderLimit, setMediaRenderLimit] = useState(MEDIA_GRID_INITIAL_LIMIT);
   const [mediaProgress, setMediaProgress] = useState<MediaOperationProgress | null>(null);
+  const [migrationConfirmationTarget, setMigrationConfirmationTarget] =
+    useState<MigrationConfirmationTarget | null>(null);
   const [pageNotice, setPageNoticeState] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -780,6 +787,9 @@ export function MediaPage() {
     () => mediaRows.filter((row) => row.kind === "video").length,
     [mediaRows],
   );
+  const migrationConfirmationLabel = migrationConfirmationTarget
+    ? uploadTargetProviderLabel(migrationConfirmationTarget)
+    : "";
 
   return (
     <AdminDataPage
@@ -903,6 +913,48 @@ export function MediaPage() {
           </AlertDialog.Backdrop>
         </AlertDialog>
       ) : null}
+      {migrationConfirmationTarget ? (
+        <AlertDialog>
+          <AlertDialog.Backdrop
+            isOpen
+            onOpenChange={(isOpen) => {
+              if (isOpen) return;
+              setMigrationConfirmationTarget(null);
+            }}
+            variant="blur"
+          >
+            <AlertDialog.Container placement="center" size="sm">
+              <AlertDialog.Dialog>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="warning" />
+                  <AlertDialog.Heading>
+                    {migrationConfirmationTitle(migrationConfirmationTarget)}
+                  </AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>{`将把所选 ${selectedMediaRows.length} 个媒体文件迁移到 ${migrationConfirmationLabel}，并同步更新文章、头像、站点配置等已知引用。旧文件会默认保留，不会自动删除。`}</p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    取消
+                  </Button>
+                  <Button
+                    onPress={() => {
+                      void migrateSelectedMedia(migrationConfirmationTarget);
+                      setMigrationConfirmationTarget(null);
+                    }}
+                    slot="close"
+                    variant="primary"
+                  >
+                    确认迁移
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      ) : null}
       <div className="media-library-layout">
         <input
           ref={uploadInputRef}
@@ -1001,7 +1053,7 @@ export function MediaPage() {
                 </span>
                 <Button
                   isDisabled={selectedMediaRows.length === 0}
-                  onPress={() => void migrateSelectedMedia("local")}
+                  onPress={() => setMigrationConfirmationTarget("local")}
                   size="sm"
                   type="button"
                   variant="tertiary"
@@ -1011,7 +1063,7 @@ export function MediaPage() {
                 </Button>
                 <Button
                   isDisabled={selectedMediaRows.length === 0}
-                  onPress={() => void migrateSelectedMedia("r2")}
+                  onPress={() => setMigrationConfirmationTarget("r2")}
                   size="sm"
                   type="button"
                   variant="tertiary"
