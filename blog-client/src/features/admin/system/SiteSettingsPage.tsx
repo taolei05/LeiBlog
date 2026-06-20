@@ -1053,6 +1053,7 @@ export function SiteSettingsPage() {
               value={siteConfig.ipgeolocationApiKey}
             />
             <Switch
+              className="settings-switch-row"
               isSelected={siteConfig.commentsEnabled}
               onChange={(isSelected) =>
                 setSiteConfig((state) => ({
@@ -1061,7 +1062,7 @@ export function SiteSettingsPage() {
                 }))
               }
             >
-              <Switch.Content>
+              <Switch.Content className="settings-switch-content">
                 <Switch.Control>
                   <Switch.Thumb />
                 </Switch.Control>

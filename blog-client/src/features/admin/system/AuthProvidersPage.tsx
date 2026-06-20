@@ -1,4 +1,15 @@
-import { Button, Chip, Description, InputGroup, Label, Switch, TextField } from "@heroui/react";
+import {
+  AlertDialog,
+  Button,
+  Chip,
+  Description,
+  InputOTP,
+  InputGroup,
+  Label,
+  Modal,
+  Switch,
+  TextField,
+} from "@heroui/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { getAdminApiBaseUrl } from "../../../shared/api/api-base-url";
@@ -6,6 +17,7 @@ import { AppIcon } from "../../../shared/icons";
 import { showOperationToast } from "../../../shared/toast/operation-toast";
 import { AdminDataPage } from "../shared/AdminDataPage";
 import { adminFetch } from "../shared/admin-api";
+import { ApiKeyGetLink } from "../shared/api-key-links";
 
 type AuthProviderSettingsItem = {
   clientId: string | null;
@@ -26,10 +38,30 @@ type AuthProviderFormState = {
   scopes: string;
 };
 
+type ApiKeyEmailCodeResult = {
+  expiresAt: string;
+  sent: boolean;
+  validMinutes: number;
+};
+
+type AuthProviderClientSecretItem = {
+  clientSecret: string | null;
+  provider: string;
+};
+
 const providerDefaultScopes: Record<string, string[]> = {
   github: ["read:user", "user:email"],
   google: ["openid", "profile", "email"],
 };
+
+const AUTH_PROVIDER_CLIENT_SECRET_URLS: Record<string, string> = {
+  github: "https://github.com/settings/developers",
+  google: "https://console.cloud.google.com/apis/credentials",
+};
+
+const revealCodeResendCooldownMs = 60_000;
+const revealCodeResendStorageKey =
+  "leiblog:admin:auth-provider-client-secret-code-resend-available-at";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -118,11 +150,57 @@ function isConfigured(provider: AuthProviderSettingsItem) {
   return Boolean(provider.clientId && provider.redirectUri && provider.hasClientSecret);
 }
 
+function formatCountdown(seconds: number) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+function readRevealCodeResendAvailableAt() {
+  const rawValue = window.localStorage.getItem(revealCodeResendStorageKey);
+
+  if (!rawValue) return null;
+
+  const availableAt = Number(rawValue);
+
+  if (!Number.isFinite(availableAt) || availableAt <= Date.now()) {
+    window.localStorage.removeItem(revealCodeResendStorageKey);
+
+    return null;
+  }
+
+  return availableAt;
+}
+
 export function AuthProvidersPage() {
   const [providers, setProviders] = useState<AuthProviderSettingsItem[]>([]);
   const [forms, setForms] = useState<Record<string, AuthProviderFormState>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingProvider, setSavingProvider] = useState("");
+  const [pendingSaveProvider, setPendingSaveProvider] = useState<AuthProviderSettingsItem | null>(
+    null,
+  );
+  const [visibleClientSecretProviders, setVisibleClientSecretProviders] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [clientSecretRevealProvider, setClientSecretRevealProvider] =
+    useState<AuthProviderSettingsItem | null>(null);
+  const [clientSecretRevealCode, setClientSecretRevealCode] = useState("");
+  const [revealedClientSecret, setRevealedClientSecret] = useState("");
+  const [revealCodeExpiresAt, setRevealCodeExpiresAt] = useState<string | null>(null);
+  const [revealCodeValidMinutes, setRevealCodeValidMinutes] = useState<number | null>(null);
+  const [revealCountdownSeconds, setRevealCountdownSeconds] = useState(0);
+  const [revealResendAvailableAt, setRevealResendAvailableAt] = useState<number | null>(null);
+  const [revealResendCountdownSeconds, setRevealResendCountdownSeconds] = useState(0);
+  const isClientSecretRevealed = Boolean(revealedClientSecret);
+  const revealSendLabel =
+    revealResendCountdownSeconds > 0
+      ? `重新发送验证码 ${revealResendCountdownSeconds}s`
+      : revealCodeExpiresAt
+        ? "重新发送验证码"
+        : "发送验证码";
   const enabledCount = providers.filter((provider) => provider.enabled).length;
   const configuredCount = providers.filter(isConfigured).length;
   const metrics = useMemo(
@@ -205,9 +283,162 @@ export function AuthProvidersPage() {
     }
   }
 
+  function toggleClientSecretVisibility(provider: string) {
+    setVisibleClientSecretProviders((current) => {
+      const next = new Set(current);
+
+      if (next.has(provider)) {
+        next.delete(provider);
+      } else {
+        next.add(provider);
+      }
+
+      return next;
+    });
+  }
+
+  function openClientSecretRevealModal(provider: AuthProviderSettingsItem) {
+    if (!provider.hasClientSecret) {
+      showOperationToast("Client Secret 未配置，无法查看", "danger");
+      return;
+    }
+
+    setClientSecretRevealProvider(provider);
+    setClientSecretRevealCode("");
+    setRevealedClientSecret("");
+    setRevealCodeExpiresAt(null);
+    setRevealCodeValidMinutes(null);
+  }
+
+  function closeClientSecretRevealModal() {
+    setClientSecretRevealProvider(null);
+    setClientSecretRevealCode("");
+    setRevealedClientSecret("");
+    setRevealCodeExpiresAt(null);
+    setRevealCodeValidMinutes(null);
+  }
+
+  async function sendClientSecretRevealCode() {
+    if (revealResendCountdownSeconds > 0) {
+      showOperationToast(`请 ${revealResendCountdownSeconds} 秒后再发送验证码`, "danger");
+      return;
+    }
+
+    try {
+      const response = await adminFetch<ApiKeyEmailCodeResult>(
+        "/admin/system/api-keys/email-code",
+        {
+          method: "POST",
+        },
+      );
+
+      if (response.sent) {
+        const resendAvailableAt = Date.now() + revealCodeResendCooldownMs;
+
+        setRevealCodeExpiresAt(response.expiresAt);
+        setRevealCodeValidMinutes(response.validMinutes);
+        setRevealResendAvailableAt(resendAvailableAt);
+        setRevealResendCountdownSeconds(Math.ceil(revealCodeResendCooldownMs / 1000));
+        window.localStorage.setItem(revealCodeResendStorageKey, String(resendAvailableAt));
+      } else {
+        setRevealCodeExpiresAt(null);
+        setRevealCodeValidMinutes(null);
+      }
+
+      showOperationToast(
+        response.sent
+          ? "验证码已发送到管理员邮箱"
+          : "验证码未发送：请先配置 Resend API Key 和已验证的 Resend 域名",
+        response.sent ? "success" : "danger",
+      );
+    } catch (error) {
+      setRevealCodeExpiresAt(null);
+      setRevealCodeValidMinutes(null);
+      showOperationToast(error instanceof Error ? error.message : "验证码发送失败", "danger");
+    }
+  }
+
+  async function revealClientSecretValue() {
+    if (!clientSecretRevealProvider) return;
+
+    if (!clientSecretRevealCode.trim()) {
+      showOperationToast("请输入邮箱验证码", "danger");
+      return;
+    }
+
+    try {
+      const response = await adminFetch<{ item: AuthProviderClientSecretItem }>(
+        `/admin/system/auth-providers/${clientSecretRevealProvider.provider}/client-secret/reveal`,
+        {
+          body: { emailCode: clientSecretRevealCode.trim() },
+          method: "POST",
+        },
+      );
+
+      setRevealedClientSecret(response.item.clientSecret ?? "未配置");
+      showOperationToast("验证通过，已显示 Client Secret", "success");
+    } catch (error) {
+      showOperationToast(
+        error instanceof Error ? error.message : "Client Secret 查看失败",
+        "danger",
+      );
+    }
+  }
+
   useEffect(() => {
     void loadProviders();
   }, []);
+
+  useEffect(() => {
+    setRevealResendAvailableAt(readRevealCodeResendAvailableAt());
+  }, []);
+
+  useEffect(() => {
+    if (!revealCodeExpiresAt) {
+      setRevealCountdownSeconds(0);
+      return;
+    }
+
+    const expiresAt = revealCodeExpiresAt;
+
+    function updateCountdown() {
+      const remainingSeconds = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000);
+
+      setRevealCountdownSeconds(Math.max(0, remainingSeconds));
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [revealCodeExpiresAt]);
+
+  useEffect(() => {
+    if (!revealResendAvailableAt) {
+      setRevealResendCountdownSeconds(0);
+      return;
+    }
+
+    const availableAt = revealResendAvailableAt;
+
+    function updateCountdown() {
+      const remainingSeconds = Math.ceil((availableAt - Date.now()) / 1000);
+
+      if (remainingSeconds <= 0) {
+        window.localStorage.removeItem(revealCodeResendStorageKey);
+        setRevealResendAvailableAt(null);
+        setRevealResendCountdownSeconds(0);
+        return;
+      }
+
+      setRevealResendCountdownSeconds(remainingSeconds);
+    }
+
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [revealResendAvailableAt]);
 
   return (
     <AdminDataPage
@@ -223,6 +454,9 @@ export function AuthProvidersPage() {
           const form = forms[provider.provider] ?? createFormState(provider);
           const isSaving = savingProvider === provider.provider;
           const defaultScopeText = getDefaultScopes(provider.provider).join("、");
+          const clientSecretGetUrl = AUTH_PROVIDER_CLIENT_SECRET_URLS[provider.provider];
+          const isClientSecretVisible = visibleClientSecretProviders.has(provider.provider);
+          const hasTypedClientSecret = Boolean(form.clientSecret.trim());
 
           return (
             <section className="auth-provider-panel" key={provider.provider}>
@@ -285,8 +519,11 @@ export function AuthProvidersPage() {
                   </InputGroup>
                 </TextField>
 
-                <TextField fullWidth>
-                  <Label>Client Secret</Label>
+                <TextField className="secret-setting-field" fullWidth>
+                  <div className="api-key-field-heading">
+                    <Label>Client Secret</Label>
+                    {clientSecretGetUrl ? <ApiKeyGetLink href={clientSecretGetUrl} /> : null}
+                  </div>
                   <InputGroup fullWidth variant="secondary">
                     <InputGroup.Prefix>
                       <AppIcon name="lockClosed" size={16} />
@@ -297,9 +534,35 @@ export function AuthProvidersPage() {
                         updateForm(provider.provider, { clientSecret: event.target.value })
                       }
                       placeholder={provider.hasClientSecret ? "已设置，留空则不修改" : "尚未设置"}
-                      type="password"
+                      type={isClientSecretVisible ? "text" : "password"}
                       value={form.clientSecret}
                     />
+                    <InputGroup.Suffix className="secret-input-actions">
+                      <Button
+                        isDisabled={!hasTypedClientSecret && !provider.hasClientSecret}
+                        isIconOnly
+                        aria-label={
+                          hasTypedClientSecret
+                            ? isClientSecretVisible
+                              ? "隐藏 Client Secret"
+                              : "显示 Client Secret"
+                            : "查看 Client Secret"
+                        }
+                        onPress={() => {
+                          if (hasTypedClientSecret) {
+                            toggleClientSecretVisibility(provider.provider);
+                            return;
+                          }
+
+                          openClientSecretRevealModal(provider);
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <AppIcon name={isClientSecretVisible ? "eyeOff" : "eye"} size={16} />
+                      </Button>
+                    </InputGroup.Suffix>
                   </InputGroup>
                   <Description>
                     <span className="auth-provider-secret-state">
@@ -345,7 +608,7 @@ export function AuthProvidersPage() {
                 </TextField>
 
                 <div className="auth-provider-panel__actions">
-                  <Button isDisabled={isSaving} onPress={() => void saveProvider(provider)}>
+                  <Button isDisabled={isSaving} onPress={() => setPendingSaveProvider(provider)}>
                     <AppIcon name="save" />
                     {isSaving ? "保存中" : "保存登录方式"}
                   </Button>
@@ -355,6 +618,151 @@ export function AuthProvidersPage() {
           );
         })}
       </div>
+      <Modal.Backdrop
+        isOpen={clientSecretRevealProvider !== null}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          closeClientSecretRevealModal();
+        }}
+        variant="blur"
+      >
+        <Modal.Container placement="center" size="lg">
+          <Modal.Dialog>
+            <div className="admin-form-modal admin-form-modal--reveal">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Icon>
+                  <AppIcon name="eye" />
+                </Modal.Icon>
+                <div>
+                  <Modal.Heading>Client Secret 查看验证码</Modal.Heading>
+                  <p className="admin-form-modal__description">
+                    {clientSecretRevealProvider
+                      ? `正在查看「${clientSecretRevealProvider.displayName}」的 Client Secret。查看前需要通过管理员邮箱验证码。`
+                      : "查看前需要通过管理员邮箱验证码。"}
+                  </p>
+                </div>
+              </Modal.Header>
+              <Modal.Body>
+                <div className="settings-form">
+                  {!isClientSecretRevealed ? (
+                    <>
+                      <InputOTP
+                        className="secret-reveal-otp"
+                        maxLength={6}
+                        onChange={setClientSecretRevealCode}
+                        pushPasswordManagerStrategy="none"
+                        value={clientSecretRevealCode}
+                        variant="secondary"
+                      >
+                        <InputOTP.Group>
+                          {Array.from({ length: 6 }).map((_, index) => (
+                            <InputOTP.Slot index={index} key={index} />
+                          ))}
+                        </InputOTP.Group>
+                      </InputOTP>
+                      {revealCodeExpiresAt ? (
+                        <div
+                          className="secret-reveal-countdown"
+                          data-expired={revealCountdownSeconds <= 0}
+                        >
+                          <AppIcon name="calendar" />
+                          <span>有效期 {revealCodeValidMinutes ?? 10} 分钟</span>
+                          <strong>
+                            {revealCountdownSeconds > 0
+                              ? formatCountdown(revealCountdownSeconds)
+                              : "已过期"}
+                          </strong>
+                        </div>
+                      ) : (
+                        <p className="secret-reveal-help">
+                          验证码有效期为 10 分钟，发送后会显示倒计时。
+                        </p>
+                      )}
+                    </>
+                  ) : null}
+                  {revealedClientSecret ? (
+                    <div className="secret-reveal-panel">
+                      <div>
+                        <dt>Client Secret</dt>
+                        <dd>{revealedClientSecret}</dd>
+                      </div>
+                      <Button
+                        onPress={() => void navigator.clipboard.writeText(revealedClientSecret)}
+                        size="sm"
+                        type="button"
+                        variant="tertiary"
+                      >
+                        <AppIcon name="copy" />
+                        复制
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </Modal.Body>
+              {!isClientSecretRevealed ? (
+                <Modal.Footer>
+                  <Button
+                    isDisabled={revealResendCountdownSeconds > 0}
+                    onPress={() => void sendClientSecretRevealCode()}
+                    variant="tertiary"
+                  >
+                    <AppIcon name="mail" />
+                    {revealSendLabel}
+                  </Button>
+                  <Button onPress={() => void revealClientSecretValue()}>
+                    <AppIcon name="eye" />
+                    验证并显示
+                  </Button>
+                </Modal.Footer>
+              ) : null}
+            </div>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+      {pendingSaveProvider ? (
+        <AlertDialog>
+          <AlertDialog.Backdrop
+            isOpen
+            onOpenChange={(isOpen) => {
+              if (isOpen) return;
+              setPendingSaveProvider(null);
+            }}
+            variant="blur"
+          >
+            <AlertDialog.Container placement="center" size="sm">
+              <AlertDialog.Dialog>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="warning" />
+                  <AlertDialog.Heading>确认保存登录方式？</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>
+                    {`将保存「${pendingSaveProvider.displayName}」登录方式的启用状态、Client ID、Client Secret、Callback URL 和 Scope。`}
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    取消
+                  </Button>
+                  <Button
+                    isDisabled={savingProvider === pendingSaveProvider.provider}
+                    onPress={() => {
+                      void saveProvider(pendingSaveProvider);
+                      setPendingSaveProvider(null);
+                    }}
+                    slot="close"
+                    variant="primary"
+                  >
+                    确认保存
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      ) : null}
     </AdminDataPage>
   );
 }

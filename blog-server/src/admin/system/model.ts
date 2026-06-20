@@ -102,6 +102,10 @@ export const RevealApiKeysBody = t.Object({
   emailCode: t.String({ minLength: 4, maxLength: 12 }),
 });
 
+export const RevealAuthProviderClientSecretBody = t.Object({
+  emailCode: t.String({ minLength: 4, maxLength: 12 }),
+});
+
 export const ResendTestBody = t.Object({
   kind: t.Union([t.Literal("domain"), t.Literal("apiKey")]),
   resendApiKey: t.Optional(t.Nullable(t.String({ maxLength: 1000 }))),
@@ -152,6 +156,14 @@ export const ApiKeysResponse = t.Object({
     resendApiKey: t.Nullable(t.String()),
     deeplApiKey: t.Nullable(t.String()),
     ipgeolocationApiKey: t.Nullable(t.String()),
+  }),
+});
+
+export const AuthProviderClientSecretResponse = t.Object({
+  ok: t.Boolean(),
+  item: t.Object({
+    clientSecret: t.Nullable(t.String()),
+    provider: t.String(),
   }),
 });
 

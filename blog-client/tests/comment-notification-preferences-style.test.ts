@@ -14,17 +14,19 @@ const layoutsCss = readFileSync(
 
 function expectClickableSwitchLabel(source: string, label: string) {
   expect(source).toMatch(
-    new RegExp(`<Switch\\.Content>\\s*<Switch\\.Control>[\\s\\S]*?<strong>${label}</strong>`),
+    new RegExp(
+      `<Switch\\.Content(?:\\s+[^>]*)?>\\s*<Switch\\.Control>[\\s\\S]*?<strong>${label}</strong>`,
+    ),
   );
 }
 
 describe("comment notification preference styles", () => {
   it("shares the compact site settings switch style and right-aligns preference saves", () => {
-    expect(siteSettingsPageSource).not.toContain('className="settings-switch-row"');
+    expect(siteSettingsPageSource).toContain('className="settings-switch-row"');
     expect(profilePageSource).toContain('className="account-preference-list settings-form"');
     expect(authPagesSource).toContain('className="account-preference-list settings-form"');
     expect(profilePageSource).not.toContain('className="settings-switch-row"');
-    expect(authPagesSource).not.toContain('className="settings-switch-row"');
+    expect(authPagesSource).toContain('className="settings-switch-row"');
     expect(layoutsCss).toMatch(/\.account-preference-list\s*\{[^}]*gap: 0\.75rem;/);
     expect(layoutsCss).toMatch(
       /\.account-preference-list \.switch\s*\{[^}]*--accent: var\(--cursor-accent\);/,
@@ -35,6 +37,7 @@ describe("comment notification preference styles", () => {
     expect(layoutsCss).not.toMatch(
       /\.account-preference-list\s*\{[^}]*--accent: var\(--cursor-accent\);/,
     );
+    expect(layoutsCss).toContain(".settings-switch-content");
   });
 
   it("places switch controls inside their clickable labels", () => {

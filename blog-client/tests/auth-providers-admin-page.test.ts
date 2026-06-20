@@ -24,6 +24,17 @@ describe("admin auth provider settings", () => {
     expect(authProvidersPageSource).toContain("/admin/system/auth-providers");
     expect(authProvidersPageSource).toContain("Client Secret");
     expect(authProvidersPageSource).toContain("hasClientSecret");
+    expect(authProvidersPageSource).toContain("AUTH_PROVIDER_CLIENT_SECRET_URLS");
+    expect(authProvidersPageSource).toContain("<ApiKeyGetLink href={clientSecretGetUrl} />");
+    expect(authProvidersPageSource).toContain("openClientSecretRevealModal(provider)");
+    expect(authProvidersPageSource).toContain(
+      "/admin/system/auth-providers/${clientSecretRevealProvider.provider}/client-secret/reveal",
+    );
+    expect(authProvidersPageSource).toContain("Client Secret 查看验证码");
+    expect(authProvidersPageSource).toContain("验证并显示");
+    expect(authProvidersPageSource).toContain("pendingSaveProvider");
+    expect(authProvidersPageSource).toContain("确认保存登录方式？");
+    expect(authProvidersPageSource).toContain("saveProvider(pendingSaveProvider)");
     expect(authProvidersPageSource).toContain("providerDefaultScopes");
     expect(authProvidersPageSource).toContain('google: ["openid", "profile", "email"]');
     expect(authProvidersPageSource).toContain("启用 {provider.displayName} 登录");

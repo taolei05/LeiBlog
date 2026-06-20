@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
   listAuthProviderSettings,
+  revealAuthProviderClientSecret,
   updateAuthProviderSettings,
 } from "../src/admin/system/auth-providers";
 import {
@@ -10,7 +11,7 @@ import {
   createOAuthAuthorization,
   listPublicAuthProviders,
 } from "../src/auth/oauth";
-import { hashPassword } from "../src/shared/auth";
+import { hashPassword, hashToken } from "../src/shared/auth";
 import { decryptSecret } from "../src/shared/crypto";
 import type { AuthUser } from "../src/shared/auth";
 import {
@@ -292,6 +293,55 @@ describe("OAuth login providers", () => {
       hasClientSecret: false,
       redirectUri: null,
     });
+  });
+
+  test("reveals a provider Client Secret only after administrator email verification", async () => {
+    await configureGithubProvider({
+      clientId: "github-client-id-reveal",
+      secret: "github-client-secret-reveal",
+    });
+    await testDb`
+      INSERT INTO email_verification_codes (email, code_hash, purpose, expires_at)
+      VALUES (
+        ${adminUser.email},
+        ${hashToken("123456")},
+        'email_change',
+        now() + interval '10 minutes'
+      )
+    `;
+
+    await expect(
+      revealAuthProviderClientSecret(
+        adminUser,
+        "microsoft",
+        { emailCode: "123456" },
+        testDb
+      )
+    ).rejects.toThrow("不支持的登录方式");
+
+    const revealed = await revealAuthProviderClientSecret(
+      adminUser,
+      "github",
+      { emailCode: "123456" },
+      testDb
+    );
+
+    expect(revealed).toEqual({
+      item: {
+        clientSecret: "github-client-secret-reveal",
+        provider: "github",
+      },
+      ok: true,
+    });
+
+    await expect(
+      revealAuthProviderClientSecret(
+        adminUser,
+        "github",
+        { emailCode: "123456" },
+        testDb
+      )
+    ).rejects.toThrow("邮箱验证码无效或已过期");
   });
 
   test("creates a GitHub authorization URL and turns a callback into a one-time login ticket", async () => {

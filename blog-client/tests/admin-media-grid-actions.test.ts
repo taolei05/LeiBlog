@@ -15,9 +15,37 @@ describe("admin media grid actions", () => {
     expect(mediaPageSource).not.toContain("媒体视图切换");
     expect(mediaPageSource).not.toContain('setViewMode("list")');
     expect(mediaPageSource).toContain("选择全部当前媒体");
+    expect(mediaPageSource).toContain("选择当前文件夹全部媒体");
     expect(mediaPageSource).toContain("批量删除");
     expect(mediaPageSource).toContain("下载${row.fileName}");
     expect(mediaPageSource).toContain("删除${row.fileName}");
+  });
+
+  it("keeps bulk selection independent from the rendered media batch", () => {
+    expect(mediaPageSource).toContain("MEDIA_GRID_INITIAL_LIMIT");
+    expect(mediaPageSource).toContain("MEDIA_GRID_BATCH_SIZE");
+    expect(mediaPageSource).toContain("renderedMediaRows");
+    expect(mediaPageSource).toContain("visibleMediaRows.slice(0, mediaRenderLimit)");
+    expect(mediaPageSource).toContain("visibleMediaRows.forEach");
+    expect(mediaPageSource).toContain(
+      "已显示 {renderedMediaRows.length} / {visibleMediaRows.length} 项",
+    );
+    expect(mediaPageSource).toContain("加载更多媒体");
+  });
+
+  it("keeps the bulk selection label inside the clickable checkbox content", () => {
+    expect(mediaPageSource).toMatch(
+      /aria-label="选择全部当前媒体"[\s\S]*?<Checkbox\.Content>[\s\S]*?<Checkbox\.Control>[\s\S]*?activeFolder \? "选择当前文件夹全部媒体" : "选择全部媒体"[\s\S]*?<\/Checkbox\.Content>/,
+    );
+  });
+
+  it("limits heavy media card work for large libraries", () => {
+    expect(mediaPageSource).toContain("deleteModalRow");
+    expect(mediaPageSource).toContain("setDeleteModalRow(row)");
+    expect(mediaPageSource).toContain('loading="lazy"');
+    expect(mediaPageSource).toContain('decoding="async"');
+    expect(layoutsCss).toContain("content-visibility: auto");
+    expect(layoutsCss).toContain("contain-intrinsic-size");
   });
 
   it("shows a clear empty state when the selected folder has no files", () => {

@@ -1,6 +1,6 @@
 import { AlertDialog, Button, Card, Checkbox, Modal, ScrollShadow } from "@heroui/react";
 import SVG from "react-inlinesvg";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveApiAssetUrl } from "../../../shared/api/api-base-url";
 import { AppIcon } from "../../../shared/icons";
@@ -75,6 +75,9 @@ type MediaUploadEditState = {
   folderSlug: string;
   kind: LocalImageEditorKind;
 };
+
+const MEDIA_GRID_INITIAL_LIMIT = 60;
+const MEDIA_GRID_BATCH_SIZE = 60;
 
 function formatFileSize(bytes: number) {
   const units = ["B", "KB", "MB", "GB"] as const;
@@ -180,7 +183,7 @@ function MediaPreviewModal({ item, onCopyUrl, onOpenChange }: MediaPreviewModalP
                     item.isSvg ? (
                       <SvgMediaPreview item={item} />
                     ) : (
-                      <img alt={item.alt} src={item.url} />
+                      <img alt={item.alt} decoding="async" loading="lazy" src={item.url} />
                     )
                   ) : item ? (
                     <MediaThumb item={item} />
@@ -253,7 +256,9 @@ export function MediaPage() {
   const [renameFileName, setRenameFileName] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaRow | null>(null);
+  const [deleteModalRow, setDeleteModalRow] = useState<MediaRow | null>(null);
   const [uploadEditState, setUploadEditState] = useState<MediaUploadEditState | null>(null);
+  const [mediaRenderLimit, setMediaRenderLimit] = useState(MEDIA_GRID_INITIAL_LIMIT);
   const [pageNotice, setPageNoticeState] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -278,25 +283,40 @@ export function MediaPage() {
       adminFetch<{ items: MediaFolder[] }>("/admin/media/folders"),
     ]);
     const nextRows = mediaResponse.items.map(toMediaRow);
+    const nextRowIds = new Set(nextRows.map((row) => row.id));
 
     setFolders(folderResponse.items);
     setMediaRows(nextRows);
     setSelectedMediaIds(
-      (selectedIds) =>
-        new Set([...selectedIds].filter((id) => nextRows.some((row) => row.id === id))),
+      (selectedIds) => new Set([...selectedIds].filter((id) => nextRowIds.has(id))),
     );
   }
 
-  const activeFolder = folders.find((folder) => folder.slug === activeFolderSlug) ?? null;
-  const visibleMediaRows =
-    activeFolderSlug === "all"
-      ? mediaRows
-      : mediaRows.filter((row) => row.folderSlug === activeFolderSlug);
+  const activeFolder = useMemo(
+    () => folders.find((folder) => folder.slug === activeFolderSlug) ?? null,
+    [activeFolderSlug, folders],
+  );
+  const visibleMediaRows = useMemo(
+    () =>
+      activeFolderSlug === "all"
+        ? mediaRows
+        : mediaRows.filter((row) => row.folderSlug === activeFolderSlug),
+    [activeFolderSlug, mediaRows],
+  );
   const isActiveFolderEmpty = activeFolder !== null && visibleMediaRows.length === 0;
-  const selectedMediaRows = mediaRows.filter((row) => selectedMediaIds.has(row.id));
-  const selectedVisibleCount = visibleMediaRows.filter((row) =>
-    selectedMediaIds.has(row.id),
-  ).length;
+  const selectedMediaRows = useMemo(
+    () => mediaRows.filter((row) => selectedMediaIds.has(row.id)),
+    [mediaRows, selectedMediaIds],
+  );
+  const selectedVisibleCount = useMemo(
+    () => visibleMediaRows.filter((row) => selectedMediaIds.has(row.id)).length,
+    [selectedMediaIds, visibleMediaRows],
+  );
+  const renderedMediaRows = useMemo(
+    () => visibleMediaRows.slice(0, mediaRenderLimit),
+    [mediaRenderLimit, visibleMediaRows],
+  );
+  const canRenderMoreMedia = renderedMediaRows.length < visibleMediaRows.length;
   const areAllVisibleSelected =
     visibleMediaRows.length > 0 && selectedVisibleCount === visibleMediaRows.length;
   const areSomeVisibleSelected = selectedVisibleCount > 0 && !areAllVisibleSelected;
@@ -304,6 +324,10 @@ export function MediaPage() {
   useEffect(() => {
     void loadMedia();
   }, [reloadKey]);
+
+  useEffect(() => {
+    setMediaRenderLimit(MEDIA_GRID_INITIAL_LIMIT);
+  }, [activeFolderSlug]);
 
   function getUploadEditorKind(file: File, folderSlug: string): LocalImageEditorKind | null {
     if (!file.type.startsWith("image/")) return null;
@@ -477,9 +501,18 @@ export function MediaPage() {
     }
   }
 
-  const imageCount = mediaRows.filter((row) => row.kind === "image").length;
-  const documentCount = mediaRows.filter((row) => row.kind === "document").length;
-  const videoCount = mediaRows.filter((row) => row.kind === "video").length;
+  const imageCount = useMemo(
+    () => mediaRows.filter((row) => row.kind === "image").length,
+    [mediaRows],
+  );
+  const documentCount = useMemo(
+    () => mediaRows.filter((row) => row.kind === "document").length,
+    [mediaRows],
+  );
+  const videoCount = useMemo(
+    () => mediaRows.filter((row) => row.kind === "video").length,
+    [mediaRows],
+  );
 
   return (
     <AdminDataPage
@@ -563,6 +596,46 @@ export function MediaPage() {
           setPreviewItem(null);
         }}
       />
+      {deleteModalRow ? (
+        <AlertDialog>
+          <AlertDialog.Backdrop
+            isOpen
+            onOpenChange={(isOpen) => {
+              if (isOpen) return;
+              setDeleteModalRow(null);
+            }}
+            variant="blur"
+          >
+            <AlertDialog.Container placement="center" size="sm">
+              <AlertDialog.Dialog>
+                <AlertDialog.CloseTrigger />
+                <AlertDialog.Header>
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>确认删除媒体？</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body>
+                  <p>{`删除「${deleteModalRow.fileName}」后，已写入文章、头像或站点配置的链接不会自动替换。`}</p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    取消
+                  </Button>
+                  <Button
+                    onPress={() => {
+                      void deleteMedia(deleteModalRow);
+                      setDeleteModalRow(null);
+                    }}
+                    slot="close"
+                    variant="danger"
+                  >
+                    确认删除
+                  </Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
+      ) : null}
       <div className="media-library-layout">
         <input
           ref={uploadInputRef}
@@ -635,11 +708,17 @@ export function MediaPage() {
                   onChange={updateVisibleMediaSelection}
                   variant="secondary"
                 >
-                  <Checkbox.Control>
-                    <Checkbox.Indicator />
-                  </Checkbox.Control>
+                  <Checkbox.Content>
+                    <Checkbox.Control>
+                      <Checkbox.Indicator />
+                    </Checkbox.Control>
+                    {activeFolder ? "选择当前文件夹全部媒体" : "选择全部媒体"}
+                  </Checkbox.Content>
                 </Checkbox>
                 <span>已选择 {selectedMediaIds.size} 项</span>
+                <span>
+                  已显示 {renderedMediaRows.length} / {visibleMediaRows.length} 项
+                </span>
                 <AlertDialog>
                   <Button
                     isDisabled={selectedMediaRows.length === 0}
@@ -775,7 +854,7 @@ export function MediaPage() {
                 <p>点击上方上传按钮，可以将文件添加到当前文件夹。</p>
               </Card>
             ) : null}
-            {visibleMediaRows.map((row) => {
+            {renderedMediaRows.map((row) => {
               const isSelected = selectedMediaIds.has(row.id);
 
               return (
@@ -801,7 +880,7 @@ export function MediaPage() {
                       row.isSvg ? (
                         <SvgMediaPreview item={row} />
                       ) : (
-                        <img alt={row.alt} src={row.url} />
+                        <img alt={row.alt} decoding="async" loading="lazy" src={row.url} />
                       )
                     ) : (
                       <MediaThumb item={row} />
@@ -855,47 +934,37 @@ export function MediaPage() {
                     >
                       <AppIcon name="pencil" />
                     </Button>
-                    <AlertDialog>
-                      <Button
-                        isIconOnly
-                        aria-label={`删除${row.fileName}`}
-                        size="sm"
-                        type="button"
-                        variant="danger-soft"
-                      >
-                        <AppIcon name="trash" />
-                      </Button>
-                      <AlertDialog.Backdrop>
-                        <AlertDialog.Container placement="center" size="sm">
-                          <AlertDialog.Dialog>
-                            <AlertDialog.CloseTrigger />
-                            <AlertDialog.Header>
-                              <AlertDialog.Icon status="danger" />
-                              <AlertDialog.Heading>确认删除媒体？</AlertDialog.Heading>
-                            </AlertDialog.Header>
-                            <AlertDialog.Body>
-                              <p>{`删除「${row.fileName}」后，已写入文章、头像或站点配置的链接不会自动替换。`}</p>
-                            </AlertDialog.Body>
-                            <AlertDialog.Footer>
-                              <Button slot="close" variant="tertiary">
-                                取消
-                              </Button>
-                              <Button
-                                onPress={() => void deleteMedia(row)}
-                                slot="close"
-                                variant="danger"
-                              >
-                                确认删除
-                              </Button>
-                            </AlertDialog.Footer>
-                          </AlertDialog.Dialog>
-                        </AlertDialog.Container>
-                      </AlertDialog.Backdrop>
-                    </AlertDialog>
+                    <Button
+                      isIconOnly
+                      aria-label={`删除${row.fileName}`}
+                      onPress={() => setDeleteModalRow(row)}
+                      size="sm"
+                      type="button"
+                      variant="danger-soft"
+                    >
+                      <AppIcon name="trash" />
+                    </Button>
                   </div>
                 </Card>
               );
             })}
+            {canRenderMoreMedia ? (
+              <Card className="media-grid-load-more-card">
+                <span className="media-thumb media-thumb--document">
+                  <AppIcon name="images" />
+                </span>
+                <strong>{`还有 ${visibleMediaRows.length - renderedMediaRows.length} 个媒体文件未显示`}</strong>
+                <p>分批加载可减少大量图片和 SVG 同时渲染造成的卡顿。</p>
+                <Button
+                  onPress={() => setMediaRenderLimit((limit) => limit + MEDIA_GRID_BATCH_SIZE)}
+                  type="button"
+                  variant="tertiary"
+                >
+                  <AppIcon name="arrowDown" />
+                  加载更多媒体
+                </Button>
+              </Card>
+            ) : null}
           </div>
         </div>
       </div>

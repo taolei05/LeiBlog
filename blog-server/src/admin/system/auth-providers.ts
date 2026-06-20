@@ -1,5 +1,6 @@
 import type { AuthUser } from "../../shared/auth";
 import { requireAdmin } from "../../shared/auth";
+import { consumeEmailCode } from "../../auth/service";
 import type { AuthProvider, AuthProviderSettingsItem } from "../../shared/auth-providers";
 import {
   getAuthProviderDefaults,
@@ -7,7 +8,7 @@ import {
   supportedAuthProviders,
 } from "../../shared/auth-providers";
 import type { StoredEncryptedSecret } from "../../shared/crypto";
-import { encryptSecret } from "../../shared/crypto";
+import { decryptSecret, encryptSecret } from "../../shared/crypto";
 import type { DbClient } from "../../shared/db";
 import { db } from "../../shared/db";
 import { validationError } from "../../shared/errors";
@@ -29,6 +30,10 @@ type AuthProviderSettingsRow = {
   client_secret_encrypted: StoredEncryptedSecret | null;
   redirect_uri: string | null;
   scopes: string[] | string;
+};
+
+type AuthProviderSecretRow = {
+  client_secret_encrypted: StoredEncryptedSecret | null;
 };
 
 function cleanOptional(value: string | null | undefined) {
@@ -172,6 +177,38 @@ export async function updateAuthProviderSettings(
 
   return {
     item: toSettingsItem(provider, row),
+    ok: true,
+  };
+}
+
+export async function revealAuthProviderClientSecret(
+  currentUser: AuthUser,
+  providerValue: string,
+  input: { emailCode: string },
+  client: DbClient = db
+) {
+  requireAdmin(currentUser);
+  const provider = readAuthProvider(providerValue);
+  if (!provider) throw validationError("不支持的登录方式");
+
+  if (!currentUser.email) {
+    throw validationError("管理员账号未配置邮箱，无法校验验证码");
+  }
+
+  await consumeEmailCode(currentUser.email, input.emailCode, "email_change", client);
+
+  const [row] = await client<AuthProviderSecretRow[]>`
+    SELECT client_secret_encrypted
+    FROM auth_provider_settings
+    WHERE provider = ${provider}
+    LIMIT 1
+  `;
+
+  return {
+    item: {
+      clientSecret: decryptSecret(row?.client_secret_encrypted),
+      provider,
+    },
     ok: true,
   };
 }

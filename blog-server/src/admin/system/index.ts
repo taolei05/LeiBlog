@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 
 import {
   AuthProviderParams,
+  AuthProviderClientSecretResponse,
   AuthProviderSettingsBody,
   AuthProviderSettingsResponse,
   AuthProvidersResponse,
@@ -9,6 +10,7 @@ import {
   ApiKeysResponse,
   DeepLTestBody,
   IntegrationTestResponse,
+  RevealAuthProviderClientSecretBody,
   RevealApiKeysBody,
   ResendTestBody,
   SystemFilingBody,
@@ -20,6 +22,7 @@ import {
 } from "./model";
 import {
   listAuthProviderSettings,
+  revealAuthProviderClientSecret,
   updateAuthProviderSettings,
 } from "./auth-providers";
 import {
@@ -78,6 +81,16 @@ export const adminSystemModule = new Elysia({ prefix: "/system" })
       body: AuthProviderSettingsBody,
       params: AuthProviderParams,
       response: { 200: AuthProviderSettingsResponse },
+    }
+  )
+  .post(
+    "/auth-providers/:provider/client-secret/reveal",
+    ({ currentUser, params, body }) =>
+      revealAuthProviderClientSecret(currentUser, params.provider, body),
+    {
+      body: RevealAuthProviderClientSecretBody,
+      params: AuthProviderParams,
+      response: { 200: AuthProviderClientSecretResponse },
     }
   )
   .post("/api-keys/email-code", async ({ currentUser, requestMeta }) => {

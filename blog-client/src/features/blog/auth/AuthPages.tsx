@@ -2251,11 +2251,12 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                 <Accordion.Body>
                   <div className="account-preference-list settings-form">
                     <Switch
+                      className="settings-switch-row"
                       isDisabled={isSavingPreferences}
                       isSelected={commentEmailNotificationsDraft}
                       onChange={setCommentEmailNotificationsDraft}
                     >
-                      <Switch.Content>
+                      <Switch.Content className="settings-switch-content">
                         <Switch.Control>
                           <Switch.Thumb />
                         </Switch.Control>
@@ -2264,11 +2265,12 @@ export function UserProfilePage({ initialDialog }: UserProfilePageProps) {
                       </Switch.Content>
                     </Switch>
                     <Switch
+                      className="settings-switch-row"
                       isDisabled={isSavingPreferences}
                       isSelected={newArticleEmailNotificationsDraft}
                       onChange={setNewArticleEmailNotificationsDraft}
                     >
-                      <Switch.Content>
+                      <Switch.Content className="settings-switch-content">
                         <Switch.Control>
                           <Switch.Thumb />
                         </Switch.Control>
