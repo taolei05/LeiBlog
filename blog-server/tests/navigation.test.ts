@@ -48,9 +48,10 @@ describe("navigation services", () => {
   test("loads seeded bookmark websites after migrations", async () => {
     const adminNavigation = await listNavigation(currentAdmin, testDb);
     const seededGroup = adminNavigation.groups.find((group) => group.name === "传统银行");
+    const nabItem = seededGroup?.items.find((item) => item.url === "https://www.nab.com.au/");
 
-    expect(seededGroup?.items.some((item) => item.url === "https://www.nab.com.au/")).toBe(
-      true
+    expect(nabItem?.note).toBe(
+      "澳大利亚国民银行，提供基础日常账户，无月费，支持澳元存取款及网银服务。"
     );
 
     const publicNavigation = await listPublicNavigation(testDb);

@@ -36,6 +36,7 @@ const navigationBookmarksMigration = readMigration("008_navigation_bookmarks_see
 const navigationBookmarksBackfillMigration = readMigration(
   "009_navigation_bookmarks_items_backfill.sql"
 );
+const navigationBookmarkNotesMigration = readMigration("010_navigation_bookmark_notes.sql");
 const seedSource = readFileSync(join(import.meta.dir, "../src/db/seed.ts"), "utf8");
 
 describe("initial database migration", () => {
@@ -50,6 +51,7 @@ describe("initial database migration", () => {
       "007_user_last_login_method.sql",
       "008_navigation_bookmarks_seed.sql",
       "009_navigation_bookmarks_items_backfill.sql",
+      "010_navigation_bookmark_notes.sql",
     ]);
   });
 
@@ -249,5 +251,18 @@ describe("initial database migration", () => {
     expect(navigationBookmarksBackfillMigration).not.toContain("account-card-application");
     expect(navigationBookmarksBackfillMigration).toContain("https://mcp.so/zh");
     expect(navigationBookmarksBackfillMigration).toContain("https://xszn.org/");
+  });
+
+  test("updates seeded navigation website notes from the curated bookmark file", () => {
+    expect(navigationBookmarkNotesMigration).toContain("UPDATE navigation_items");
+    expect(navigationBookmarkNotesMigration).toContain("IS DISTINCT FROM");
+    expect(navigationBookmarkNotesMigration).toContain("https://www.nab.com.au/");
+    expect(navigationBookmarkNotesMigration).toContain(
+      "澳大利亚国民银行，提供基础日常账户，无月费，支持澳元存取款及网银服务。"
+    );
+    expect(navigationBookmarkNotesMigration).toContain("https://www.amazon.com/");
+    expect(navigationBookmarkNotesMigration).not.toContain(
+      "NAB Australia - 账户申请 属于「传统银行」"
+    );
   });
 });
