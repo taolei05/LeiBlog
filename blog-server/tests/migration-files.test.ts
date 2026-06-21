@@ -32,6 +32,7 @@ const authSessionLoginMethodMigration = readFileSync(
 );
 const googleAuthProviderMigration = readMigration("005_google_auth_provider.sql");
 const userLastLoginMethodMigration = readMigration("007_user_last_login_method.sql");
+const navigationBookmarksMigration = readMigration("008_navigation_bookmarks_seed.sql");
 const seedSource = readFileSync(join(import.meta.dir, "../src/db/seed.ts"), "utf8");
 
 describe("initial database migration", () => {
@@ -44,6 +45,7 @@ describe("initial database migration", () => {
       "005_google_auth_provider.sql",
       "006_r2_media_storage.sql",
       "007_user_last_login_method.sql",
+      "008_navigation_bookmarks_seed.sql",
     ]);
   });
 
@@ -209,5 +211,27 @@ describe("initial database migration", () => {
 
     expect(r2Migration).toContain("media_assets_storage_provider_check");
     expect(r2Migration).toContain("CHECK (storage_provider IN ('local', 'r2'))");
+  });
+
+  test("seeds curated navigation bookmarks idempotently", () => {
+    for (const groupName of [
+      "传统银行",
+      "数字银行 / 新银行 (Neobanks)",
+      "MCP 服务 / 技能市场",
+      "AI 开发 / IDE",
+      "VitePress 生态",
+      "国际邮箱",
+      "短信验证码平台",
+      "导航站与资源目录",
+    ]) {
+      expect(navigationBookmarksMigration).toContain(`('${groupName}'`);
+    }
+
+    expect(navigationBookmarksMigration).toContain("https://www.nab.com.au/");
+    expect(navigationBookmarksMigration).not.toContain("account-card-application");
+    expect(navigationBookmarksMigration).toContain("https://mcp.so/zh");
+    expect(navigationBookmarksMigration).toContain("https://xszn.org/zh");
+    expect(navigationBookmarksMigration).toContain("WHERE NOT EXISTS");
+    expect(navigationBookmarksMigration).toContain("ON CONFLICT (lower(name))");
   });
 });

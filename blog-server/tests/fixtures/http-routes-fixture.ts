@@ -752,7 +752,10 @@ async function main() {
     })),
     200
   );
-  assert(adminNavigation.groups[0]?.name === "路由导航", "管理员导航路由应返回导航分组");
+  assert(
+    adminNavigation.groups.some((group) => group.name === "路由导航"),
+    "管理员导航路由应返回导航分组"
+  );
 
   const adminArticles = await expectJson<ListBody<ArticleBody>>(
     await app.handle(new Request("http://localhost/api/admin/content/articles", {

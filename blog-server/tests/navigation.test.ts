@@ -55,7 +55,12 @@ describe("navigation services", () => {
       note: "前端 API 兼容性查询",
     }, testDb);
 
-    await reorderNavigationGroups(currentAdmin, { ids: [ai.id, tools.id] }, testDb);
+    const navigationBeforeReorder = await listNavigation(currentAdmin, testDb);
+    const otherGroupIds = navigationBeforeReorder.groups
+      .map((group) => group.id)
+      .filter((id) => id !== ai.id && id !== tools.id);
+
+    await reorderNavigationGroups(currentAdmin, { ids: [ai.id, tools.id, ...otherGroupIds] }, testDb);
     const moved = await updateNavigationItem(currentAdmin, item.id, {
       groupId: ai.id,
       iconUrl: "/uploads/website-icons/caniuse.png",
@@ -69,14 +74,17 @@ describe("navigation services", () => {
       .rejects.toThrow("请先移动或删除组内网站");
 
     const adminNavigation = await listNavigation(currentAdmin, testDb);
-    expect(adminNavigation.groups.map((group) => group.name)).toEqual(["AI 导航", "常用工具"]);
+    expect(adminNavigation.groups.slice(0, 2).map((group) => group.name)).toEqual([
+      "AI 导航",
+      "常用工具",
+    ]);
     expect(adminNavigation.groups[0]?.items[0]?.iconUrl).toBe(
       "/uploads/website-icons/caniuse.png"
     );
 
     const publicNavigation = await listPublicNavigation(testDb);
-    expect(publicNavigation.groups.map((group) => group.name)).toEqual(["AI 导航"]);
-    expect(publicNavigation.groups[0]?.items[0]?.url).toBe("https://caniuse.com");
+    const publicAiGroup = publicNavigation.groups.find((group) => group.name === "AI 导航");
+    expect(publicAiGroup?.items[0]?.url).toBe("https://caniuse.com");
   });
 
   test("validates duplicate names, URLs, reorder IDs, and admin access", async () => {
