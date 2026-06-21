@@ -328,8 +328,12 @@ async function main() {
     await app.handle(new Request("http://localhost/api/public/navigation")),
     200
   );
-  assert(publicNavigation.groups[0]?.name === "路由导航", "公共导航路由应返回导航分组");
-  assert(publicNavigation.groups[0]?.items[0]?.name === "路由网站", "公共导航路由应返回网站");
+  const routeNavigationGroup = publicNavigation.groups.find((group) => group.name === "路由导航");
+  assert(routeNavigationGroup, "公共导航路由应返回导航分组");
+  assert(
+    routeNavigationGroup.items.some((item) => item.name === "路由网站"),
+    "公共导航路由应返回网站"
+  );
 
   const adminAuth = await login(app, "route-admin", "admin-password");
   assert(adminAuth.user.id === seeded.adminId, "管理员登录用户不正确");

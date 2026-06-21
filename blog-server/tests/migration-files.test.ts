@@ -33,6 +33,9 @@ const authSessionLoginMethodMigration = readFileSync(
 const googleAuthProviderMigration = readMigration("005_google_auth_provider.sql");
 const userLastLoginMethodMigration = readMigration("007_user_last_login_method.sql");
 const navigationBookmarksMigration = readMigration("008_navigation_bookmarks_seed.sql");
+const navigationBookmarksBackfillMigration = readMigration(
+  "009_navigation_bookmarks_items_backfill.sql"
+);
 const seedSource = readFileSync(join(import.meta.dir, "../src/db/seed.ts"), "utf8");
 
 describe("initial database migration", () => {
@@ -46,6 +49,7 @@ describe("initial database migration", () => {
       "006_r2_media_storage.sql",
       "007_user_last_login_method.sql",
       "008_navigation_bookmarks_seed.sql",
+      "009_navigation_bookmarks_items_backfill.sql",
     ]);
   });
 
@@ -233,5 +237,17 @@ describe("initial database migration", () => {
     expect(navigationBookmarksMigration).toContain("https://xszn.org/zh");
     expect(navigationBookmarksMigration).toContain("WHERE NOT EXISTS");
     expect(navigationBookmarksMigration).toContain("ON CONFLICT (lower(name))");
+  });
+
+  test("backfills seeded navigation websites without changing applied seed migrations", () => {
+    expect(navigationBookmarksBackfillMigration).toContain("INSERT INTO navigation_items");
+    expect(navigationBookmarksBackfillMigration).toContain(
+      "INNER JOIN navigation_groups ON lower(navigation_groups.name) = lower(desired_items.group_name)"
+    );
+    expect(navigationBookmarksBackfillMigration).toContain("WHERE NOT EXISTS");
+    expect(navigationBookmarksBackfillMigration).toContain("https://www.nab.com.au/");
+    expect(navigationBookmarksBackfillMigration).not.toContain("account-card-application");
+    expect(navigationBookmarksBackfillMigration).toContain("https://mcp.so/zh");
+    expect(navigationBookmarksBackfillMigration).toContain("https://xszn.org/");
   });
 });

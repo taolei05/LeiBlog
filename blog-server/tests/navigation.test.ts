@@ -45,6 +45,20 @@ afterAll(async () => {
 });
 
 describe("navigation services", () => {
+  test("loads seeded bookmark websites after migrations", async () => {
+    const adminNavigation = await listNavigation(currentAdmin, testDb);
+    const seededGroup = adminNavigation.groups.find((group) => group.name === "传统银行");
+
+    expect(seededGroup?.items.some((item) => item.url === "https://www.nab.com.au/")).toBe(
+      true
+    );
+
+    const publicNavigation = await listPublicNavigation(testDb);
+    const publicSeededGroup = publicNavigation.groups.find((group) => group.name === "传统银行");
+
+    expect(publicSeededGroup?.items.length).toBeGreaterThan(0);
+  });
+
   test("manages ordered groups and items while filtering empty public groups", async () => {
     const tools = await createNavigationGroup(currentAdmin, { name: "常用工具" }, testDb);
     const ai = await createNavigationGroup(currentAdmin, { name: "AI 导航" }, testDb);
