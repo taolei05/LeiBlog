@@ -42,6 +42,7 @@ type AdminProfile = {
   lastLoginDevice: string | null;
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
+  lastLoginMethod: "github" | "google" | "password" | null;
   name: string | null;
   newArticleEmailNotificationsEnabled: boolean;
   role: "admin" | "user";

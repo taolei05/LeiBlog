@@ -107,7 +107,7 @@ export function requireAdmin(user: AuthUser | null | undefined) {
     throw forbidden("需要管理员权限");
   }
   if (currentUser.loginMethod === "oauth") {
-    throw forbidden("GitHub 登录仅可用于前台");
+    throw forbidden("第三方登录仅可用于前台");
   }
 
   return currentUser;

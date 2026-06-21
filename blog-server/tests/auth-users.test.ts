@@ -355,6 +355,7 @@ describe("auth and user services", () => {
 
       expect(profile.lastLoginLocation).toBe("美国 圣何塞");
       expect(profile.lastLoginDevice).toBe("geo-browser");
+      expect(profile.lastLoginMethod).toBe("password");
 
       const users = await listUsers(
         {
@@ -370,6 +371,9 @@ describe("auth and user services", () => {
       );
       expect(users.items.find((item) => item.id === user.id)?.lastLoginLocation).toBe(
         "美国 圣何塞"
+      );
+      expect(users.items.find((item) => item.id === user.id)?.lastLoginMethod).toBe(
+        "password"
       );
     } finally {
       globalThis.fetch = originalFetch;

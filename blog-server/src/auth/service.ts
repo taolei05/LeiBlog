@@ -577,7 +577,7 @@ async function getUserProfileById(userId: string, client: DbClient = db) {
            new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip, last_login_location,
-           last_login_device
+           last_login_device, last_login_method
     FROM users
     WHERE id = ${userId}
   `;
@@ -735,7 +735,7 @@ export async function verifyLogin(
            avatar_url, social_links, blog_url, comment_email_notifications_enabled,
            new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
-           host(last_login_ip) AS last_login_ip
+           host(last_login_ip) AS last_login_ip, last_login_method
     FROM users
     WHERE lower(username) = ${identifier}
        OR lower(email) = ${identifier}
@@ -772,7 +772,8 @@ export async function verifyLogin(
     SET last_login_at = now(),
         last_login_ip = ${meta.ip},
         last_login_location = ${location}::jsonb,
-        last_login_device = ${device}::jsonb
+        last_login_device = ${device}::jsonb,
+        last_login_method = 'password'
     WHERE id = ${user.id}
   `;
 
@@ -782,6 +783,7 @@ export async function verifyLogin(
     last_login_ip: meta.ip,
     last_login_location: location,
     last_login_device: device,
+    last_login_method: "password",
   });
 }
 

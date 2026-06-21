@@ -12,12 +12,10 @@ import {
   listPublicAuthProviders,
 } from "../src/auth/oauth";
 import { hashPassword, hashToken } from "../src/shared/auth";
-import { decryptSecret } from "../src/shared/crypto";
 import type { AuthUser } from "../src/shared/auth";
-import {
-  createMigratedTestDatabase,
-  type TestDatabase,
-} from "./helpers/database";
+import { decryptSecret, encryptSecret } from "../src/shared/crypto";
+import type { TestDatabase } from "./helpers/database";
+import { createMigratedTestDatabase } from "./helpers/database";
 
 let testDatabase: TestDatabase;
 let testDb: Bun.SQL;
@@ -169,6 +167,50 @@ async function configureGoogleProvider({
     },
     testDb
   );
+}
+
+async function configureLocationProviders() {
+  await testDb`
+    INSERT INTO site_config (id, deepl_api_key_encrypted, ipgeolocation_api_key_encrypted)
+    VALUES (
+      1,
+      ${JSON.stringify(encryptSecret("deepl-oauth-test"))}::jsonb,
+      ${JSON.stringify(encryptSecret("ipgeo-oauth-test"))}::jsonb
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET deepl_api_key_encrypted = EXCLUDED.deepl_api_key_encrypted,
+        ipgeolocation_api_key_encrypted = EXCLUDED.ipgeolocation_api_key_encrypted
+  `;
+}
+
+function installLocationFetch() {
+  const originalFetch = globalThis.fetch;
+  const locationFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("https://api.ipgeolocation.io/ipgeo")) {
+      return Response.json({
+        country_name: "United States",
+        city: "San Jose",
+      });
+    }
+    if (url.includes("api-free.deepl.com") || url.includes("api.deepl.com")) {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        target_lang: "ZH-HANS",
+        text: ["United States San Jose"],
+      });
+      return Response.json({ translations: [{ text: "美国 圣何塞" }] });
+    }
+
+    throw new Error(`Unexpected location fetch URL: ${url}`);
+  };
+
+  globalThis.fetch = Object.assign(locationFetch, {
+    preconnect: originalFetch.preconnect,
+  });
+
+  return () => {
+    globalThis.fetch = originalFetch;
+  };
 }
 
 async function createStartedGithubState(returnTo = "/profile") {
@@ -412,6 +454,66 @@ describe("OAuth login providers", () => {
     ).rejects.toThrow("第三方登录票据无效或已过期");
   });
 
+  test("records login location and method when consuming a GitHub login ticket", async () => {
+    await configureLocationProviders();
+    await configureGithubProvider({
+      clientId: "github-client-id-location",
+      secret: "github-client-secret-location",
+    });
+    const restoreFetch = installLocationFetch();
+
+    try {
+      const { state } = await createStartedGithubState("/profile");
+      const { fetcher } = oauthFetch({
+        emails: [
+          {
+            email: "octocat-location@example.com",
+            primary: true,
+            verified: true,
+          },
+        ],
+        id: 10,
+        login: "octocat-location",
+      });
+      const loginTicket = await completeOAuthLogin(
+        "github",
+        {
+          code: "github-code-location",
+          state,
+        },
+        { ip: "8.8.8.8", userAgent: "github-location-browser" },
+        {
+          client: testDb,
+          fetch: fetcher,
+        }
+      );
+      const session = await consumeOAuthLoginTicket(
+        loginTicket.ticket,
+        { ip: "8.8.8.8", userAgent: "github-location-browser" },
+        { client: testDb }
+      );
+
+      expect(session.user.lastLoginLocation).toBe("美国 圣何塞");
+      expect(session.user.lastLoginMethod).toBe("github");
+
+      const [stored] = await testDb<{
+        last_login_method: string | null;
+        location: string | null;
+      }[]>`
+        SELECT last_login_method,
+               last_login_location->>'location' AS location
+        FROM users
+        WHERE id = ${session.user.id}
+      `;
+      expect(stored).toEqual({
+        last_login_method: "github",
+        location: "美国 圣何塞",
+      });
+    } finally {
+      restoreFetch();
+    }
+  });
+
   test("creates a Google authorization URL and turns a callback into a one-time login ticket", async () => {
     await configureGoogleProvider({
       clientId: "google-client-id-callback",
@@ -475,6 +577,59 @@ describe("OAuth login providers", () => {
       provider_user_id: "google-sub-1",
       user_id: session.user.id,
     });
+  });
+
+  test("records login location and method when consuming a Google login ticket", async () => {
+    await configureLocationProviders();
+    await configureGoogleProvider({
+      clientId: "google-client-id-location",
+      secret: "google-client-secret-location",
+    });
+    const restoreFetch = installLocationFetch();
+
+    try {
+      const { state } = await createStartedGoogleState("/profile");
+      const { fetcher } = googleOauthFetch({
+        email: "reader-google-location@example.com",
+        sub: "google-sub-location",
+      });
+      const loginTicket = await completeOAuthLogin(
+        "google",
+        {
+          code: "google-code-location",
+          state,
+        },
+        { ip: "8.8.4.4", userAgent: "google-location-browser" },
+        {
+          client: testDb,
+          fetch: fetcher,
+        }
+      );
+      const session = await consumeOAuthLoginTicket(
+        loginTicket.ticket,
+        { ip: "8.8.4.4", userAgent: "google-location-browser" },
+        { client: testDb }
+      );
+
+      expect(session.user.lastLoginLocation).toBe("美国 圣何塞");
+      expect(session.user.lastLoginMethod).toBe("google");
+
+      const [stored] = await testDb<{
+        last_login_method: string | null;
+        location: string | null;
+      }[]>`
+        SELECT last_login_method,
+               last_login_location->>'location' AS location
+        FROM users
+        WHERE id = ${session.user.id}
+      `;
+      expect(stored).toEqual({
+        last_login_method: "google",
+        location: "美国 圣何塞",
+      });
+    } finally {
+      restoreFetch();
+    }
   });
 
   test("binds a verified GitHub email to an existing normal user", async () => {

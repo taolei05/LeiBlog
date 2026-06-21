@@ -105,7 +105,9 @@ CREATE TABLE users (
   last_login_at timestamptz,
   last_login_ip inet,
   last_login_location jsonb,
-  last_login_device jsonb
+  last_login_device jsonb,
+  last_login_method varchar(40)
+    CHECK (last_login_method IS NULL OR last_login_method IN ('password', 'github', 'google'))
 );
 
 CREATE UNIQUE INDEX users_username_unique ON users (lower(username));

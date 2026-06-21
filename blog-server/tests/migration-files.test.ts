@@ -31,6 +31,7 @@ const authSessionLoginMethodMigration = readFileSync(
   "utf8"
 );
 const googleAuthProviderMigration = readMigration("005_google_auth_provider.sql");
+const userLastLoginMethodMigration = readMigration("007_user_last_login_method.sql");
 const seedSource = readFileSync(join(import.meta.dir, "../src/db/seed.ts"), "utf8");
 
 describe("initial database migration", () => {
@@ -42,6 +43,7 @@ describe("initial database migration", () => {
       "004_auth_session_login_method.sql",
       "005_google_auth_provider.sql",
       "006_r2_media_storage.sql",
+      "007_user_last_login_method.sql",
     ]);
   });
 
@@ -174,6 +176,17 @@ describe("initial database migration", () => {
       "ADD COLUMN IF NOT EXISTS login_method varchar(40) NOT NULL DEFAULT 'password'"
     );
     expect(authSessionLoginMethodMigration).toContain("auth_sessions_login_method_check");
+  });
+
+  test("stores the latest concrete login method for users", () => {
+    expect(migration).toContain("last_login_method varchar(40)");
+    expect(migration).toContain(
+      "last_login_method IS NULL OR last_login_method IN ('password', 'github', 'google')"
+    );
+    expect(userLastLoginMethodMigration).toContain(
+      "ADD COLUMN IF NOT EXISTS last_login_method varchar(40)"
+    );
+    expect(userLastLoginMethodMigration).toContain("users_last_login_method_check");
   });
 
   test("supports optional Cloudflare R2 media storage", () => {

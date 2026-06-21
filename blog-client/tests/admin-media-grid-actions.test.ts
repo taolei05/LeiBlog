@@ -124,4 +124,9 @@ describe("admin user actions", () => {
     expect(usersPageSource).toContain('header: "登录地点"');
     expect(usersPageSource).toContain("lastLoginLocation: item.lastLoginLocation ??");
   });
+
+  it("shows the latest login method in the user table", () => {
+    expect(usersPageSource).toContain('header: "登录方式"');
+    expect(usersPageSource).toContain("lastLoginMethod: item.lastLoginMethod");
+  });
 });

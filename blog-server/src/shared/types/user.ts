@@ -1,7 +1,10 @@
 import { t } from "elysia";
 
 import type { UserRole } from "../auth";
+import type { AuthProvider } from "../auth-providers";
 import { describeLocation } from "../location";
+
+export type UserLastLoginMethod = "password" | AuthProvider;
 
 export const UserRoleSchema = t.Union([
   t.Literal("admin"),
@@ -27,6 +30,9 @@ export const UserProfileSchema = t.Object({
   lastLoginIp: t.Nullable(t.String()),
   lastLoginLocation: t.Nullable(t.String()),
   lastLoginDevice: t.Nullable(t.String()),
+  lastLoginMethod: t.Nullable(
+    t.Union([t.Literal("password"), t.Literal("github"), t.Literal("google")])
+  ),
 });
 
 export interface UserProfile {
@@ -48,6 +54,7 @@ export interface UserProfile {
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
   lastLoginDevice: string | null;
+  lastLoginMethod: UserLastLoginMethod | null;
 }
 
 export interface UserProfileRow {
@@ -69,6 +76,7 @@ export interface UserProfileRow {
   last_login_ip: string | null;
   last_login_location?: unknown;
   last_login_device?: unknown;
+  last_login_method?: UserLastLoginMethod | null;
 }
 
 function toIsoString(value: Date | string | null) {
@@ -111,5 +119,6 @@ export function toUserProfile(row: UserProfileRow): UserProfile {
     lastLoginIp: row.last_login_ip,
     lastLoginLocation: describeLocation(row.last_login_location),
     lastLoginDevice: readJsonText(row.last_login_device, "userAgent"),
+    lastLoginMethod: row.last_login_method ?? null,
   };
 }

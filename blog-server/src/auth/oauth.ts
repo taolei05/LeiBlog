@@ -22,6 +22,7 @@ import { addMinutes } from "../shared/time";
 import type { UserProfileRow } from "../shared/types/user";
 import { toUserProfile } from "../shared/types/user";
 import type { RequestMeta } from "./service";
+import { resolveLoginLocation } from "./service";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -225,7 +226,7 @@ async function readUserProfileById(userId: string, client: DbClient) {
            new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
            host(last_login_ip) AS last_login_ip, last_login_location,
-           last_login_device
+           last_login_device, last_login_method
     FROM users
     WHERE id = ${userId}
     LIMIT 1
@@ -409,7 +410,7 @@ async function findOrCreateOAuthUser(
            u.new_article_email_notifications_enabled,
            u.created_at, u.updated_at, u.last_login_at,
            host(u.last_login_ip) AS last_login_ip, u.last_login_location,
-           u.last_login_device, oa.user_id AS oauth_user_id
+           u.last_login_device, u.last_login_method, oa.user_id AS oauth_user_id
     FROM user_oauth_accounts oa
     JOIN users u ON u.id = oa.user_id
     WHERE oa.provider = ${provider}
@@ -662,7 +663,7 @@ export async function consumeOAuthLoginTicket(
              u.new_article_email_notifications_enabled,
              u.created_at, u.updated_at, u.last_login_at,
              host(u.last_login_ip) AS last_login_ip, u.last_login_location,
-             u.last_login_device
+             u.last_login_device, u.last_login_method
       FROM oauth_login_tickets t
       JOIN users u ON u.id = t.user_id
       WHERE t.ticket_hash = ${hashToken(ticket)}
@@ -675,6 +676,7 @@ export async function consumeOAuthLoginTicket(
     if (!row) throw validationError("第三方登录票据无效或已过期");
 
     const device = { userAgent: meta.userAgent };
+    const location = await resolveLoginLocation(meta, tx);
     await tx`
       UPDATE oauth_login_tickets
       SET consumed_at = now()
@@ -684,7 +686,9 @@ export async function consumeOAuthLoginTicket(
       UPDATE users
       SET last_login_at = now(),
           last_login_ip = ${meta.ip},
-          last_login_device = ${device}::jsonb
+          last_login_location = ${location}::jsonb,
+          last_login_device = ${device}::jsonb,
+          last_login_method = ${row.ticket_provider}
       WHERE id = ${row.id}
     `;
 
@@ -693,6 +697,8 @@ export async function consumeOAuthLoginTicket(
       last_login_at: new Date(),
       last_login_device: device,
       last_login_ip: meta.ip,
+      last_login_location: location,
+      last_login_method: row.ticket_provider,
     });
   }, client);
 

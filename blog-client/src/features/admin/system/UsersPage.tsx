@@ -28,6 +28,7 @@ type UserRow = DataTableRow & {
   email: string;
   lastLogin: string;
   lastLoginLocation: string;
+  lastLoginMethod: string;
   name: string;
   role: "admin" | "user";
   username: string;
@@ -43,6 +44,7 @@ type AdminUserItem = {
   id: string;
   lastLoginAt: string | null;
   lastLoginLocation: string | null;
+  lastLoginMethod: "github" | "google" | "password" | null;
   name: string | null;
   role: UserRow["role"];
   tags: string[];
@@ -75,6 +77,12 @@ type UserModalState =
 const roleLabel = {
   admin: "管理员",
   user: "普通用户",
+} as const;
+
+const loginMethodLabel = {
+  github: "GitHub",
+  google: "Google",
+  password: "账号密码",
 } as const;
 
 const userRoleOptions: Array<{ label: string; value: UserRow["role"] }> = [
@@ -150,6 +158,12 @@ const userColumns: DataTableColumn<UserRow>[] = [
     value: (row) => row.lastLoginLocation,
   },
   {
+    header: "登录方式",
+    id: "lastLoginMethod",
+    sortable: true,
+    value: (row) => row.lastLoginMethod,
+  },
+  {
     header: "最近登录",
     id: "lastLogin",
     sortable: true,
@@ -178,6 +192,7 @@ function toUserRow(item: AdminUserItem): UserRow {
     id: item.id,
     lastLogin: item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString("zh-CN") : "从未登录",
     lastLoginLocation: item.lastLoginLocation ?? "暂无记录",
+    lastLoginMethod: item.lastLoginMethod ? loginMethodLabel[item.lastLoginMethod] : "暂无记录",
     name: item.name ?? item.username,
     role: item.role,
     tags: item.tags,
@@ -520,7 +535,7 @@ export function UsersPage() {
         filters={userFilters}
         rowActions={userRowActions}
         rows={userRows}
-        searchPlaceholder="搜索用户名、昵称、邮箱、登录地点"
+        searchPlaceholder="搜索用户名、昵称、邮箱、登录地点、登录方式"
         toolbarActions={userToolbarActions}
         emptyText="暂无用户记录"
       />

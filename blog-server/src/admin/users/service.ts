@@ -1,13 +1,10 @@
-import {
-  hashPassword,
-  normalizeEmail,
-  requireAdmin,
-  type AuthUser,
-  type UserRole,
-} from "../../shared/auth";
-import { db, withTransaction, type DbClient } from "../../shared/db";
+import type { AuthUser, UserRole } from "../../shared/auth";
+import { hashPassword, normalizeEmail, requireAdmin } from "../../shared/auth";
+import type { DbClient } from "../../shared/db";
+import { db, withTransaction } from "../../shared/db";
 import { conflict, forbidden, notFound } from "../../shared/errors";
-import { toUserProfile, type UserProfileRow } from "../../shared/types/user";
+import type { UserProfileRow } from "../../shared/types/user";
+import { toUserProfile } from "../../shared/types/user";
 
 export interface UserListInput {
   search?: string;
@@ -81,7 +78,8 @@ async function getUserById(userId: string, client: DbClient = db) {
            social_links, blog_url, comment_email_notifications_enabled,
            new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
-           host(last_login_ip) AS last_login_ip, last_login_location
+           host(last_login_ip) AS last_login_ip, last_login_location,
+           last_login_method
     FROM users
     WHERE id = ${userId}
   `;
@@ -137,7 +135,8 @@ export async function listUsers(
              social_links, blog_url, comment_email_notifications_enabled,
              new_article_email_notifications_enabled,
              created_at, updated_at, last_login_at,
-             host(last_login_ip) AS last_login_ip, last_login_location
+             host(last_login_ip) AS last_login_ip, last_login_location,
+             last_login_method
       FROM users
       WHERE ($1::text IS NULL OR lower(username) LIKE $1 OR lower(coalesce(email, '')) LIKE $1 OR lower(coalesce(name, '')) LIKE $1)
         AND ($2::user_role IS NULL OR role = $2)

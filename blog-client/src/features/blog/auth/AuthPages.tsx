@@ -33,6 +33,7 @@ import { useTheme } from "../../../shared/theme/ThemeProviderLite";
 import { BlogPageHeader } from "../shared/BlogComponents";
 
 type AuthDialogMode = "login" | "register";
+type BlogLoginMethod = "github" | "google" | "password";
 type BlogUserRole = "admin" | "user";
 type ProfilePanelMode = "email" | "password" | "preferences" | "profile" | "theme";
 type ProfileConfirmAction =
@@ -54,6 +55,7 @@ type BlogAuthUser = {
   lastLoginDevice: string | null;
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
+  lastLoginMethod: BlogLoginMethod | null;
   name: string | null;
   newArticleEmailNotificationsEnabled: boolean;
   role: BlogUserRole;
@@ -215,6 +217,12 @@ function readRole(value: unknown): BlogUserRole {
   return value === "admin" || value === "user" ? value : "user";
 }
 
+function readLoginMethod(value: unknown): BlogLoginMethod | null {
+  if (value === "github" || value === "google" || value === "password") return value;
+
+  return null;
+}
+
 function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -243,6 +251,7 @@ function parseBlogUser(value: unknown): BlogAuthUser | null {
     lastLoginDevice: readNullableString(value.lastLoginDevice),
     lastLoginIp: readNullableString(value.lastLoginIp),
     lastLoginLocation: readNullableString(value.lastLoginLocation),
+    lastLoginMethod: readLoginMethod(value.lastLoginMethod),
     name: readNullableString(value.name),
     newArticleEmailNotificationsEnabled: readBoolean(
       value.newArticleEmailNotificationsEnabled,

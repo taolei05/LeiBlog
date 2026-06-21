@@ -27,6 +27,7 @@ type TestBlogUser = {
   lastLoginDevice: string | null;
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
+  lastLoginMethod: "github" | "google" | "password" | null;
   name: string | null;
   newArticleEmailNotificationsEnabled?: boolean;
   role: "admin" | "user";
@@ -60,6 +61,7 @@ function createTestUser(overrides: Partial<TestBlogUser> = {}): TestBlogUser {
     lastLoginDevice: null,
     lastLoginIp: null,
     lastLoginLocation: null,
+    lastLoginMethod: null,
     name: "读者",
     newArticleEmailNotificationsEnabled: true,
     role: "user",

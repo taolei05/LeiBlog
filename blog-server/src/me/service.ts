@@ -71,7 +71,8 @@ export async function getUserProfile(userId: string, client: DbClient = db) {
            social_links, blog_url, comment_email_notifications_enabled,
            new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
-           host(last_login_ip) AS last_login_ip, last_login_location, last_login_device
+           host(last_login_ip) AS last_login_ip, last_login_location,
+           last_login_device, last_login_method
     FROM users
     WHERE id = ${userId}
   `;

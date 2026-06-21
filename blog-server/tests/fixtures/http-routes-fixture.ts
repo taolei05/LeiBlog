@@ -49,6 +49,7 @@ interface MeBody {
     lastLoginIp: string | null;
     lastLoginLocation: string | null;
     lastLoginDevice: string | null;
+    lastLoginMethod: "github" | "google" | "password" | null;
   };
 }
 
@@ -111,6 +112,13 @@ function assertUserProfileShape(user: MeBody["user"]) {
   assertNullableString(user.lastLoginIp, "用户资料应包含 lastLoginIp");
   assertNullableString(user.lastLoginLocation, "用户资料应包含 lastLoginLocation");
   assertNullableString(user.lastLoginDevice, "用户资料应包含 lastLoginDevice");
+  assert(
+    user.lastLoginMethod === null ||
+      user.lastLoginMethod === "github" ||
+      user.lastLoginMethod === "google" ||
+      user.lastLoginMethod === "password",
+    "用户资料应包含 lastLoginMethod"
+  );
 }
 
 async function readJson<T>(response: Response): Promise<T> {

@@ -133,7 +133,8 @@ export async function getPublicSiteAuthor(client: DbClient = db) {
            social_links, blog_url, comment_email_notifications_enabled,
            new_article_email_notifications_enabled,
            created_at, updated_at, last_login_at,
-           last_login_ip, last_login_location, last_login_device
+           last_login_ip, last_login_location, last_login_device,
+           last_login_method
     FROM users
     WHERE role = 'admin'
     ORDER BY created_at ASC
