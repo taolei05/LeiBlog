@@ -102,8 +102,18 @@ describe("public navigation page", () => {
 
     expect(html).toContain('aria-label="打开导航目录"');
     expect(html).toContain("navigation-page__mobile-directory");
+    expect(navigationPageSource).toContain("<Popover.Trigger>");
     expect(navigationPageSource).toContain("navigation-page__mobile-directory-popover");
+    expect(navigationPageSource).toContain('placement="top end"');
     expect(navigationPageSource).toContain("本页目录");
+  });
+
+  it("keeps the mobile directory button fixed while scrolling", () => {
+    expect(navigationStyles).toContain(".navigation-page__mobile-directory {");
+    expect(navigationStyles).toContain("position: fixed;");
+    expect(navigationStyles).toContain("bottom: max(1rem, env(safe-area-inset-bottom));");
+    expect(navigationStyles).toContain("right: max(1rem, env(safe-area-inset-right));");
+    expect(navigationStyles).toContain("z-index: 30;");
   });
 
   it("marks the active navigation group in desktop and mobile directories", () => {
@@ -116,6 +126,17 @@ describe("public navigation page", () => {
     expect(navigationStyles).toContain(".navigation-page__directory-link--active");
     expect(navigationStyles).toContain(".navigation-page__directory-link--active::before");
     expect(navigationStyles).toContain("aria-current=\"true\"");
+  });
+
+  it("keeps the desktop directory scrollable and follows the active group", () => {
+    expect(navigationPageSource).toContain("useRef");
+    expect(navigationPageSource).toContain("directoryRef");
+    expect(navigationPageSource).toContain("scrollActiveDirectoryLinkIntoView");
+    expect(navigationPageSource).toContain('ref={directoryRef}');
+    expect(navigationStyles).toContain("max-height: calc(100dvh - 7rem);");
+    expect(navigationStyles).toContain("overflow-y: auto;");
+    expect(navigationStyles).toContain("overscroll-behavior: contain;");
+    expect(navigationStyles).toContain("scrollbar-gutter: stable;");
   });
 
   it("wires a top-level navigation entry and public route", () => {

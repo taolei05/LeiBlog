@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import navigationPageSource from "../src/features/admin/content/NavigationPage.tsx?raw";
 import routerSource from "../src/app/router.tsx?raw";
+import adminFormModalSource from "../src/features/admin/shared/admin-form-modal.tsx?raw";
 import { persistOptimisticOrder } from "../src/features/admin/content/navigation-order";
 
+const layoutsStyles = readFileSync(new URL("../src/shared/theme/layouts.css", import.meta.url), "utf8");
 const navigationStyles = readFileSync(
   new URL("../src/shared/theme/navigation.css", import.meta.url),
   "utf8",
@@ -75,6 +77,19 @@ describe("admin navigation page", () => {
   .navigation-admin-list {
     overflow: visible;
   }`);
+  });
+
+  it("keeps the move target group select list scrollable inside the modal", () => {
+    expect(adminFormModalSource).toContain('className="admin-form-modal__select-popover"');
+    expect(adminFormModalSource).toContain('className="admin-form-modal__select-list"');
+    expect(layoutsStyles).toContain(".admin-form-modal__select-popover");
+    expect(layoutsStyles.indexOf(".admin-form-modal__select-popover")).toBeGreaterThan(
+      layoutsStyles.lastIndexOf(".select__popover,"),
+    );
+    expect(layoutsStyles).toContain("max-height: min(18rem, calc(100dvh - 8rem));");
+    expect(layoutsStyles).toContain("overflow-y: auto;");
+    expect(layoutsStyles).toContain("overscroll-behavior: contain;");
+    expect(layoutsStyles).toContain(".admin-form-modal__select-list");
   });
 
   it("aligns create and card action buttons for mobile", () => {

@@ -267,8 +267,8 @@ export function AdminSelectGroupField({
         <Select.Value />
         <Select.Indicator />
       </Select.Trigger>
-      <Select.Popover>
-        <ListBox aria-label={label}>
+      <Select.Popover className="admin-form-modal__select-popover">
+        <ListBox aria-label={label} className="admin-form-modal__select-list">
           {options.map((option) => (
             <ListBox.Item id={option.value} key={option.value} textValue={option.label}>
               {option.label}

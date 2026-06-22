@@ -9147,6 +9147,21 @@
   color: var(--cursor-active-foreground, white);
 }
 
+.admin-form-modal__select-popover {
+  max-height: min(18rem, calc(100dvh - 8rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.admin-form-modal__select-list {
+  min-width: 0;
+  max-height: min(18rem, calc(100dvh - 8rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .tooltip,
 .data-table-action-tooltip,
 .admin-sidebar-tooltip {

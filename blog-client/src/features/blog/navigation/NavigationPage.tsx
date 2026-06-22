@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Popover, Tooltip } from "@heroui/react";
+import { useEffect, useRef, useState } from "react";
+import { Button, Popover, Tooltip } from "@heroui/react";
 
 import { AppIcon } from "../../../shared/icons";
 import type { NavigationGroup, NavigationItem } from "./navigation-api";
@@ -11,6 +11,25 @@ type NavigationPageProps = {
 
 function sectionId(group: NavigationGroup) {
   return `navigation-group-${group.id}`;
+}
+
+function scrollActiveDirectoryLinkIntoView(container: HTMLElement | null) {
+  if (!container) return;
+
+  const activeLink = container.querySelector<HTMLElement>(
+    '.navigation-page__directory-link[aria-current="true"]',
+  );
+  if (!activeLink) return;
+
+  const inset = 8;
+  const containerRect = container.getBoundingClientRect();
+  const linkRect = activeLink.getBoundingClientRect();
+
+  if (linkRect.top < containerRect.top + inset) {
+    container.scrollTop -= containerRect.top + inset - linkRect.top;
+  } else if (linkRect.bottom > containerRect.bottom - inset) {
+    container.scrollTop += linkRect.bottom - (containerRect.bottom - inset);
+  }
 }
 
 type NavigationDirectoryLinksProps = {
@@ -55,17 +74,21 @@ function NavigationMobileDirectory({ activeGroupId, groups }: NavigationMobileDi
 
   return (
     <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
-      <button
-        aria-label="打开导航目录"
-        className="button button--icon-only button--sm button--secondary navigation-page__mobile-directory-button"
-        type="button"
-      >
-        <AppIcon name="list" />
-      </button>
+      <Popover.Trigger>
+        <Button
+          aria-label="打开导航目录"
+          className="navigation-page__mobile-directory-button"
+          isIconOnly
+          size="sm"
+          variant="secondary"
+        >
+          <AppIcon name="list" />
+        </Button>
+      </Popover.Trigger>
       <Popover.Content
         className="navigation-page__mobile-directory-popover"
         offset={8}
-        placement="bottom end"
+        placement="top end"
       >
         <Popover.Dialog>
           <div className="navigation-page__mobile-directory-panel">
@@ -174,6 +197,7 @@ function NavigationSiteCard({ item }: NavigationSiteCardProps) {
 }
 
 export function NavigationPage({ initialGroups }: NavigationPageProps) {
+  const directoryRef = useRef<HTMLElement | null>(null);
   const [groups, setGroups] = useState<NavigationGroup[]>(initialGroups ?? []);
   const [activeGroupId, setActiveGroupId] = useState(initialGroups?.[0]?.id ?? "");
   const [error, setError] = useState("");
@@ -250,6 +274,18 @@ export function NavigationPage({ initialGroups }: NavigationPageProps) {
     };
   }, [groups]);
 
+  useEffect(() => {
+    if (!activeGroupId || typeof window === "undefined") return undefined;
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      scrollActiveDirectoryLinkIntoView(directoryRef.current);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [activeGroupId]);
+
   return (
     <section className="navigation-page page-stack">
       <header className="navigation-page__hero">
@@ -294,7 +330,7 @@ export function NavigationPage({ initialGroups }: NavigationPageProps) {
             ))}
           </div>
 
-          <nav aria-label="导航页目录" className="navigation-page__directory">
+          <nav aria-label="导航页目录" className="navigation-page__directory" ref={directoryRef}>
             <strong>目录</strong>
             <NavigationDirectoryLinks activeGroupId={activeGroupId} groups={groups} />
           </nav>
