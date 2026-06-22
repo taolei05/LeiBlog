@@ -106,6 +106,18 @@ describe("public navigation page", () => {
     expect(navigationPageSource).toContain("本页目录");
   });
 
+  it("marks the active navigation group in desktop and mobile directories", () => {
+    expect(navigationPageSource).toContain("activeGroupId");
+    expect(navigationPageSource).toContain("updateActiveGroup");
+    expect(navigationPageSource).toContain("addEventListener(\"scroll\"");
+    expect(navigationPageSource).toContain("requestAnimationFrame");
+    expect(navigationPageSource).toContain("aria-current={isActive ? \"true\" : undefined}");
+    expect(navigationPageSource).toContain("navigation-page__directory-link--active");
+    expect(navigationStyles).toContain(".navigation-page__directory-link--active");
+    expect(navigationStyles).toContain(".navigation-page__directory-link--active::before");
+    expect(navigationStyles).toContain("aria-current=\"true\"");
+  });
+
   it("wires a top-level navigation entry and public route", () => {
     expect(blogLayoutSource).toContain('{ to: "/navigation", label: "导航页"');
     expect(routerSource).toContain('path="navigation"');

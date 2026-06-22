@@ -56,6 +56,27 @@ describe("admin navigation page", () => {
   }`);
   });
 
+  it("lets group and website columns scroll independently on desktop", () => {
+    expect(navigationStyles).toContain("align-items: start;");
+    expect(navigationStyles).toContain("max-height: min(52rem, calc(100dvh - 14rem));");
+    expect(navigationStyles).toContain("overflow: hidden;");
+    expect(navigationStyles).toContain("overflow-y: auto;");
+    expect(navigationStyles).toContain("scrollbar-gutter: stable;");
+    expect(navigationStyles).toContain(`@media (max-width: 1024px) {
+  .navigation-admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation-admin-panel {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .navigation-admin-list {
+    overflow: visible;
+  }`);
+  });
+
   it("aligns create and card action buttons for mobile", () => {
     expect(navigationStyles).toContain(`@media (max-width: 720px) {
   .navigation-admin-panel__header,

@@ -6,13 +6,19 @@
 
 .navigation-admin-layout {
   display: grid;
+  align-items: start;
   gap: 1rem;
   grid-template-columns: minmax(16rem, 0.7fr) minmax(24rem, 1.3fr);
 }
 
 .navigation-admin-panel {
+  display: flex;
+  max-height: min(52rem, calc(100dvh - 14rem));
+  min-height: 0;
   min-width: 0;
+  flex-direction: column;
   padding: 1rem;
+  overflow: hidden;
   border: 1px solid var(--cursor-border-soft);
   border-radius: var(--navigation-surface-radius);
   background: var(--cursor-surface);
@@ -45,7 +51,11 @@
 
 .navigation-admin-list {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
   gap: 0.75rem;
+  padding-right: 0.25rem;
+  scrollbar-gutter: stable;
 }
 
 .navigation-admin-row {
@@ -233,6 +243,7 @@ html:has(.navigation-page) {
 }
 
 .navigation-page__mobile-directory-nav a {
+  position: relative;
   max-width: calc(100vw - 4.25rem);
   overflow: hidden;
   padding: 0.35rem 0.5rem;
@@ -240,6 +251,7 @@ html:has(.navigation-page) {
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border-radius: 0.6rem;
 }
 
 .navigation-page__mobile-directory-nav a:hover,
@@ -379,11 +391,14 @@ html:has(.navigation-page) {
 }
 
 .navigation-page__directory a {
+  position: relative;
   padding: 0.35rem 0.5rem;
   color: var(--cursor-muted);
   text-decoration: none;
   border-left: 2px solid transparent;
+  border-radius: 0.6rem;
   transition:
+    background-color 180ms ease,
     border-color 180ms ease,
     color 180ms ease;
 }
@@ -397,6 +412,36 @@ html:has(.navigation-page) {
 .navigation-page__directory a:focus-visible {
   outline: 2px solid var(--cursor-accent);
   outline-offset: 2px;
+}
+
+.navigation-page__directory-link--active,
+.navigation-page__directory-link[aria-current="true"] {
+  color: var(--cursor-ink);
+  background: color-mix(in oklch, var(--cursor-accent) 10%, transparent);
+  font-weight: 800;
+}
+
+.navigation-page__directory .navigation-page__directory-link--active {
+  border-left-color: var(--cursor-accent);
+}
+
+.navigation-page__directory-link--active::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.42rem;
+  left: -0.25rem;
+  width: 0.2rem;
+  border-radius: 999px;
+  background: var(--cursor-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--cursor-accent) 14%, transparent);
+}
+
+.navigation-page__mobile-directory-nav .navigation-page__directory-link--active {
+  padding-left: 0.8rem;
+}
+
+.navigation-page__mobile-directory-nav .navigation-page__directory-link--active::before {
+  left: 0.25rem;
 }
 
 .navigation-page__state {
@@ -419,6 +464,15 @@ html:has(.navigation-page) {
 @media (max-width: 1024px) {
   .navigation-admin-layout {
     grid-template-columns: 1fr;
+  }
+
+  .navigation-admin-panel {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .navigation-admin-list {
+    overflow: visible;
   }
 }
 
