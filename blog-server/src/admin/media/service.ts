@@ -191,6 +191,7 @@ const FORMAT_TO_TYPE = {
   jpeg: "image",
   png: "image",
   gif: "image",
+  ico: "image",
   webp: "image",
   svg: "image",
   mp4: "video",
@@ -204,6 +205,7 @@ const EXTENSION_ALIASES: Record<string, keyof typeof FORMAT_TO_TYPE> = {
   jpeg: "jpeg",
   png: "png",
   gif: "gif",
+  ico: "ico",
   webp: "webp",
   svg: "svg",
   mp4: "mp4",
@@ -415,6 +417,8 @@ function validateSignature(format: keyof typeof FORMAT_TO_TYPE, bytes: Uint8Arra
       return hasBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     case "gif":
       return textHead(bytes).startsWith("gif87a") || textHead(bytes).startsWith("gif89a");
+    case "ico":
+      return hasBytes(bytes, [0x00, 0x00, 0x01, 0x00]);
     case "webp":
       return (
         textHead(bytes.slice(0, 16)).startsWith("riff") &&
@@ -1297,6 +1301,8 @@ function mediaContentType(format: string) {
       return "image/png";
     case "gif":
       return "image/gif";
+    case "ico":
+      return "image/x-icon";
     case "webp":
       return "image/webp";
     case "svg":

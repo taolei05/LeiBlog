@@ -979,7 +979,7 @@ export function SiteSettingsPage() {
               value={siteInfo.logoDarkUrl}
             />
             <MediaAssetField
-              accept="image/png,image/svg+xml,image/webp,image/x-icon"
+              accept="image/png,image/svg+xml,image/webp,image/x-icon,.ico"
               canRemoveValue
               folderSlug="site"
               label="favicon"

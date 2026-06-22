@@ -60,6 +60,20 @@ function svgFile(name = "logo.svg") {
   );
 }
 
+function icoFile(name = "favicon.ico") {
+  return new File(
+    [
+      new Uint8Array([
+        0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01,
+        0x00, 0x20, 0x00, 0x04, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+      ]),
+    ],
+    name,
+    { type: "image/x-icon" }
+  );
+}
+
 beforeAll(async () => {
   uploadRoot = await mkdtemp(join(tmpdir(), "leiblog-media-"));
   await adminDb.unsafe(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
@@ -225,6 +239,31 @@ describe("admin media service", () => {
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>`
     );
     expect(body).not.toContain("Content-Length: 0");
+  });
+
+  test("uploads website icon ico files", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      UPLOADS_DIR: uploadRoot,
+      UPLOADS_URL_PREFIX: "/uploads",
+      UPLOAD_MAX_FILE_SIZE_BYTES: "2048",
+    });
+
+    const uploaded = await uploadMedia(
+      currentAdmin,
+      { file: icoFile(), folderSlug: "website-icons" },
+      { client: testDb, config }
+    );
+    const download = await getMediaDownload(currentAdmin, uploaded.id, {
+      client: testDb,
+      config,
+    });
+
+    expect(uploaded.fileFormat).toBe("ico");
+    expect(uploaded.fileType).toBe("image");
+    expect(uploaded.folderSlug).toBe("website-icons");
+    expect(uploaded.accessUrl.endsWith(".ico")).toBe(true);
+    expect(download.contentType).toBe("image/x-icon");
   });
 
   test("creates and protects the website icon folder", async () => {

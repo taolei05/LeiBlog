@@ -958,7 +958,7 @@ export function MediaPage() {
       <div className="media-library-layout">
         <input
           ref={uploadInputRef}
-          accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/x-icon,.ico,video/mp4,video/webm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="visually-hidden"
           multiple
           onChange={(event) => {

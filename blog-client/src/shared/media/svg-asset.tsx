@@ -61,6 +61,14 @@ export function SvgAsset({
   }
 
   return (
-    <img alt={alt} className={className} onError={handleError} src={activeSrc} title={title} />
+    <img
+      alt={alt}
+      className={className}
+      decoding="async"
+      onError={handleError}
+      referrerPolicy="no-referrer"
+      src={activeSrc}
+      title={title}
+    />
   );
 }

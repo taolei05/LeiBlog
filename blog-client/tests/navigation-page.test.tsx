@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import blogLayoutSource from "../src/app/blog/BlogLayout.tsx?raw";
 import interactiveCursorSource from "../src/app/blog/InteractiveCursor.tsx?raw";
 import routerSource from "../src/app/router.tsx?raw";
+import navigationPageSource from "../src/features/blog/navigation/NavigationPage.tsx?raw";
 import { NavigationPage } from "../src/features/blog/navigation/NavigationPage";
 import { normalizeNavigationGroups } from "../src/features/blog/navigation/navigation-api";
 
@@ -69,6 +70,40 @@ describe("public navigation page", () => {
     expect(html).toContain('aria-label="导航页目录"');
     expect(html).toContain("前端 API 兼容性查询");
     expect(html).not.toContain("空分组");
+  });
+
+  it("uses arrow tooltips to expose full website notes", () => {
+    expect(navigationPageSource).toContain("Popover, Tooltip");
+    expect(navigationPageSource).toContain("Tooltip.Content");
+    expect(navigationPageSource).toContain("Tooltip.Trigger");
+    expect(navigationPageSource).toContain("role: _role");
+    expect(navigationPageSource).toContain("isOpen={isTooltipOpen}");
+    expect(navigationPageSource).toContain("onOpenChange={setIsTooltipOpen}");
+    expect(navigationPageSource).toContain("onPointerEnter");
+    expect(navigationPageSource).toContain("onPointerLeave");
+    expect(navigationPageSource).toContain("onFocus");
+    expect(navigationPageSource).toContain("onBlur");
+    expect(navigationPageSource).toContain("showArrow");
+    expect(navigationPageSource).toContain("Tooltip.Arrow");
+    expect(navigationPageSource).toContain("navigation-page__note-tooltip");
+    expect(navigationPageSource).toContain("NavigationSiteIcon");
+    expect(navigationPageSource).toContain('referrerPolicy="no-referrer"');
+    expect(navigationPageSource).toContain("setHasIconError(true)");
+    expect(navigationPageSource).not.toContain("Link,");
+    expect(navigationPageSource).not.toContain("onMouseEnter");
+  });
+
+  it("renders a mobile directory trigger and popover", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <NavigationPage initialGroups={fixtureGroups} />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('aria-label="打开导航目录"');
+    expect(html).toContain("navigation-page__mobile-directory");
+    expect(navigationPageSource).toContain("navigation-page__mobile-directory-popover");
+    expect(navigationPageSource).toContain("本页目录");
   });
 
   it("wires a top-level navigation entry and public route", () => {

@@ -161,9 +161,95 @@ html:has(.navigation-page) {
   padding-block: 1rem 0.5rem;
 }
 
+.navigation-page__hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.navigation-page__hero-top .eyebrow {
+  margin: 0;
+}
+
 .navigation-page__hero h1,
 .navigation-page__hero p {
   margin-block: 0 0.5rem;
+}
+
+.navigation-page__mobile-directory {
+  display: none;
+  flex: 0 0 auto;
+}
+
+.navigation-page__mobile-directory-button.button {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-color: var(--cursor-border-soft);
+  border-radius: 999px;
+  background: var(--cursor-surface-soft);
+  color: var(--cursor-ink);
+}
+
+.navigation-page__mobile-directory-popover {
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: calc(100vw - 1.5rem) !important;
+  height: fit-content !important;
+  min-height: 0 !important;
+  max-height: min(60dvh, 24rem) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.navigation-page__mobile-directory-panel {
+  display: inline-grid;
+  width: max-content;
+  min-width: 0;
+  max-width: calc(100vw - 2.5rem);
+  max-height: min(60dvh, 24rem);
+  overflow: auto;
+  gap: 0.75rem;
+  padding: 0.875rem;
+  scrollbar-width: none;
+}
+
+.navigation-page__mobile-directory-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.navigation-page__mobile-directory-panel p {
+  margin: 0;
+  color: var(--cursor-ink);
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.navigation-page__mobile-directory-nav {
+  display: grid;
+  width: max-content;
+  max-width: calc(100vw - 4.25rem);
+  gap: 0.35rem;
+}
+
+.navigation-page__mobile-directory-nav a {
+  max-width: calc(100vw - 4.25rem);
+  overflow: hidden;
+  padding: 0.35rem 0.5rem;
+  color: var(--cursor-muted);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-page__mobile-directory-nav a:hover,
+.navigation-page__mobile-directory-nav a:focus-visible {
+  color: var(--cursor-ink);
+}
+
+.navigation-page__mobile-directory-nav a:focus-visible {
+  outline: 2px solid var(--cursor-accent);
+  outline-offset: 2px;
 }
 
 .navigation-page__layout {
@@ -274,6 +360,15 @@ html:has(.navigation-page) {
   transform: translate3d(1px, -1px, 0);
 }
 
+.navigation-page__note-tooltip {
+  max-width: min(22rem, calc(100vw - 2rem));
+}
+
+.navigation-page__note-tooltip p {
+  margin: 0;
+  line-height: 1.65;
+}
+
 .navigation-page__directory {
   position: sticky;
   top: 6rem;
@@ -334,6 +429,10 @@ html:has(.navigation-page) {
 
   .navigation-page__directory {
     display: none;
+  }
+
+  .navigation-page__mobile-directory {
+    display: inline-flex;
   }
 }
 

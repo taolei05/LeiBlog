@@ -51,6 +51,29 @@ const emptyItemForm = {
   url: "",
 };
 
+const websiteIconAccept = "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/x-icon,.ico";
+
+function NavigationAdminIcon({ iconUrl }: { iconUrl: string | null }) {
+  const [hasIconError, setHasIconError] = useState(false);
+
+  useEffect(() => {
+    setHasIconError(false);
+  }, [iconUrl]);
+
+  if (!iconUrl || hasIconError) return <AppIcon name="link" />;
+
+  return (
+    <img
+      alt=""
+      decoding="async"
+      loading="lazy"
+      onError={() => setHasIconError(true)}
+      referrerPolicy="no-referrer"
+      src={resolveApiAssetUrl(iconUrl)}
+    />
+  );
+}
+
 function orderedByIds<T extends { id: string }>(items: T[], ids: string[]) {
   return ids
     .map((id) => items.find((item) => item.id === id))
@@ -483,6 +506,7 @@ export function NavigationPage() {
           value={itemForm.note}
         />
         <MediaAssetField
+          accept={websiteIconAccept}
           canRemoveValue
           folderSlug="website-icons"
           label="网址图标"
@@ -599,11 +623,7 @@ export function NavigationPage() {
               >
                 <div className="navigation-admin-row__main">
                   <span className="navigation-admin-row__icon">
-                    {item.iconUrl ? (
-                      <img alt="" src={resolveApiAssetUrl(item.iconUrl)} />
-                    ) : (
-                      <AppIcon name="link" />
-                    )}
+                    <NavigationAdminIcon iconUrl={item.iconUrl} />
                   </span>
                   <span>
                     <strong>{item.name}</strong>

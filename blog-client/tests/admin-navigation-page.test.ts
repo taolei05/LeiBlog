@@ -26,8 +26,12 @@ describe("admin navigation page", () => {
     expect(navigationPageSource).not.toContain("上移");
     expect(navigationPageSource).not.toContain("下移");
     expect(navigationPageSource).toContain('className="navigation-admin-row__icon"');
-    expect(navigationPageSource).toContain("item.iconUrl ? (");
-    expect(navigationPageSource).toContain("resolveApiAssetUrl(item.iconUrl)");
+    expect(navigationPageSource).toContain("NavigationAdminIcon");
+    expect(navigationPageSource).toContain("resolveApiAssetUrl(iconUrl)");
+    expect(navigationPageSource).toContain('accept={websiteIconAccept}');
+    expect(navigationPageSource).toContain(".ico");
+    expect(navigationPageSource).toContain('referrerPolicy="no-referrer"');
+    expect(navigationPageSource).toContain("setHasIconError(true)");
     expect(navigationPageSource).toContain('<AppIcon name="link" />');
     expect(navigationPageSource).toContain("请先移动或删除组内网站");
     expect(routerSource).toContain('path="admin/content/navigation"');

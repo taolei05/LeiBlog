@@ -60,6 +60,7 @@ describe("admin media grid actions", () => {
     expect(mediaPageSource).toContain("multiple");
     expect(mediaPageSource).toContain("Array.from(event.target.files");
     expect(mediaPageSource).toContain("uploadFiles");
+    expect(mediaPageSource).toContain("image/x-icon,.ico");
     expect(mediaPageSource).toContain("maxValue={mediaProgress.total}");
     expect(layoutsCss).toContain(".media-operation-progress");
   });
