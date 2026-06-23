@@ -312,6 +312,39 @@ export async function downloadAdminFile(path: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+function readDownloadFileName(response: Response, fallback: string) {
+  const disposition = response.headers.get("content-disposition");
+  if (!disposition) return fallback;
+
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encodedName) {
+    try {
+      return decodeURIComponent(encodedName.replace(/^"|"$/g, ""));
+    } catch {
+      return encodedName.replace(/^"|"$/g, "") || fallback;
+    }
+  }
+
+  return disposition.match(/filename="([^"]+)"/i)?.[1] ?? fallback;
+}
+
+export async function fetchAdminBlob(path: string, fallbackFileName = "download.bin") {
+  const response = await fetch(getAdminApiUrl(path), {
+    headers: buildHeaders(undefined, true),
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    expireAdminSessionForResponse(response, true);
+    throw new Error("文件下载失败");
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: readDownloadFileName(response, fallbackFileName),
+  };
+}
+
 export async function uploadAdminMediaFile({
   file,
   fileName,

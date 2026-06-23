@@ -118,6 +118,13 @@ export const adminNavigationGroups: Array<{
         path: "/admin/system/site",
         section: "系统",
       },
+      {
+        description: "导出和恢复站点数据与媒体文件。",
+        icon: "archive",
+        label: "全站备份",
+        path: "/admin/system/backup",
+        section: "系统",
+      },
     ],
   },
 ];

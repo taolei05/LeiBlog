@@ -5990,6 +5990,108 @@
   text-align: start;
 }
 
+.backup-page-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.backup-action-card {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.backup-action-card .card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.backup-action-card__body {
+  display: grid;
+  gap: 1rem;
+  padding: 0 0.25rem 0.25rem;
+}
+
+.backup-action-card__actions,
+.backup-package-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+.backup-selected-file {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.backup-operation-progress {
+  border: 1px solid var(--border);
+  border-radius: var(--field-radius);
+  background: var(--surface-secondary);
+  padding: 0.875rem 1rem;
+}
+
+.backup-package-summary {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  padding: 1rem;
+}
+
+.backup-package-summary__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.backup-package-summary__header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.backup-package-summary__header p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.backup-table-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.5rem;
+}
+
+.backup-table-counts span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--field-radius);
+  background: var(--surface-secondary);
+  padding: 0.625rem 0.75rem;
+}
+
+.backup-table-counts strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-table-counts small {
+  color: var(--muted);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .admin-data-card {
   padding: 1rem;
 }
@@ -10568,6 +10670,17 @@
 
   .theme-current-state {
     width: 100%;
+  }
+
+  .backup-page-grid,
+  .backup-package-summary__header {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .backup-action-card__actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .theme-token-row {
