@@ -1,0 +1,37 @@
+{
+  "name": "blog-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "tsc && vp build",
+    "preview": "vp preview",
+    "prepare": "vp config"
+  },
+  "dependencies": {
+    "@astryxdesign/core": "^0.6.2",
+    "@stylexjs/stylex": "^0.19.1",
+    "lucide-react": "^1.47.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@astryxdesign/cli": "^0.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "~6.0.2",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3",
+    "vite-plus": "0.3.3"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.4.2",
+      "onFail": "download"
+    }
+  }
+}
