@@ -16,12 +16,12 @@ import { Text } from "@astryxdesign/core/Text";
 import { VStack } from "@astryxdesign/core/VStack";
 import { Theme } from "@astryxdesign/core/theme";
 
-import { neutralTheme } from "./themes/neutral/neutral";
-import "./themes/neutral/neutral.css";
+import { neutralTheme } from "../../shared/themes/neutral/neutral";
+import "../../shared/themes/neutral/neutral.css";
 
-const featuredTopics = ["AI", "Engineering", "Product", "Notes"] as const;
+const FEATURED_TOPICS = ["AI", "Engineering", "Product", "Notes"] as const;
 
-const articles = [
+const ARTICLES = [
   {
     title: "Designing with calm defaults",
     summary:
@@ -58,7 +58,7 @@ function App() {
                 <Section variant="transparent" padding={0}>
                   <VStack gap={4}>
                     <HStack gap={2} wrap="wrap">
-                      {featuredTopics.map((topic) => (
+                      {FEATURED_TOPICS.map((topic) => (
                         <Badge key={topic} variant="neutral" label={topic} />
                       ))}
                     </HStack>
@@ -88,7 +88,7 @@ function App() {
                     density="spacious"
                     header={<Heading level={2}>Latest essays</Heading>}
                   >
-                    {articles.map((article) => (
+                    {ARTICLES.map((article) => (
                       <ListItem
                         key={article.title}
                         href={`#${article.title.toLowerCase().replaceAll(" ", "-")}`}

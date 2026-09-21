@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "dev": "vp dev --host 0.0.0.0",
+    "dev:blog": "vp dev --host 0.0.0.0",
+    "dev:admin": "vp dev --host 0.0.0.0",
     "build": "tsc && vp build",
+    "check": "vp check --fix",
     "preview": "vp preview",
+    "test": "vp test",
     "prepare": "vp config"
   },
   "dependencies": {
