@@ -1,124 +1,362 @@
-import { StrictMode } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { useTranslation } from "react-i18next";
 
 import "@astryxdesign/core/reset.css";
 import "@astryxdesign/core/astryx.css";
+import "./styles.css";
 
-import { AppShell } from "@astryxdesign/core/AppShell";
-import { Badge } from "@astryxdesign/core/Badge";
-import { Heading } from "@astryxdesign/core/Heading";
-import { HStack } from "@astryxdesign/core/HStack";
-import { Layout, LayoutContent } from "@astryxdesign/core/Layout";
-import { Link } from "@astryxdesign/core/Link";
-import { List, ListItem } from "@astryxdesign/core/List";
-import { Section } from "@astryxdesign/core/Section";
-import { Text } from "@astryxdesign/core/Text";
-import { VStack } from "@astryxdesign/core/VStack";
+import { Center } from "@astryxdesign/core/Center";
+import { InternationalizationProvider, getLocaleDirection } from "@astryxdesign/core/i18n";
+import { LayerProvider } from "@astryxdesign/core/Layer";
+import { Spinner } from "@astryxdesign/core/Spinner";
+import zhCN from "@astryxdesign/core/locales/zh-CN.json";
 import { Theme } from "@astryxdesign/core/theme";
+import type { MessagesByLocale } from "@astryxdesign/core/i18n";
+import type { ThemeMode } from "@astryxdesign/core/theme";
 
+import {
+  AdminFeedbackBanner,
+  createAdminFeedbackBanner,
+} from "./app/components/admin-feedback-banner";
+import type {
+  AdminFeedbackBannerState,
+  CreateAdminFeedbackBannerParams,
+} from "./app/components/admin-feedback-banner";
+import { AdminShellPage } from "./app/admin-shell/page";
+import { InitialSetupPage } from "./app/initial-setup/page";
+import { LoginPage } from "./app/login-card/page";
+import { getAdminMe, getAdminSetupStatus, logoutAdmin } from "../../shared/admin-api";
+import type { AdminAuthState, AdminSetupStatus, AdminUser } from "../../shared/admin-api";
+import { normalizeLanguage } from "../../shared/i18n";
 import { neutralTheme } from "../../shared/themes/neutral/neutral";
 import "../../shared/themes/neutral/neutral.css";
 
-const ADMIN_METRICS = [
-  { label: "Drafts", value: "12", description: "3 ready for editorial review" },
-  { label: "Comments", value: "28", description: "6 waiting for moderation" },
-  { label: "Assets", value: "146", description: "Images and documents in storage" },
-] as const;
+const ASTRYX_MESSAGES: MessagesByLocale = { "zh-CN": zhCN };
+const THEME_STORAGE_KEY = "leiblog-theme";
+const ADMIN_AUTH_STORAGE_KEY = "leiblog-admin-auth";
+const ADMIN_HOME_PATH = "/admin/";
+const ADMIN_SETUP_PATH = "/admin/initial-setup";
+const APP_THEME_MODES = ["light", "dark"] as const;
+const OPEN_BLOG_NAVIGATION_DELAY_MS = 800;
+type AppThemeMode = Extract<ThemeMode, (typeof APP_THEME_MODES)[number]>;
 
-const PUBLISHING_TASKS = [
-  {
-    title: "Review homepage feature article",
-    description: "Check summary length, cover image, and pinned topic before publishing.",
-    state: "Editorial",
-  },
-  {
-    title: "Refresh navigation labels",
-    description: "Confirm the public blog categories match the current writing plan.",
-    state: "Content",
-  },
-  {
-    title: "Audit media library",
-    description: "Find unused uploads before the next backup snapshot is created.",
-    state: "Storage",
-  },
-] as const;
+type AdminExperienceProps = {
+  themeMode: AppThemeMode;
+  onToggleThemeMode: () => void;
+};
+
+const normalizeThemeMode = (mode?: string | null): AppThemeMode =>
+  mode === "dark" ? "dark" : "light";
+
+const getInitialThemeMode = (): AppThemeMode => {
+  if (typeof window === "undefined") {
+    return "light";
+  }
+
+  const savedMode = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (savedMode) {
+    return normalizeThemeMode(savedMode);
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+};
+
+const isStoredAdminUser = (value: unknown): value is AdminUser => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.id === "string" &&
+    record.role === "admin" &&
+    typeof record.username === "string" &&
+    typeof record.email === "string" &&
+    Array.isArray(record.tags) &&
+    record.tags.every((tag) => typeof tag === "string") &&
+    typeof record.commentEmailNotifications === "boolean" &&
+    typeof record.newPostEmailNotifications === "boolean"
+  );
+};
+
+const isStoredAdminAuthState = (value: unknown): value is AdminAuthState => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return typeof record.token === "string" && isStoredAdminUser(record.user);
+};
+
+const readStoredAuthState = () => {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const rawState = window.localStorage.getItem(ADMIN_AUTH_STORAGE_KEY);
+  if (rawState === null) {
+    return undefined;
+  }
+
+  const parsedState: unknown = JSON.parse(rawState);
+  return isStoredAdminAuthState(parsedState) ? parsedState : undefined;
+};
+
+const writeStoredAuthState = (authState: AdminAuthState) => {
+  window.localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(authState));
+};
+
+const clearStoredAuthState = () => {
+  window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+};
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
+const getAdminDisplayName = (user: AdminUser) => {
+  const name = user.name?.trim();
+  return name ? name : user.username;
+};
+
+function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps) {
+  const { i18n, t } = useTranslation();
+  const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const [authState, setAuthState] = useState<AdminAuthState | undefined>();
+  const [setupStatus, setSetupStatus] = useState<AdminSetupStatus | undefined>();
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [feedbackBanner, setFeedbackBanner] = useState<AdminFeedbackBannerState>();
+
+  const showFeedbackBanner = useCallback((params: CreateAdminFeedbackBannerParams) => {
+    setFeedbackBanner(createAdminFeedbackBanner(params));
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkStartupState = async () => {
+      try {
+        const nextSetupStatus = await getAdminSetupStatus();
+        if (!isMounted) {
+          return;
+        }
+
+        setSetupStatus(nextSetupStatus);
+
+        if (nextSetupStatus.requiresSetup) {
+          clearStoredAuthState();
+          setAuthState(undefined);
+          if (window.location.pathname !== ADMIN_SETUP_PATH) {
+            window.history.replaceState(null, "", ADMIN_SETUP_PATH);
+          }
+          return;
+        }
+
+        if (window.location.pathname === ADMIN_SETUP_PATH) {
+          window.history.replaceState(null, "", ADMIN_HOME_PATH);
+        }
+
+        const storedState = readStoredAuthState();
+        if (storedState === undefined) {
+          return;
+        }
+
+        const user = await getAdminMe(storedState.token, language);
+        if (!isMounted) {
+          return;
+        }
+
+        const nextState = { token: storedState.token, user };
+        writeStoredAuthState(nextState);
+        setAuthState(nextState);
+      } catch {
+        clearStoredAuthState();
+      } finally {
+        if (isMounted) {
+          setIsCheckingSession(false);
+        }
+      }
+    };
+
+    void checkStartupState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [language]);
+
+  const handleAuthenticated = (nextAuthState: AdminAuthState) => {
+    writeStoredAuthState(nextAuthState);
+    setAuthState(nextAuthState);
+    showFeedbackBanner({
+      status: "success",
+      title: t("admin.toast.loginSuccess", { name: getAdminDisplayName(nextAuthState.user) }),
+    });
+  };
+
+  const handleAuthenticationFailed = (message: string) => {
+    showFeedbackBanner({
+      status: "error",
+      title: message || t("admin.toast.loginFailed"),
+    });
+  };
+
+  const handleSetupComplete = (nextAuthState: AdminAuthState) => {
+    setSetupStatus({ hasAdmin: true, requiresSetup: false });
+    writeStoredAuthState(nextAuthState);
+    setAuthState(nextAuthState);
+    window.history.replaceState(null, "", ADMIN_HOME_PATH);
+    showFeedbackBanner({
+      status: "success",
+      title: t("admin.toast.setupSuccess"),
+    });
+  };
+
+  const handleSetupFailed = (message: string) => {
+    showFeedbackBanner({
+      status: "error",
+      title: message || t("admin.toast.setupFailed"),
+    });
+  };
+
+  const handleLogout = async () => {
+    const token = authState?.token;
+
+    if (token !== undefined) {
+      try {
+        await logoutAdmin(token);
+      } catch (error) {
+        showFeedbackBanner({
+          status: "error",
+          title: getErrorMessage(error, t("admin.toast.logoutFailed")),
+        });
+        return;
+      }
+    }
+
+    clearStoredAuthState();
+    setAuthState(undefined);
+    showFeedbackBanner({
+      status: "success",
+      title: t("admin.toast.logoutSuccess"),
+    });
+  };
+
+  const handleUserUpdated = useCallback((user: AdminUser) => {
+    setAuthState((currentState) => {
+      if (currentState === undefined) {
+        return currentState;
+      }
+
+      const nextState = { token: currentState.token, user };
+      writeStoredAuthState(nextState);
+      return nextState;
+    });
+  }, []);
+
+  const handleOpenBlog = () => {
+    showFeedbackBanner({
+      status: "success",
+      title: t("admin.toast.openBlogSuccess"),
+    });
+
+    window.setTimeout(() => {
+      try {
+        window.location.assign("/");
+      } catch {
+        showFeedbackBanner({
+          status: "error",
+          title: t("admin.toast.openBlogFailed"),
+        });
+      }
+    }, OPEN_BLOG_NAVIGATION_DELAY_MS);
+  };
+
+  const feedbackBannerNode = (
+    <AdminFeedbackBanner
+      banner={feedbackBanner}
+      onDismiss={() => setFeedbackBanner(undefined)}
+    />
+  );
+
+  if (isCheckingSession) {
+    return (
+      <Center axis="both" padding={6} style={{ minHeight: "100vh" }}>
+        <Spinner label="Loading" />
+      </Center>
+    );
+  }
+
+  if (setupStatus?.requiresSetup) {
+    return (
+      <>
+        {feedbackBannerNode}
+        <InitialSetupPage
+          themeMode={themeMode}
+          onToggleThemeMode={onToggleThemeMode}
+          onComplete={handleSetupComplete}
+          onSubmitFailed={handleSetupFailed}
+        />
+      </>
+    );
+  }
+
+  if (authState === undefined) {
+    return (
+      <>
+        {feedbackBannerNode}
+        <LoginPage
+          onAuthenticated={handleAuthenticated}
+          onAuthenticationFailed={handleAuthenticationFailed}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {feedbackBannerNode}
+      <AdminShellPage
+        authToken={authState.token}
+        user={authState.user}
+        themeMode={themeMode}
+        onToggleThemeMode={onToggleThemeMode}
+        onUserUpdated={handleUserUpdated}
+        onLogout={handleLogout}
+        onOpenBlog={handleOpenBlog}
+      />
+    </>
+  );
+}
 
 function App() {
+  const { i18n } = useTranslation();
+  const [themeMode, setThemeMode] = useState<AppThemeMode>(getInitialThemeMode);
+  const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const direction = getLocaleDirection(language);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = direction;
+  }, [direction, language]);
+
+  const toggleThemeMode = () => {
+    setThemeMode((currentMode) => {
+      const nextMode = currentMode === "dark" ? "light" : "dark";
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextMode);
+      return nextMode;
+    });
+  };
+
   return (
-    <Theme theme={neutralTheme}>
-      <AppShell height="auto" variant="surface" contentPadding={0}>
-        <Layout
-          height="auto"
-          contentWidth={1040}
-          content={
-            <LayoutContent isScrollable={false} label="Admin dashboard" padding={4}>
-              <VStack gap={8} paddingBlock={6}>
-                <Section variant="transparent" padding={0}>
-                  <VStack gap={4}>
-                    <HStack gap={2} wrap="wrap">
-                      <Badge variant="neutral" label="Admin" />
-                      <Badge variant="neutral" label="Content" />
-                      <Badge variant="neutral" label="Operations" />
-                    </HStack>
-                    <VStack gap={2}>
-                      <Heading level={1} type="display-2" textWrap="balance">
-                        LeiBlog Admin
-                      </Heading>
-                      <Text as="p" type="large" color="secondary">
-                        A focused workspace for publishing, moderation, and keeping the blog running
-                        cleanly.
-                      </Text>
-                    </VStack>
-                    <HStack gap={4} wrap="wrap">
-                      <Link href="/blog/" isStandalone weight="semibold">
-                        View blog
-                      </Link>
-                      <Link href="#queue" isStandalone color="secondary">
-                        Publishing queue
-                      </Link>
-                    </HStack>
-                  </VStack>
-                </Section>
-
-                <Section padding={0} dividers={["top"]}>
-                  <List hasDividers density="spacious" header={<Heading level={2}>Today</Heading>}>
-                    {ADMIN_METRICS.map((metric) => (
-                      <ListItem
-                        key={metric.label}
-                        label={metric.label}
-                        description={metric.description}
-                        endContent={
-                          <Text type="large" weight="bold">
-                            {metric.value}
-                          </Text>
-                        }
-                      />
-                    ))}
-                  </List>
-                </Section>
-
-                <Section id="queue" variant="muted" padding={4}>
-                  <List
-                    hasDividers
-                    density="spacious"
-                    header={<Heading level={2}>Publishing queue</Heading>}
-                  >
-                    {PUBLISHING_TASKS.map((task) => (
-                      <ListItem
-                        key={task.title}
-                        label={task.title}
-                        description={task.description}
-                        endContent={<Badge variant="neutral" label={task.state} />}
-                      />
-                    ))}
-                  </List>
-                </Section>
-              </VStack>
-            </LayoutContent>
-          }
-        />
-      </AppShell>
-    </Theme>
+    <InternationalizationProvider locale={language} messages={ASTRYX_MESSAGES} dir={direction}>
+      <Theme theme={neutralTheme} mode={themeMode}>
+        <LayerProvider>
+          <AdminExperience themeMode={themeMode} onToggleThemeMode={toggleThemeMode} />
+        </LayerProvider>
+      </Theme>
+    </InternationalizationProvider>
   );
 }
 

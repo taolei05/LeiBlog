@@ -1,0 +1,3 @@
+[popover="manual"][role="region"]:has(.astryx-toast) {
+  align-items: center !important;
+}

@@ -16,9 +16,11 @@
   "dependencies": {
     "@astryxdesign/core": "^0.6.2",
     "@stylexjs/stylex": "^0.19.1",
+    "i18next": "^26.4.2",
     "lucide-react": "^1.47.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "react-i18next": "^17.0.14"
   },
   "devDependencies": {
     "@astryxdesign/cli": "^0.6.2",
