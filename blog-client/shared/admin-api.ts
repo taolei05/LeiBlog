@@ -19,6 +19,57 @@ export type AdminAuthState = {
   user: AdminUser;
 };
 
+export type ManagedUserRole = "admin" | "user";
+
+export type ManagedUser = {
+  id: string;
+  role: ManagedUserRole;
+  username: string;
+  email: string;
+  tags: string[];
+  englishTags: string[];
+  commentEmailNotifications: boolean;
+  newPostEmailNotifications: boolean;
+  createdAt: string;
+  updatedAt: string;
+  name?: string;
+  englishName?: string;
+  avatarUrl?: string;
+  bio?: string;
+  englishBio?: string;
+  blogUrl?: string;
+};
+
+export type UserManagementSummary = {
+  total: number;
+  administrators: number;
+  users: number;
+  notificationSubscribers: number;
+};
+
+export type UserManagementPageInfo = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+export type UserManagementList = {
+  users: ManagedUser[];
+  summary: UserManagementSummary;
+  pageInfo: UserManagementPageInfo;
+};
+
+export type ManagedUserDetails = {
+  profileLocalizations: AdminProfileLocalizations;
+  user: ManagedUser;
+};
+
+export type ManagedUserMutationResult = ManagedUserDetails & {
+  ok: true;
+  profileTranslation: AdminProfileTranslation;
+};
+
 export type AdminSocialLink = {
   label: string;
   url: string;
@@ -167,6 +218,18 @@ export type UpdateSiteSettingsPayload = {
   };
 };
 
+export type ManagedUserPayload = {
+  profileLocalizations: AdminProfileLocalizations;
+  role: ManagedUserRole;
+  username: string;
+  email: string;
+  password: string;
+  avatarUrl: string;
+  blogUrl: string;
+  commentEmailNotifications: boolean;
+  newPostEmailNotifications: boolean;
+};
+
 export type AdminSetupStatus = {
   hasAdmin: boolean;
   requiresSetup: boolean;
@@ -231,6 +294,39 @@ type LoginAdminParams = {
   password: string;
 };
 
+type GetManagedUsersParameters = {
+  locale: AppLanguage;
+  page: number;
+  pageSize: number;
+  query: string;
+  role: ManagedUserRole | "all";
+  token: string;
+};
+
+type GetManagedUserParameters = {
+  locale: AppLanguage;
+  token: string;
+  userId: string;
+};
+
+type CreateManagedUserParameters = {
+  locale: AppLanguage;
+  payload: ManagedUserPayload;
+  token: string;
+};
+
+type UpdateManagedUserParameters = {
+  locale: AppLanguage;
+  payload: ManagedUserPayload;
+  token: string;
+  userId: string;
+};
+
+type DeleteManagedUserParameters = {
+  token: string;
+  userId: string;
+};
+
 const DEFAULT_API_PORT = "3000";
 const PROFILE_TAG_LOCALE_HEADER = "x-leiblog-locale";
 
@@ -264,6 +360,12 @@ const readErrorMessage = (body: unknown, fallback: string) => {
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const isOptionalString = (value: unknown): value is string | undefined =>
+  value === undefined || typeof value === "string";
+
+const isManagedUserRole = (value: unknown): value is ManagedUserRole =>
+  value === "admin" || value === "user";
 
 const isAdminProfileTranslationLocale = (
   value: unknown,
@@ -430,6 +532,33 @@ const isAdminUser = (value: unknown): value is AdminUser => {
   );
 };
 
+const isManagedUser = (value: unknown): value is ManagedUser => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.id === "string" &&
+    isManagedUserRole(record.role) &&
+    typeof record.username === "string" &&
+    typeof record.email === "string" &&
+    isStringArray(record.tags) &&
+    isStringArray(record.englishTags) &&
+    typeof record.commentEmailNotifications === "boolean" &&
+    typeof record.newPostEmailNotifications === "boolean" &&
+    typeof record.createdAt === "string" &&
+    typeof record.updatedAt === "string" &&
+    isOptionalString(record.name) &&
+    isOptionalString(record.englishName) &&
+    isOptionalString(record.avatarUrl) &&
+    isOptionalString(record.bio) &&
+    isOptionalString(record.englishBio) &&
+    isOptionalString(record.blogUrl)
+  );
+};
+
 const isAdminAuthState = (value: unknown): value is AdminAuthState => {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -539,6 +668,89 @@ const isSiteSettings = (value: unknown): value is SiteSettings => {
   );
 };
 
+const isUserManagementSummary = (value: unknown): value is UserManagementSummary => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.total === "number" &&
+    typeof record.administrators === "number" &&
+    typeof record.users === "number" &&
+    typeof record.notificationSubscribers === "number"
+  );
+};
+
+const isUserManagementPageInfo = (value: unknown): value is UserManagementPageInfo => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    typeof record.page === "number" &&
+    typeof record.pageSize === "number" &&
+    typeof record.totalItems === "number" &&
+    typeof record.totalPages === "number"
+  );
+};
+
+const isUserManagementList = (value: unknown): value is UserManagementList => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    Array.isArray(record.users) &&
+    record.users.every(isManagedUser) &&
+    isUserManagementSummary(record.summary) &&
+    isUserManagementPageInfo(record.pageInfo)
+  );
+};
+
+const isManagedUserDetails = (value: unknown): value is ManagedUserDetails => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    isManagedUser(record.user) &&
+    isAdminProfileLocalizations(record.profileLocalizations)
+  );
+};
+
+const isManagedUserMutationResult = (
+  value: unknown,
+): value is ManagedUserMutationResult => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    record.ok === true &&
+    isManagedUserDetails(value) &&
+    isAdminProfileTranslation(record.profileTranslation)
+  );
+};
+
+const isDeleteManagedUserResponse = (value: unknown): value is { ok: true } => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return record.ok === true;
+};
+
 const isAdminSetupStatus = (value: unknown): value is AdminSetupStatus => {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -641,6 +853,134 @@ export const getAdminSettings = async (token: string, locale: AppLanguage) => {
 
   if (!isAdminSettings(body)) {
     throw new Error("Administrator settings response was invalid.");
+  }
+
+  return body;
+};
+
+export const getManagedUsers = async ({
+  locale,
+  page,
+  pageSize,
+  query,
+  role,
+  token,
+}: GetManagedUsersParameters) => {
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    query: query.trim(),
+    role,
+  });
+  const response = await fetch(`${API_BASE_URL}/api/admin/users?${searchParams.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      [PROFILE_TAG_LOCALE_HEADER]: locale,
+    },
+  });
+  const body = await parseJson(response);
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "User management request failed."));
+  }
+
+  if (!isUserManagementList(body)) {
+    throw new Error("User management response was invalid.");
+  }
+
+  return body;
+};
+
+export const getManagedUser = async ({ locale, token, userId }: GetManagedUserParameters) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      [PROFILE_TAG_LOCALE_HEADER]: locale,
+    },
+  });
+  const body = await parseJson(response);
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "User details request failed."));
+  }
+
+  if (!isManagedUserDetails(body)) {
+    throw new Error("User details response was invalid.");
+  }
+
+  return body;
+};
+
+export const createManagedUser = async ({
+  locale,
+  payload,
+  token,
+}: CreateManagedUserParameters) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      [PROFILE_TAG_LOCALE_HEADER]: locale,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseJson(response);
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "User creation failed."));
+  }
+
+  if (!isManagedUserMutationResult(body)) {
+    throw new Error("User creation response was invalid.");
+  }
+
+  return body;
+};
+
+export const updateManagedUser = async ({
+  locale,
+  payload,
+  token,
+  userId,
+}: UpdateManagedUserParameters) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      [PROFILE_TAG_LOCALE_HEADER]: locale,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseJson(response);
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "User update failed."));
+  }
+
+  if (!isManagedUserMutationResult(body)) {
+    throw new Error("User update response was invalid.");
+  }
+
+  return body;
+};
+
+export const deleteManagedUser = async ({ token, userId }: DeleteManagedUserParameters) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const body = await parseJson(response);
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "User deletion failed."));
+  }
+
+  if (!isDeleteManagedUserResponse(body)) {
+    throw new Error("User deletion response was invalid.");
   }
 
   return body;

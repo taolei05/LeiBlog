@@ -47,6 +47,7 @@ import type { ThemeMode } from "@astryxdesign/core/theme";
 
 import { AdminSettingsPage } from "../admin-settings/page";
 import { SiteSettingsPage } from "../site-settings/page";
+import { UsersManagementPage } from "../table-filter/page";
 import type { AdminUser, SiteSettings } from "../../../../shared/admin-api";
 import { getSiteSettings } from "../../../../shared/admin-api";
 import { APP_LANGUAGES, changeAppLanguage, normalizeLanguage } from "../../../../shared/i18n";
@@ -199,6 +200,12 @@ const adminNavSections: AdminNavSection[] = [
         icon: <MessageSquareText size={16} />,
       },
       {
+        id: "users",
+        labelKey: "admin.pages.users",
+        descriptionKey: "admin.pageDescriptions.users",
+        icon: <UserCog size={16} />,
+      },
+      {
         id: "contributors",
         labelKey: "admin.pages.contributors",
         descriptionKey: "admin.pageDescriptions.contributors",
@@ -223,12 +230,6 @@ const adminNavSections: AdminNavSection[] = [
     descriptionKey: "admin.navDescriptions.system",
     icon: <Settings size={14} />,
     items: [
-      {
-        id: "users",
-        labelKey: "admin.pages.users",
-        descriptionKey: "admin.pageDescriptions.users",
-        icon: <UserCog size={16} />,
-      },
       {
         id: "admin-settings",
         labelKey: "admin.pages.adminSettings",
@@ -353,6 +354,8 @@ export function AdminShellPage({
   const activeTitle = t(activePage.item.labelKey);
   const activeDescription = t(activePage.item.descriptionKey);
   const activeSectionTitle = t(activePage.section.labelKey);
+  const isActivePagePlaceholder =
+    activePageId !== "admin-settings" && activePageId !== "site-settings" && activePageId !== "users";
   const displayName = user.name ?? user.username;
   const lightLogoUrl = siteSettings?.site.lightLogoUrl.trim() ?? "";
   const darkLogoUrl = siteSettings?.site.darkLogoUrl.trim() ?? "";
@@ -536,7 +539,10 @@ export function AdminShellPage({
               icon={item.icon}
               isSelected={activePageId === item.id}
               endContent={
-                activePageId === item.id ? (
+                activePageId === item.id &&
+                item.id !== "admin-settings" &&
+                item.id !== "site-settings" &&
+                item.id !== "users" ? (
                   <Badge label={t("admin.placeholder.dev")} variant="neutral" />
                 ) : undefined
               }
@@ -582,7 +588,13 @@ export function AdminShellPage({
                   </VStack>
                 </StackItem>
                 <HStack gap={1} vAlign="center" wrap="wrap">
-                  <Badge label={t("admin.placeholder.dev")} icon={<Boxes size={14} />} />
+                  <Badge
+                    label={t(
+                      isActivePagePlaceholder ? "admin.placeholder.dev" : "admin.placeholder.ready",
+                    )}
+                    icon={<Boxes size={14} />}
+                    variant={isActivePagePlaceholder ? "neutral" : "success"}
+                  />
                   <IconButton
                     label={t("admin.actions.notifications")}
                     icon={<Bell size={16} />}
@@ -608,6 +620,8 @@ export function AdminShellPage({
                     isNarrow={isNarrow}
                     onSettingsUpdated={setSiteSettings}
                   />
+                ) : activePageId === "users" ? (
+                  <UsersManagementPage authToken={authToken} isNarrow={isNarrow} />
                 ) : (
                   <PlaceholderPage
                     title={activeTitle}

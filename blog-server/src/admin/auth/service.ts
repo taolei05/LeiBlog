@@ -31,6 +31,10 @@ type DeleteAdminSessionParams = {
   sessionId: string;
 };
 
+type DeleteAdminSessionsForUserParams = {
+  userId: string;
+};
+
 export const toAdminProfile = (row: UserRecord) => {
   if (row.role !== USER_ROLE.Admin) {
     return undefined;
@@ -208,6 +212,48 @@ export const readAdminSession = async ({ sessionId }: ReadAdminSessionParams) =>
 export const deleteAdminSession = async ({ sessionId }: DeleteAdminSessionParams) => {
   const redis = await getRedisClient();
   await redis.del(`${ADMIN_SESSION_PREFIX}${sessionId}`);
+};
+
+const isRedisScanResponse = (value: unknown): value is [string, string[]] =>
+  Array.isArray(value) &&
+  typeof value[0] === "string" &&
+  Array.isArray(value[1]) &&
+  value[1].every((item) => typeof item === "string");
+
+export const deleteAdminSessionsForUser = async ({
+  userId,
+}: DeleteAdminSessionsForUserParams) => {
+  const redis = await getRedisClient();
+  let cursor = "0";
+
+  do {
+    const response: unknown = await redis.sendCommand([
+      "SCAN",
+      cursor,
+      "MATCH",
+      `${ADMIN_SESSION_PREFIX}*`,
+      "COUNT",
+      "100",
+    ]);
+    if (!isRedisScanResponse(response)) {
+      return;
+    }
+
+    const [nextCursor, keys] = response;
+    cursor = nextCursor;
+
+    for (const key of keys) {
+      const rawSession = await redis.get(key);
+      if (rawSession === null) {
+        continue;
+      }
+
+      const parsedSession: unknown = JSON.parse(rawSession);
+      if (isAdminSessionPayload(parsedSession) && parsedSession.userId === userId) {
+        await redis.del(key);
+      }
+    }
+  } while (cursor !== "0");
 };
 
 type GetAdminProfileByIdParameters = {
