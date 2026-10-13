@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-LEIBLOG_SCRIPT_VERSION="0.3.0"
+LEIBLOG_SCRIPT_VERSION="0.3.1"
 LEIBLOG_BASE_DIR="${LEIBLOG_BASE_DIR:-/var/leiblog}"
 LEIBLOG_PROJECT_NAME="${LEIBLOG_PROJECT_NAME:-leiblog}"
 LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-main}"
@@ -245,18 +245,32 @@ check_public_site() {
   [[ "$home" != "$admin" && "$admin" == *'<title>LeiBlog Admin</title>'* ]] || die "前后台路由入口检查失败"
   info "HTTPS、API 健康及前后台路由检查通过: $origin"
 }
+backup_before_deployment() {
+  [[ -f "$COMPOSE_FILE" ]] || return 0
+  local containers volumes
+  containers="$(compose ps --all --quiet postgres)" || die "无法检查已有数据库容器，拒绝跳过备份"
+  volumes="$(docker volume ls --quiet --filter "label=com.docker.compose.project=$LEIBLOG_PROJECT_NAME" --filter 'label=com.docker.compose.volume=postgres-data')" || die "无法检查已有数据库卷，拒绝跳过备份"
+  if [[ -z "$containers" && -z "$volumes" ]]; then
+    info "尚未创建数据库容器或数据卷，保留配置并继续首次安装"
+    return 0
+  fi
+  compose up -d --no-deps --wait --wait-timeout 180 postgres || die "无法启动已有数据库，请先修复后再备份"
+  backup_leiblog || die "部署前备份失败"
+}
 backup_leiblog() (
-  local temporary backup resume=0
-  temporary="$(mktemp -d "${LEIBLOG_BASE_DIR}/.backup.XXXXXX")"
-  trap 'rm -rf "$temporary"; if [[ "$resume" == 1 ]]; then compose start api >/dev/null; fi' EXIT
-  if [[ -n "$(compose ps --status running --quiet api)" ]]; then resume=1; compose stop api; fi
+  local temporary backup='' running resume=0 completed=0
+  temporary="$(mktemp -d "${LEIBLOG_BASE_DIR}/.backup.XXXXXX")" || die "无法创建备份暂存目录"
+  trap 'rm -rf "$temporary"; if [[ "$completed" == 0 && -n "$backup" ]]; then rm -f "$backup" "${backup}.partial"; fi; if [[ "$resume" == 1 ]]; then compose start api >/dev/null; fi' EXIT
+  running="$(compose ps --status running --quiet api)" || die "无法检查 API 状态，备份已中止"
+  if [[ -n "$running" ]]; then resume=1; compose stop api || die "无法停止 API，备份已中止"; fi
   load_env_file
-  compose exec -T postgres pg_dump --format=custom --no-owner -U "$POSTGRES_USER" "$POSTGRES_DB" > "$temporary/database.dump"
-  printf 'LEIBLOG_BACKUP_FORMAT=2\n' > "$temporary/manifest.txt"
-  backup="$(mktemp --suffix=.tar.gz "${BACKUP_DIR}/leiblog-backup-$(date +%Y%m%d-%H%M%S)-XXXXXX")"
-  tar -czf "${backup}.partial" -C "$temporary" database.dump manifest.txt -C "$LEIBLOG_BASE_DIR" .env docker-compose.yml uploads
-  chmod 600 "${backup}.partial"
-  mv "${backup}.partial" "$backup"
+  compose exec -T postgres pg_dump --format=custom --no-owner -U "$POSTGRES_USER" "$POSTGRES_DB" > "$temporary/database.dump" || die "数据库导出失败，未生成备份"
+  printf 'LEIBLOG_BACKUP_FORMAT=2\n' > "$temporary/manifest.txt" || die "无法写入备份清单"
+  backup="$(mktemp --suffix=.tar.gz "${BACKUP_DIR}/leiblog-backup-$(date +%Y%m%d-%H%M%S)-XXXXXX")" || die "无法创建备份文件"
+  tar -czf "${backup}.partial" -C "$temporary" database.dump manifest.txt -C "$LEIBLOG_BASE_DIR" .env docker-compose.yml uploads || die "备份归档失败"
+  chmod 600 "${backup}.partial" || die "无法设置备份权限"
+  mv "${backup}.partial" "$backup" || die "无法保存完整备份"
+  completed=1
   info "备份完成（包含加密密钥和个人数据，请妥善保护）: $backup"
 )
 confirm_dangerous_action() {
@@ -309,10 +323,10 @@ restore_leiblog() (
   info "恢复完成；请重新登录，并核对邮件队列、R2 媒体和第三方配置"
 )
 deploy_release() {
-  local command="$1" domain="${2:-}"
+  local domain="${2:-}"
   write_env_if_missing "$domain"
   load_env_file; validate_env; assert_instance
-  if [[ "$command" == update || -f "$COMPOSE_FILE" ]]; then backup_leiblog; fi
+  backup_before_deployment
   fetch_source
   compose build --pull
   start_services
@@ -365,7 +379,7 @@ main() {
       [[ -f "$ENV_FILE" && -f "$COMPOSE_FILE" ]] || die "请先安装"
       load_env_file; validate_env; assert_instance
       if [[ "${1:-}" == --domain ]]; then
-        backup_leiblog
+        backup_before_deployment
         domain="$(prompt_domain "${2:-}")"; upsert_env_value SITE_HOST "$domain"
       elif [[ $# -gt 0 ]]; then die "未知 update 参数"; fi
       deploy_release update;;

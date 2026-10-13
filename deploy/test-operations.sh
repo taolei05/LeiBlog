@@ -21,7 +21,10 @@ mkdir -p "$BACKUP_DIR"
 LEIBLOG_SOURCE_DIR=/repo fetch_source
 [[ ! -d "$SOURCE_DIR/blog-client/node_modules" && ! -f "$SOURCE_DIR/blog-server/.env" ]]
 compose exec -T api bun -e "await Bun.write('/data/uploads/fixture.txt','original')"
-backup_leiblog
+compose stop api web postgres
+compose rm --force postgres
+backup_before_deployment
+start_services
 backup="$(find "$BACKUP_DIR" -name '*.tar.gz' -type f | head -1)"
 [[ -n "$backup" ]]
 compose exec -T api bun -e "await Bun.write('/data/uploads/fixture.txt','changed')"
@@ -44,4 +47,4 @@ load_env_file
 [[ -z "$ADMIN_BOOTSTRAP_PASSWORD" ]]
 count="$(compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM users WHERE role='admin'")"
 [[ "$count" == 1 ]]
-printf '%s\n' 'Real deployment backup/restore, encryption-key preservation and bootstrap secret removal checks passed.'
+printf '%s\n' 'Real retained-volume recovery, deployment backup/restore, encryption-key preservation and bootstrap secret removal checks passed.'

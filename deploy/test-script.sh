@@ -38,4 +38,5 @@ expect_failure validate_archive "$fixture_dir/unknown.tar.gz" backup
 expect_failure validate_source "$root/blog-server"
 validate_source "$root"
 bash -n "$root/deploy/leiblog.sh"
+bash "$root/deploy/test-build-and-retry.sh"
 printf '%s\n' 'Deployment script regression checks passed.'

@@ -10,6 +10,8 @@
 4. 安装 Docker Compose v2，需支持 `up --wait`。未安装 Docker 时脚本会使用 Docker 官方安装器；不希望自动安装时设置 `LEIBLOG_INSTALL_DOCKER=0`。
 5. **不得覆盖旧项目的部署目录、数据库或 Compose 项目名。** 旧项目 `.env` 和备份格式不兼容。仍运行旧项目时，给新项目使用不同目录和项目名；80/443 被占用时先明确安排域名/端口切换。
 
+生产前端镜像只执行 `bun run build`（包含 TypeScript 检查），不在 VPS 上重复运行 lint 和测试。完整质量检查保留在 `./check.sh`，GitHub Actions 在每次推送 `main` 和拉取请求时执行检查、安全集成测试及生产部署回归。发布前应确认 Actions 通过。
+
 ## 安装
 
 已拿到新源码时，优先从本地已检查的脚本安装：
@@ -38,6 +40,18 @@ sudo leiblog doctor
 ```
 
 登录 `https://blog.example.com/admin`，立即修改初始密码，然后删除上述凭据文件。在后台完善站点资料、Resend 发信域名/API key，以及需要使用的 OAuth、R2 和翻译配置。邮件发送域名需实际配置 SPF/DKIM，并验证邮件投递；OAuth 服务商需配置真实 HTTPS 回调地址。
+
+## 首次安装失败后重试
+
+如果源码已经下载，但镜像构建未完成，先更新全局脚本，然后重新运行 `install`。脚本会保留已有 `.env`、密钥和初始管理员凭据；仅在没有数据库容器或数据卷时跳过备份。已存在的数据卷即使容器停止或删除，也必须启动数据库并成功备份后才能继续。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh -o leiblog.sh &&
+sudo bash leiblog.sh install-cli &&
+sudo leiblog install blog.example.com
+```
+
+不要删除 `/var/leiblog` 或使用 `uninstall --purge` 来解决构建失败。`oxc_allocator/src/pool/fixed_size.rs` 的 panic 属于 Oxlint 分配器启动失败，上游在部分 Linux 环境已有同类报告，不能据此认定网站代码存在 lint 错误或仅凭日志确定 VPS 内存不足。参见 [Oxlint 上游问题](https://github.com/oxc-project/oxc/issues/20331)。
 
 ## 配置和更新
 
