@@ -1,5 +1,6 @@
 import type { AppLanguage } from "./i18n";
 import { resolveApiBaseUrl } from "./api-base-url";
+import { versionLocalMediaUrl } from "./media-url";
 
 // A blank token selects HttpOnly cookie transport; API clients can still supply a bearer token.
 export const COOKIE_ADMIN_AUTH_TOKEN = "";
@@ -3914,11 +3915,11 @@ export const resolveAdminAssetUrl = (url: string) => {
     trimmedUrl.startsWith("https://") ||
     trimmedUrl.startsWith("data:")
   ) {
-    return trimmedUrl;
+    return versionLocalMediaUrl({ value: trimmedUrl, origin: API_BASE_URL });
   }
 
   if (trimmedUrl.startsWith("/")) {
-    return `${API_BASE_URL}${trimmedUrl}`;
+    return versionLocalMediaUrl({ value: `${API_BASE_URL}${trimmedUrl}`, origin: API_BASE_URL });
   }
 
   return trimmedUrl;

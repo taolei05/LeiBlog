@@ -1,3 +1,5 @@
+import { versionLocalMediaUrl } from "./media-url";
+
 const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 const IMAGE_PROTOCOLS = new Set(["http:", "https:"]);
 
@@ -36,13 +38,17 @@ export const resolveContentAssetUrl = (value: string) => {
   }
 
   if (!path.startsWith("/") || typeof window === "undefined") {
-    return path;
+    return versionLocalMediaUrl({ value: path });
   }
 
   const url = new URL(path, window.location.origin);
+  const localOrigin = new URL(window.location.origin);
+  if (localOrigin.port === "5173" || localOrigin.port === "5174") {
+    localOrigin.port = "3000";
+  }
   if (url.origin === window.location.origin && (url.port === "5173" || url.port === "5174")) {
     url.port = "3000";
   }
 
-  return url.toString();
+  return versionLocalMediaUrl({ value: url.toString(), origin: localOrigin.origin });
 };

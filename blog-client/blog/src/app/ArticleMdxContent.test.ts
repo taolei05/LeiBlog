@@ -35,6 +35,6 @@ describe("untrusted article rendering", () => {
     expect(markup).not.toContain("data:text/html");
     expect(markup).toContain("unsafe");
     expect(markup).toContain('href="/articles/hello"');
-    expect(markup).toContain('src="/uploads/image.png"');
+    expect(markup).toContain('src="/uploads/image.png?media-v=2"');
   });
 });

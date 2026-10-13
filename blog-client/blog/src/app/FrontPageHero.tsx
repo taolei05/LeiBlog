@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { Heading } from "@astryxdesign/core/Heading";
 import { Text } from "@astryxdesign/core/Text";
+import { resolveContentAssetUrl as resolveFrontPageHeroAssetUrl } from "../../../shared/content-url";
 
 type FrontPageHeroProps = {
   coverUrls: readonly string[];
@@ -21,19 +22,6 @@ type UseFrontPageHeroCarouselParameters = {
 type GetHeroCoverUrlsParameters = {
   coverUrls: readonly string[];
   fallbackCoverUrl: string;
-};
-
-const resolveFrontPageHeroAssetUrl = (path: string) => {
-  if (!path.startsWith("/") || typeof window === "undefined") {
-    return path;
-  }
-
-  const url = new URL(path, window.location.origin);
-  if (url.port === "5173" || url.port === "5174") {
-    url.port = "3000";
-  }
-
-  return url.toString();
 };
 
 const getHeroCoverUrls = ({ coverUrls, fallbackCoverUrl }: GetHeroCoverUrlsParameters) => {

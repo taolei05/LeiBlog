@@ -44,7 +44,10 @@ import {
 import type { AppLanguage } from "../../../shared/i18n";
 import { formatDateInTimeZone } from "../../../shared/time-zone";
 import { FrontPageHero } from "./FrontPageHero";
-import { getSafeLinkUrl } from "../../../shared/content-url";
+import {
+  getSafeLinkUrl,
+  resolveContentAssetUrl as resolveSiteAssetUrl,
+} from "../../../shared/content-url";
 
 type SitePageBrand = {
   readonly coverUrls: readonly string[];
@@ -492,19 +495,6 @@ const authorToolItemsByLanguage: Record<AppLanguage, readonly AboutCardItem[]> =
       title: "Elysia",
     },
   ],
-};
-
-const resolveSiteAssetUrl = (path: string) => {
-  if (!path.startsWith("/") || typeof window === "undefined") {
-    return path;
-  }
-
-  const url = new URL(path, window.location.origin);
-  if (url.port === "5173" || url.port === "5174") {
-    url.port = "3000";
-  }
-
-  return url.toString();
 };
 
 const getCurrentSiteUrl = () => {

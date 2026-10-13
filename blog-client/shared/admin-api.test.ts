@@ -8,6 +8,7 @@ import {
   getPublicSiteSettings,
   isAdminAuthState,
   loginAdmin,
+  resolveAdminAssetUrl,
   updateBlogUserProfile,
 } from "./admin-api";
 
@@ -22,6 +23,25 @@ const adminUser = {
 };
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("admin media display URLs", () => {
+  it("uses the same stable version for media previews and absolute local URLs", () => {
+    const source = "/uploads/site/image.png";
+    const displayUrl = resolveAdminAssetUrl(source);
+    expect(displayUrl).toContain("/uploads/site/image.png?media-v=2");
+    expect(resolveAdminAssetUrl(displayUrl)).toBe(displayUrl);
+  });
+
+  it("leaves external media and local object previews unchanged", () => {
+    for (const url of [
+      "https://cdn.example.com/uploads/image.png?signature=abc",
+      "data:image/png;base64,aGVsbG8=",
+      "blob:http://localhost/preview",
+    ]) {
+      expect(resolveAdminAssetUrl(url)).toBe(url);
+    }
+  });
+});
 
 describe("shared API response validation", () => {
   it("reads the initialization token requirement without exposing a secret", async () => {
