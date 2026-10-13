@@ -13,7 +13,6 @@
     "@date-fns/tz": "^1.5.0",
     "@elysiajs/cors": "^1.4.2",
     "@elysiajs/jwt": "^1.4.2",
-    "@elysiajs/static": "^1.4.10",
     "@sinclair/typebox": "^0.34.49",
     "adm-zip": "^0.6.1",
     "altcha-lib": "^2.6.0",

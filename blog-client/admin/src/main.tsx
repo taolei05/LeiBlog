@@ -1,6 +1,7 @@
 import { lazy, StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
+import Prism from "prismjs";
 
 import "@astryxdesign/core/reset.css";
 import "@astryxdesign/core/astryx.css";
@@ -45,6 +46,10 @@ const AdminShellPage = lazy(async () => ({
 const InitialSetupPage = lazy(async () => ({
   default: (await import("./app/initial-setup/page")).InitialSetupPage,
 }));
+
+// Lexical's language modules read Prism from the browser global during lazy loading.
+Prism.manual = true;
+Object.assign(globalThis, { Prism });
 
 const ASTRYX_MESSAGES: MessagesByLocale = { "zh-CN": zhCN };
 const THEME_STORAGE_KEY = "leiblog-theme";

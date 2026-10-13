@@ -17,5 +17,6 @@ bash "$project_dir/deploy/test-script.sh"
   bun run check
   bun run test --run
   bun run build
+  bun run test:production
   bun audit
 )

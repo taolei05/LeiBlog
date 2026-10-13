@@ -1,10 +1,10 @@
 import { mkdir } from "node:fs/promises";
 
 import { cors } from "@elysiajs/cors";
-import { staticPlugin } from "@elysiajs/static";
 import { Elysia } from "elysia";
 
 import { adminRoutes } from "./admin/routes";
+import { createMediaFileRoutes } from "./admin/media/public-routes";
 import { applyAdminCookieAuthentication } from "./admin/auth/cookie";
 import { blogRoutes } from "./blog/routes";
 import { altchaRoutes } from "./shared/altcha-routes";
@@ -42,11 +42,7 @@ export const createApp = () => {
     .onTransform({ as: "global" }, applyAdminCookieAuthentication)
     .get("/", () => ({ ok: true, service: "LeiBlog server" }))
     .use(
-      staticPlugin({
-        assets: env.uploadsDir,
-        prefix: env.uploadsUrlPrefix,
-        silent: true,
-      }),
+      createMediaFileRoutes({ root: env.uploadsDir, prefix: env.uploadsUrlPrefix }),
     )
     .use(healthRoutes)
     .use(altchaRoutes)

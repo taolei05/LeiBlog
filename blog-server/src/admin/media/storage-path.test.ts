@@ -9,6 +9,7 @@ import {
   resolveSafeMediaStoragePath,
 } from "./storage-path";
 import { buildR2ObjectUrl, deleteR2Object, getR2Object, putR2Object } from "./r2-storage";
+import { createMediaFileRoutes } from "./public-routes";
 
 let fixtureRoot = "";
 beforeEach(async () => {
@@ -60,6 +61,42 @@ test("rejects symlinked directories, files, and the uploads root", async () => {
   await expect(
     resolveSafeMediaStoragePath({ root: join(fixtureRoot, "root-link"), storageKey: "new.txt" }),
   ).rejects.toThrow();
+});
+
+test("serves uploads created after startup and stops serving them after deletion", async () => {
+  const app = createMediaFileRoutes({ root: fixtureRoot, prefix: "/uploads" }).compile();
+  const request = () => new Request("http://localhost/uploads/media/2026/10/new.txt");
+  const missing = await app.handle(request());
+  expect(missing.status).toBe(404);
+  expect(missing.headers.get("cache-control")).toBe("no-store");
+  const directory = join(fixtureRoot, "media", "2026", "10");
+  await mkdir(directory, { recursive: true });
+  const filePath = join(directory, "new.txt");
+  await writeFile(filePath, "uploaded after startup");
+  const response = await app.handle(request());
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe("uploaded after startup");
+  const head = await app.handle(new Request(request(), { method: "HEAD" }));
+  expect(head.status).toBe(200);
+  expect(await head.text()).toBe("");
+  await rm(filePath);
+  expect((await app.handle(request())).status).toBe(404);
+});
+
+test("public upload routes reject hidden files, directories, traversal and symbolic links", async () => {
+  const uploads = join(fixtureRoot, "uploads");
+  const outside = join(fixtureRoot, "private.txt");
+  await mkdir(uploads);
+  await writeFile(outside, "private fixture");
+  await mkdir(join(uploads, "directory"));
+  await writeFile(join(uploads, ".env"), "private fixture");
+  await symlink(outside, join(uploads, "linked.txt"));
+  const app = createMediaFileRoutes({ root: uploads, prefix: "/uploads" });
+  for (const path of [".env", "linked.txt", "%252e%252e/private.txt", "%2e%2e/private.txt", "missing", "directory"]) {
+    const response = await app.handle(new Request(`http://localhost/uploads/${path}`));
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain("private fixture");
+  }
 });
 
 const settings = {
