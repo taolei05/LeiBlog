@@ -17,7 +17,11 @@ cleanup() {
 }
 trap cleanup EXIT
 umask 077
-ln -s "$root" "$temporary/source"
+mkdir "$temporary/source"
+# Match the restrictive permissions used by the production source downloader.
+tar --exclude=node_modules --exclude=dist --exclude=.git --exclude=.sl --exclude=.env --exclude='.env.*' --exclude=uploads --exclude=output --exclude=coverage --exclude='.DS_Store' \
+  -cf - -C "$root" . | tar -xf - -C "$temporary/source"
+[[ "$(stat -c '%a' "$temporary/source/blog-server/package.json" 2>/dev/null || stat -f '%Lp' "$temporary/source/blog-server/package.json")" == 600 ]]
 mkdir "$temporary/uploads"
 chmod 777 "$temporary/uploads"
 cp "$root/deploy/compose.production.yml" "$temporary/docker-compose.yml"
@@ -71,6 +75,7 @@ compose exec -T api bun -e 'import {runMigrations} from "./src/shared/db/migrate
 count="$(compose exec -T postgres psql -U leiblog_test -d leiblog_test_production -Atc "SELECT count(*) FROM users WHERE role='admin'")"
 [[ "$count" == 1 ]]
 compose exec -T api bun -e 'import {env} from "./src/shared/env.ts"; if(env.publicSiteUrl!=="https://blog.example.test" || process.getuid()!==1000)process.exit(1);'
+compose exec -T api bun -e 'const p=JSON.parse(await Bun.file("/app/package.json").text()); if(typeof p.scripts?.start!=="string")process.exit(1);'
 asset="$(printf '%s' "$admin" | sed -n 's/.*src="\(\/assets\/[^"]*\.js\)".*/\1/p' | head -1)"
 [[ -n "$asset" ]]
 request --head "$url$asset" | grep -qi 'immutable'

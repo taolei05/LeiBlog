@@ -2,7 +2,7 @@ FROM oven/bun:1.4.3
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
+COPY --chown=bun:bun package.json bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts
 
 COPY --chown=bun:bun src ./src
