@@ -8,6 +8,11 @@ cleanup() {
   local code=$?
   if [[ "$code" -ne 0 ]]; then compose logs --tail 80 api web >&2 || true; fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  # Restore tests create root-owned files; remove only this fixture through Docker.
+  if docker image inspect docker:cli >/dev/null 2>&1; then
+    docker run --rm --network none -v "$temporary:/cleanup" docker:cli \
+      sh -c 'rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?*' >/dev/null 2>&1 || true
+  fi
   rm -rf "$temporary"
 }
 trap cleanup EXIT
