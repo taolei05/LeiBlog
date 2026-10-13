@@ -1,3 +1,742 @@
 [popover="manual"][role="region"]:has(.astryx-toast) {
   align-items: center !important;
 }
+
+.admin-form-dialog {
+  width: 100%;
+  max-height: 90dvh;
+}
+
+.admin-form-dialog__header {
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  padding: 20px 24px 16px;
+}
+
+.admin-form-dialog__title {
+  min-width: 0;
+}
+
+.admin-form-dialog__body {
+  overflow: auto;
+  padding: 20px 24px;
+}
+
+.admin-form-dialog__footer {
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  padding: 14px 24px 16px;
+}
+
+.admin-list-actions-menu[role="menu"] [role="menuitem"] {
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+}
+
+.admin-list-actions-menu[role="menu"] [role="menuitem"] > span {
+  flex: 0 0 auto;
+}
+
+.admin-list-actions-menu[role="menu"] [role="menuitem"] > span:last-child {
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+}
+
+.navigation-admin-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.navigation-admin-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.navigation-admin-group,
+.navigation-admin-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, Canvas 92%, currentColor 2%);
+}
+
+.navigation-admin-group {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 8px;
+}
+
+.navigation-admin-group.is-selected {
+  border-color: color-mix(in srgb, #7d114c 45%, transparent);
+  background: color-mix(in srgb, #7d114c 7%, Canvas);
+}
+
+.navigation-admin-group__main {
+  min-width: 0;
+  width: 100%;
+}
+
+.navigation-admin-group__main strong,
+.navigation-admin-item__content strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-admin-group__main small {
+  display: block;
+  overflow: hidden;
+  color: color-mix(in srgb, currentColor 58%, transparent);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-admin-group__main span,
+.navigation-admin-item__content span {
+  display: block;
+  overflow: hidden;
+  color: color-mix(in srgb, currentColor 64%, transparent);
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navigation-admin-group__actions,
+.navigation-admin-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.navigation-admin-group-form,
+.navigation-admin-item-form {
+  width: 100%;
+}
+
+.navigation-admin-item {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 10px;
+}
+
+.navigation-admin-item__content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.navigation-admin-item__actions {
+  justify-content: flex-end;
+}
+
+.navigation-admin-item__link {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.navigation-admin-item__link:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.mdxeditor,
+.mdxeditor-popup-container {
+  --accentBase: var(--color-background-surface, Canvas);
+  --accentBgSubtle: color-mix(in srgb, #ec4899 8%, var(--color-background-surface, Canvas));
+  --accentBg: color-mix(in srgb, #ec4899 10%, var(--color-background-surface, Canvas));
+  --accentBgHover: color-mix(in srgb, #ec4899 14%, var(--color-background-surface, Canvas));
+  --accentBgActive: color-mix(in srgb, #ec4899 18%, var(--color-background-surface, Canvas));
+  --accentLine: color-mix(in srgb, #ec4899 24%, transparent);
+  --accentBorder: #ec4899;
+  --accentBorderHover: #db2777;
+  --accentSolid: #ec4899;
+  --accentSolidHover: #db2777;
+  --accentText: #9d174d;
+  --accentTextContrast: var(--color-on-dark, #ffffff);
+  --baseBase: var(--color-background-surface, Canvas);
+  --baseBgSubtle: color-mix(
+    in srgb,
+    var(--color-background-surface, Canvas) 94%,
+    var(--color-text-primary, CanvasText) 3%
+  );
+  --baseBg: color-mix(
+    in srgb,
+    var(--color-background-surface, Canvas) 91%,
+    var(--color-text-primary, CanvasText) 6%
+  );
+  --baseBgHover: color-mix(
+    in srgb,
+    var(--color-background-surface, Canvas) 86%,
+    var(--color-text-primary, CanvasText) 10%
+  );
+  --baseBgActive: color-mix(
+    in srgb,
+    var(--color-background-surface, Canvas) 80%,
+    var(--color-text-primary, CanvasText) 14%
+  );
+  --baseLine: var(--color-border, color-mix(in srgb, CanvasText 10%, transparent));
+  --baseBorder: var(--color-border, color-mix(in srgb, CanvasText 14%, transparent));
+  --baseBorderHover: var(
+    --color-border-emphasized,
+    color-mix(in srgb, CanvasText 24%, transparent)
+  );
+  --baseSolid: var(--color-text-primary, CanvasText);
+  --baseSolidHover: var(--color-text-secondary, CanvasText);
+  --baseText: var(--color-text-secondary, CanvasText);
+  --baseTextContrast: var(--color-text-primary, CanvasText);
+  --basePageBg: var(--color-background-card, Canvas);
+  --basePanelBg: var(--color-background-popover, Canvas);
+  color: var(--color-text-primary, CanvasText);
+  font-family: inherit;
+}
+
+.mdx-editor-field {
+  min-width: 0;
+}
+
+.mdx-editor-field.is-read-only .mdx-editor-field__editor {
+  pointer-events: none;
+}
+
+.mdx-editor-field__editor {
+  overflow: hidden;
+  border: 1px solid var(--color-border, color-mix(in srgb, CanvasText 13%, transparent));
+  border-radius: 8px;
+  background: var(--color-background-card, Canvas);
+}
+
+.mdx-editor-field__toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border, color-mix(in srgb, CanvasText 10%, transparent));
+  background: var(--baseBg);
+  color: var(--color-text-primary, CanvasText);
+  padding: 6px;
+}
+
+.mdx-editor-field__toolbar > *,
+.mdx-editor-field__toolbar [role="group"],
+.mdx-editor-field__toolbar [role="toolbar"] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.mdx-editor-field__toolbar button,
+.mdx-editor-field__toolbar [role="button"],
+.mdx-editor-field__toolbar [role="radio"] {
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--color-text-primary, CanvasText);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mdx-editor-field__toolbar button:hover,
+.mdx-editor-field__toolbar [role="button"]:hover,
+.mdx-editor-field__toolbar [role="radio"]:hover {
+  background: var(--baseBgHover);
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-editor-field__toolbar [data-state="on"],
+.mdx-editor-field__toolbar [aria-checked="true"],
+.mdx-editor-field__toolbar [aria-pressed="true"] {
+  background: var(--baseBgActive);
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-editor-field__toolbar [role="separator"] {
+  width: 1px;
+  height: 24px;
+  flex: 0 0 1px;
+  background: var(--color-border, color-mix(in srgb, CanvasText 12%, transparent));
+}
+
+.mdx-editor-field__toolbar svg {
+  display: block;
+  color: currentColor;
+  stroke: currentColor;
+}
+
+.mdx-editor-field__toolbar [class*="selectTrigger"],
+.mdx-editor-field__toolbar [class*="toolbarButtonSelectTrigger"] {
+  background: var(--color-background-card, Canvas);
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-editor-field__toolbar [class*="diffSourceToggle"],
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] button,
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [role="button"],
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [role="radio"] {
+  background: transparent;
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] button:hover,
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [role="button"]:hover,
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [role="radio"]:hover {
+  background: transparent;
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [data-state="on"],
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [aria-checked="true"],
+.mdx-editor-field__toolbar [class*="diffSourceToggle"] [aria-pressed="true"] {
+  background: transparent;
+  color: var(--accentText);
+}
+
+.mdxeditor-popup-container {
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdxeditor-popup-container [role="option"],
+.mdxeditor-popup-container [role="menuitem"],
+.mdxeditor-popup-container [cmdk-item] {
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-editor-field__content {
+  min-height: 352px;
+  color: var(--color-text-primary, CanvasText);
+  font-family: inherit;
+  line-height: 1.75;
+  padding: 16px;
+}
+
+.mdx-editor-field__content img {
+  max-width: 100%;
+  height: auto;
+}
+
+.mdx-editor-field .cm-editor {
+  background: var(--color-background-card, Canvas);
+  color: var(--color-text-primary, CanvasText);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.92rem;
+}
+
+.mdx-editor-field .cm-gutters {
+  background: var(--baseBgSubtle);
+  color: var(--color-text-secondary, CanvasText);
+}
+
+.mdx-image-dialog {
+  min-width: 0;
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-image-dialog__header,
+.mdx-image-dialog__body,
+.mdx-image-dialog__footer {
+  padding-inline: 20px;
+}
+
+.mdx-image-dialog__header {
+  border-bottom: 1px solid var(--color-border, color-mix(in srgb, CanvasText 10%, transparent));
+  padding-block: 18px 16px;
+}
+
+.mdx-image-dialog__title {
+  min-width: 0;
+}
+
+.mdx-image-dialog__body {
+  max-height: min(640px, calc(100dvh - 196px));
+  overflow-y: auto;
+  padding-block: 18px;
+}
+
+.mdx-image-dialog__footer {
+  border-top: 1px solid var(--color-border, color-mix(in srgb, CanvasText 10%, transparent));
+  padding-block: 14px 18px;
+}
+
+.mdx-image-dialog__upload-panel,
+.mdx-image-dialog__preview {
+  border: 1px solid var(--color-border, color-mix(in srgb, CanvasText 12%, transparent));
+  border-radius: 8px;
+  background: var(--color-background-card, Canvas);
+}
+
+.mdx-image-dialog__upload-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.mdx-image-dialog__upload-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mdx-image-dialog__file-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.mdx-image-dialog__file-input {
+  display: none;
+}
+
+.mdx-image-dialog__file-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--color-text-secondary, CanvasText);
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdx-image-dialog__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mdx-image-dialog__field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--color-text-primary, CanvasText);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.mdx-image-dialog__field > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.mdx-image-dialog__field--wide {
+  grid-column: 1 / -1;
+}
+
+.mdx-image-dialog__input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--color-border, color-mix(in srgb, CanvasText 14%, transparent));
+  border-radius: 8px;
+  background: var(--color-background-card, Canvas);
+  color: var(--color-text-primary, CanvasText);
+  font: inherit;
+  font-weight: 400;
+  outline: none;
+  padding: 0 10px;
+}
+
+.mdx-image-dialog__input::placeholder {
+  color: var(--color-text-tertiary, color-mix(in srgb, CanvasText 42%, transparent));
+}
+
+.mdx-image-dialog__input:focus {
+  border-color: #ec4899;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #ec4899 18%, transparent);
+}
+
+.mdx-image-dialog__preview {
+  display: grid;
+  min-height: 132px;
+  place-items: center;
+  gap: 10px;
+  padding: 14px;
+  text-align: center;
+}
+
+.mdx-image-dialog__preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.mdx-link-dialog {
+  min-width: 0;
+  color: var(--color-text-primary, CanvasText);
+}
+
+.mdx-link-dialog__header,
+.mdx-link-dialog__body,
+.mdx-link-dialog__footer {
+  padding-inline: 20px;
+}
+
+.mdx-link-dialog__header {
+  border-bottom: 1px solid var(--color-border, color-mix(in srgb, CanvasText 10%, transparent));
+  padding-block: 18px 16px;
+}
+
+.mdx-link-dialog__title {
+  min-width: 0;
+}
+
+.mdx-link-dialog__body {
+  padding-block: 18px;
+}
+
+.mdx-link-dialog__footer {
+  border-top: 1px solid var(--color-border, color-mix(in srgb, CanvasText 10%, transparent));
+  padding-block: 14px 18px;
+}
+
+.mdx-link-dialog__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mdx-link-dialog__field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--color-text-primary, CanvasText);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.mdx-link-dialog__field--wide {
+  grid-column: 1 / -1;
+}
+
+.mdx-link-dialog__input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--color-border, color-mix(in srgb, CanvasText 14%, transparent));
+  border-radius: 8px;
+  background: var(--color-background-card, Canvas);
+  color: var(--color-text-primary, CanvasText);
+  font: inherit;
+  font-weight: 400;
+  outline: none;
+  padding: 0 10px;
+}
+
+.mdx-link-dialog__input::placeholder {
+  color: var(--color-text-tertiary, color-mix(in srgb, CanvasText 42%, transparent));
+}
+
+.mdx-link-dialog__input:focus {
+  border-color: #ec4899;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #ec4899 18%, transparent);
+}
+
+.mdx-link-dialog__preview {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--color-border, color-mix(in srgb, CanvasText 12%, transparent));
+  border-radius: 8px;
+  background: var(--color-background-card, Canvas);
+  padding: 14px;
+}
+
+.mdx-link-dialog__preview a,
+.mdx-link-preview-popover__link {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: #9d174d;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.mdx-link-dialog__preview a span,
+.mdx-link-preview-popover__link span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mdx-link-preview-popover {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  max-width: min(520px, calc(100vw - 24px));
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--color-border, color-mix(in srgb, CanvasText 12%, transparent));
+  border-radius: 10px;
+  background: var(--color-background-card, Canvas);
+  box-shadow: 0 16px 36px color-mix(in srgb, #111827 18%, transparent);
+  color: var(--color-text-primary, CanvasText);
+  padding: 8px 10px;
+}
+
+.mdx-link-preview-popover__link {
+  flex: 1 1 auto;
+  font-size: 0.875rem;
+}
+
+.mdx-jsx-component-editor {
+  border: 1px dashed color-mix(in srgb, #ec4899 45%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #ec4899 7%, Canvas);
+  padding: 12px;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .admin-form-dialog__header {
+    padding: 16px 16px 14px;
+  }
+
+  .admin-form-dialog__body {
+    padding: 16px;
+  }
+
+  .admin-form-dialog__footer {
+    padding: 12px 16px 16px;
+  }
+
+  .navigation-admin-summary,
+  .navigation-admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation-admin-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .navigation-admin-item__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .mdx-editor-field__content {
+    min-height: 280px;
+    padding: 12px;
+  }
+
+  .mdx-image-dialog__header,
+  .mdx-image-dialog__body,
+  .mdx-image-dialog__footer {
+    padding-inline: 16px;
+  }
+
+  .mdx-image-dialog__body {
+    max-height: calc(100dvh - 180px);
+  }
+
+  .mdx-image-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mdx-image-dialog__file-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mdx-image-dialog__file-row > button {
+    width: 100%;
+  }
+
+  .mdx-link-dialog__header,
+  .mdx-link-dialog__body,
+  .mdx-link-dialog__footer {
+    padding-inline: 16px;
+  }
+
+  .mdx-link-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mdx-link-preview-popover {
+    left: 12px !important;
+    right: 12px;
+    max-width: none;
+  }
+}
+altcha-widget {
+  --altcha-border-color: var(--color-border-subtle);
+  --altcha-border-radius: 10px;
+  --altcha-color-base: var(--color-background-surface);
+  --altcha-color-base-content: var(--color-text-primary);
+  --altcha-color-primary: var(--color-text-primary);
+}
+
+.leiblog-altcha {
+  display: block;
+  width: 100%;
+}
+
+.leiblog-altcha altcha-widget {
+  display: block;
+  max-width: 100%;
+  width: 100%;
+}
+
+.leiblog-altcha-dialog {
+  display: grid;
+  gap: 18px;
+}
+
+.leiblog-altcha-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.leiblog-altcha-dialog__header > div {
+  min-width: 0;
+}
+
+.leiblog-altcha-dialog__close {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.leiblog-altcha-dialog__close:hover {
+  background: var(--color-background-subtle);
+  color: var(--color-text-primary);
+}
+
+.leiblog-altcha-dialog__challenge {
+  margin-top: 2px;
+}
+
+.leiblog-altcha-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+}

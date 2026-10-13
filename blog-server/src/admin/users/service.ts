@@ -79,8 +79,7 @@ export const MANAGED_USER_FAILURE = {
   UsernameExists: "username-exists",
 } as const;
 
-export type ManagedUserFailure =
-  (typeof MANAGED_USER_FAILURE)[keyof typeof MANAGED_USER_FAILURE];
+export type ManagedUserFailure = (typeof MANAGED_USER_FAILURE)[keyof typeof MANAGED_USER_FAILURE];
 
 export type ManagedUserMutationResult =
   | ManagedUserMutationSuccess
@@ -424,10 +423,7 @@ type ReadManagedUserCredentialParameters = {
   userId: string;
 };
 
-const readManagedUserCredential = async ({
-  sql,
-  userId,
-}: ReadManagedUserCredentialParameters) => {
+const readManagedUserCredential = async ({ sql, userId }: ReadManagedUserCredentialParameters) => {
   const rows = await sql<ManagedUserCredentialRow[]>`
     SELECT id, role, password_hash
     FROM users
@@ -459,7 +455,11 @@ const validateManagedUserInput = ({
     return MANAGED_USER_FAILURE.PasswordTooShort;
   }
 
-  if (!passwordRequired && input.password.length > 0 && input.password.length < MIN_PASSWORD_LENGTH) {
+  if (
+    !passwordRequired &&
+    input.password.length > 0 &&
+    input.password.length < MIN_PASSWORD_LENGTH
+  ) {
     return MANAGED_USER_FAILURE.PasswordTooShort;
   }
 
@@ -689,7 +689,20 @@ export const updateManagedUser = async ({
     }
 
     const passwordHash =
-      input.password.length > 0 ? await Bun.password.hash(input.password) : currentUser.passwordHash;
+      input.password.length > 0
+        ? await Bun.password.hash(input.password)
+        : currentUser.passwordHash;
+
+    const credentialsChanged = input.password.length > 0 || input.role !== currentUser.role;
+    if (credentialsChanged) {
+      shouldClearAdminSessions = true;
+      await transaction`
+        UPDATE auth_sessions
+        SET revoked_at = now()
+        WHERE user_id = ${userId}
+          AND revoked_at IS NULL
+      `;
+    }
 
     await transaction`
       UPDATE users

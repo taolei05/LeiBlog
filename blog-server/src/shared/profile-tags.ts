@@ -14,8 +14,7 @@ export const USER_PROFILE_TRANSLATION_STATUS = {
 export type UserProfileTranslationStatus =
   (typeof USER_PROFILE_TRANSLATION_STATUS)[keyof typeof USER_PROFILE_TRANSLATION_STATUS];
 export const USER_PROFILE_TRANSLATION_FIELDS = ["name", "bio", "tags"] as const;
-export type UserProfileTranslationField =
-  (typeof USER_PROFILE_TRANSLATION_FIELDS)[number];
+export type UserProfileTranslationField = (typeof USER_PROFILE_TRANSLATION_FIELDS)[number];
 
 export const PROFILE_TAG_LOCALES = USER_PROFILE_LOCALES;
 export type ProfileTagLocale = UserProfileLocale;
@@ -84,13 +83,21 @@ type TranslatableUserProfileItem =
     }
   | {
       kind: "tag";
+      index?: number;
       value: string;
     };
 
-const createTranslatableTagItem = (value: string): TranslatableUserProfileItem => ({
-  kind: "tag",
-  value,
-});
+const createTranslatableTagItem = (value: string, index?: number): TranslatableUserProfileItem =>
+  index === undefined
+    ? {
+        kind: "tag",
+        value,
+      }
+    : {
+        index,
+        kind: "tag",
+        value,
+      };
 
 const createEmptyUserProfile = (): UserProfileContent => ({
   name: "",
@@ -98,9 +105,7 @@ const createEmptyUserProfile = (): UserProfileContent => ({
   tags: [],
 });
 
-export const normalizeProfileTagLocale = (
-  locale?: string | null,
-): UserProfileLocale => {
+export const normalizeProfileTagLocale = (locale?: string | null): UserProfileLocale => {
   if (locale === undefined || locale === null) {
     return DEFAULT_USER_PROFILE_LOCALE;
   }
@@ -123,9 +128,8 @@ export const normalizeProfileTagLabels = (values: string[]) => {
   }, []);
 };
 
-export const getOppositeProfileTagLocale = (
-  locale: UserProfileLocale,
-): UserProfileLocale => (locale === "zh-CN" ? "en" : "zh-CN");
+export const getOppositeProfileTagLocale = (locale: UserProfileLocale): UserProfileLocale =>
+  locale === "zh-CN" ? "en" : "zh-CN";
 
 type ToDeepLLanguageCodeParameters = {
   locale: UserProfileLocale;
@@ -186,6 +190,7 @@ export const translateTexts = async ({
 
   try {
     const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(10_000),
       method: "POST",
       headers: {
         Authorization: `DeepL-Auth-Key ${apiKey}`,
@@ -265,9 +270,7 @@ const createUserProfileTranslationSummary = ({
     }
   }
 
-  const missingFields = requestedFields.filter(
-    (field) => !completedFields.includes(field),
-  );
+  const missingFields = requestedFields.filter((field) => !completedFields.includes(field));
   const status =
     requestedFields.length === 0
       ? USER_PROFILE_TRANSLATION_STATUS.NotNeeded
@@ -304,9 +307,7 @@ export const prepareUserProfileInput = async ({
   const nameItem: TranslatableUserProfileItem = { kind: "name", value: source.name };
   const bioItem: TranslatableUserProfileItem = { kind: "bio", value: source.bio };
   const tagItems = source.tags.map(createTranslatableTagItem);
-  const items = [nameItem, bioItem, ...tagItems].filter(
-    (item) => item.value.length > 0,
-  );
+  const items = [nameItem, bioItem, ...tagItems].filter((item) => item.value.length > 0);
   const translations =
     apiKey === undefined || apiKey.length === 0
       ? []
@@ -385,18 +386,18 @@ export const resolveUserProfileWrite = ({
     return {
       base: toWritableUserProfile(source),
       english: toWritableUserProfile({
-        name: source.name.length > 0 ? target.name ?? currentEnglish.name : "",
-        bio: source.bio.length > 0 ? target.bio ?? currentEnglish.bio : "",
-        tags: source.tags.length > 0 ? target.tags ?? currentEnglish.tags : [],
+        name: source.name.length > 0 ? (target.name ?? currentEnglish.name) : "",
+        bio: source.bio.length > 0 ? (target.bio ?? currentEnglish.bio) : "",
+        tags: source.tags.length > 0 ? (target.tags ?? currentEnglish.tags) : [],
       }),
     };
   }
 
   return {
     base: toWritableUserProfile({
-      name: source.name.length > 0 ? target.name ?? currentBase.name : "",
-      bio: source.bio.length > 0 ? target.bio ?? currentBase.bio : "",
-      tags: source.tags.length > 0 ? target.tags ?? currentBase.tags : [],
+      name: source.name.length > 0 ? (target.name ?? currentBase.name) : "",
+      bio: source.bio.length > 0 ? (target.bio ?? currentBase.bio) : "",
+      tags: source.tags.length > 0 ? (target.tags ?? currentBase.tags) : [],
     }),
     english: toWritableUserProfile(source),
   };
@@ -444,9 +445,20 @@ const translateMissingProfileFields = async ({
     items.push({ kind: "bio", value: source.bio });
   }
 
-  if (source.tags.length > 0 && target.tags.length === 0) {
+  const missingTagItems = source.tags.reduce<TranslatableUserProfileItem[]>(
+    (tagItems, tag, index) => {
+      if ((target.tags[index]?.trim() ?? "").length > 0) {
+        return tagItems;
+      }
+
+      return [...tagItems, createTranslatableTagItem(tag, index)];
+    },
+    [],
+  );
+
+  if (missingTagItems.length > 0) {
     requestedFields.push("tags");
-    items.push(...source.tags.map(createTranslatableTagItem));
+    items.push(...missingTagItems);
   }
 
   const translations =
@@ -462,7 +474,7 @@ const translateMissingProfileFields = async ({
     ...target,
     tags: [...target.tags],
   };
-  const translatedTags: string[] = [];
+  const translatedTags: Array<{ index?: number; value: string }> = [];
   let translatedTagCount = 0;
 
   for (const [index, item] of items.entries()) {
@@ -482,12 +494,26 @@ const translateMissingProfileFields = async ({
     }
 
     translatedTagCount += 1;
-    translatedTags.push(translatedText);
+    translatedTags.push({
+      index: item.index,
+      value: translatedText,
+    });
   }
 
-  const normalizedTranslatedTags = normalizeProfileTagLabels(translatedTags);
-  if (normalizedTranslatedTags.length > 0) {
-    nextTarget.tags = normalizedTranslatedTags;
+  if (translatedTags.length > 0) {
+    const nextTags = [...nextTarget.tags];
+    const appendedTags: string[] = [];
+
+    for (const tag of translatedTags) {
+      if (tag.index === undefined) {
+        appendedTags.push(tag.value);
+        continue;
+      }
+
+      nextTags[tag.index] = tag.value;
+    }
+
+    nextTarget.tags = normalizeProfileTagLabels([...nextTags, ...appendedTags]);
   }
 
   const completedFields = requestedFields.filter((field) => {
@@ -499,7 +525,7 @@ const translateMissingProfileFields = async ({
       return nextTarget.bio.length > 0;
     }
 
-    return translatedTagCount >= source.tags.length;
+    return translatedTagCount >= missingTagItems.length;
   });
 
   return {
@@ -532,9 +558,7 @@ const createBilingualProfileTranslationSummary = ({
   const completedFields = uniqueTranslationFields(
     directions.flatMap((direction) => direction.completedFields),
   );
-  const missingFields = requestedFields.filter(
-    (field) => !completedFields.includes(field),
-  );
+  const missingFields = requestedFields.filter((field) => !completedFields.includes(field));
   const requestedDirections = directions.filter(
     (direction) => direction.requestedFields.length > 0,
   );
@@ -692,10 +716,7 @@ type PickLocalizedTextParameters = {
   preferred: string | null;
 };
 
-const pickLocalizedText = ({
-  fallback,
-  preferred,
-}: PickLocalizedTextParameters) => {
+const pickLocalizedText = ({ fallback, preferred }: PickLocalizedTextParameters) => {
   const trimmedPreferred = preferred?.trim() ?? "";
   if (trimmedPreferred.length > 0) {
     return trimmedPreferred;

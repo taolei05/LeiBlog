@@ -1,14 +1,12 @@
 import { jwt } from "@elysiajs/jwt";
+import { createAdminAuthResponse, setAdminSessionCookie } from "../auth/cookie";
 import { Elysia, status, t } from "elysia";
 
 import { createAdminSession } from "../auth/service";
 import { USER_ROLE } from "../auth/types";
 import { env } from "../../shared/env";
-import {
-  completeInitialSetup,
-  getAdminSetupStatus,
-  INITIAL_SETUP_FAILURE,
-} from "./service";
+import { completeInitialSetup, getAdminSetupStatus, INITIAL_SETUP_FAILURE } from "./service";
+import { MEDIA_LIBRARY_FAILURE, MediaLibraryError, uploadMediaAsset } from "../media/service";
 
 const socialLinkSchema = t.Object({
   label: t.String(),
@@ -44,6 +42,7 @@ const initialSetupSchema = t.Object({
     lightLogoUrl: t.String(),
     darkLogoUrl: t.String(),
     faviconUrl: t.String(),
+    timeZone: t.String({ minLength: 1 }),
   }),
   basics: t.Object({
     seoTitle: t.String(),
@@ -63,6 +62,12 @@ const initialSetupSchema = t.Object({
   }),
 });
 
+const createSetupMediaFailureResponse = (error: MediaLibraryError) => {
+  const code = error.reason === MEDIA_LIBRARY_FAILURE.FolderNotFound ? 404 : 400;
+
+  return status(code, { message: error.message, reason: error.reason });
+};
+
 export const adminSetupRoutes = new Elysia({ prefix: "/api/admin/setup" })
   .use(
     jwt({
@@ -77,19 +82,47 @@ export const adminSetupRoutes = new Elysia({ prefix: "/api/admin/setup" })
       }),
     }),
   )
-  .get(
-    "/status",
-    async () => getAdminSetupStatus(),
+  .get("/status", async () => getAdminSetupStatus(), {
+    response: t.Object({
+      hasAdmin: t.Boolean(),
+      requiresSetup: t.Boolean(),
+    }),
+  })
+  .post(
+    "/media",
+    async ({ body }) => {
+      const setupStatus = await getAdminSetupStatus();
+      if (!setupStatus.requiresSetup) {
+        return status(409, { message: "Initial setup is already complete." });
+      }
+
+      try {
+        const item = await uploadMediaAsset({
+          file: body.file,
+          fileName: body.fileName,
+          folderSlug: body.folderSlug,
+        });
+
+        return { item, ok: true };
+      } catch (error) {
+        if (error instanceof MediaLibraryError) {
+          return createSetupMediaFailureResponse(error);
+        }
+
+        throw error;
+      }
+    },
     {
-      response: t.Object({
-        hasAdmin: t.Boolean(),
-        requiresSetup: t.Boolean(),
+      body: t.Object({
+        file: t.File(),
+        fileName: t.Optional(t.String({ maxLength: 255 })),
+        folderSlug: t.Optional(t.String({ maxLength: 100 })),
       }),
     },
   )
   .post(
     "/initial",
-    async ({ body, jwt }) => {
+    async ({ body, cookie, jwt, request }) => {
       const result = await completeInitialSetup(body);
       if (!result.ok) {
         if (result.reason === INITIAL_SETUP_FAILURE.AdminExists) {
@@ -110,8 +143,8 @@ export const adminSetupRoutes = new Elysia({ prefix: "/api/admin/setup" })
         username: result.user.username,
         role: USER_ROLE.Admin,
       });
-
-      return { token, user: result.user };
+      setAdminSessionCookie(cookie, token);
+      return createAdminAuthResponse({ request, token, user: result.user });
     },
     {
       body: initialSetupSchema,

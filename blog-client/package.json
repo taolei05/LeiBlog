@@ -8,19 +8,27 @@
     "dev:blog": "vp dev --host 0.0.0.0",
     "dev:admin": "vp dev --host 0.0.0.0",
     "build": "tsc && vp build",
-    "check": "vp check --fix",
+    "check": "vp check",
+    "check:fix": "vp check --fix",
     "preview": "vp preview",
     "test": "vp test",
     "prepare": "vp config"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.6.2",
+    "@date-fns/tz": "^1.5.0",
+    "@mdx-js/react": "^3.1.1",
+    "@mdxeditor/editor": "4.0.0",
     "@stylexjs/stylex": "^0.19.1",
+    "altcha": "^3.3.0",
+    "date-fns": "^4.4.0",
+    "emoji-picker-react": "^4.19.1",
     "i18next": "^26.4.2",
     "lucide-react": "^1.47.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-i18next": "^17.0.14"
+    "react-i18next": "^17.0.14",
+    "react-photo-view": "^1.2.7"
   },
   "devDependencies": {
     "@astryxdesign/cli": "^0.6.2",
@@ -31,6 +39,8 @@
     "vite-plus": "0.3.3"
   },
   "overrides": {
+    "js-yaml": "4.3.2",
+    "source-map-js": "1.2.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3"
   },
   "devEngines": {

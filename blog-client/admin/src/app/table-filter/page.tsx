@@ -22,6 +22,7 @@ import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge } from "@astryxdesign/core/Badge";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
+import { CheckboxInput } from "@astryxdesign/core/CheckboxInput";
 import { Dialog } from "@astryxdesign/core/Dialog";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { FormLayout } from "@astryxdesign/core/FormLayout";
@@ -53,6 +54,7 @@ import {
   createAdminFeedbackBanner,
 } from "../components/admin-feedback-banner";
 import type { AdminFeedbackBannerState } from "../components/admin-feedback-banner";
+import { AdminActionTooltip } from "../components/admin-action-tooltip";
 import type {
   AdminProfileLocalizations,
   AdminProfileTranslation,
@@ -66,19 +68,15 @@ import {
   deleteManagedUser,
   getManagedUser,
   getManagedUsers,
+  resolveAdminAssetUrl,
   updateManagedUser,
 } from "../../../../shared/admin-api";
 import type { AppLanguage } from "../../../../shared/i18n";
 import { normalizeLanguage } from "../../../../shared/i18n";
+import { formatDateTimeInTimeZone } from "../../../../shared/time-zone";
 
 type UserRoleFilter = "all" | ManagedUserRole;
-type UserSortKey =
-  | "displayName"
-  | "role"
-  | "tags"
-  | "notifications"
-  | "createdAt"
-  | "updatedAt";
+type UserSortKey = "displayName" | "role" | "tags" | "notifications" | "createdAt" | "updatedAt";
 type UserTableRow = ManagedUser & Record<string, unknown>;
 type UserFormMode = "create" | "edit";
 type UserFormField =
@@ -98,6 +96,7 @@ type UserTagItemData = {
   __createdValue?: string;
 };
 type UserTagItem = SearchableItem<UserTagItemData>;
+type BulkDeleteResult = { ok: true } | { error: unknown; ok: false };
 
 type UserFormState = {
   mode: UserFormMode;
@@ -121,6 +120,7 @@ type UserFormState = {
 type UsersManagementPageProps = {
   authToken: string;
   isNarrow: boolean;
+  timeZone: string;
 };
 
 const USER_ROLE_FILTERS: UserRoleFilter[] = ["all", "admin", "user"];
@@ -182,7 +182,8 @@ const tableViewportStyle: CSSProperties = {
 };
 
 const contentAdaptiveTableStyle: CSSProperties = {
-  width: "max-content",
+  minWidth: "max-content",
+  width: "100%",
 };
 
 const tableFooterStyle: CSSProperties = {
@@ -209,8 +210,15 @@ const summaryValueStyle: CSSProperties = {
 };
 
 const actionsCellStyle: CSSProperties = {
+  alignItems: "center",
   display: "flex",
   justifyContent: "center",
+  width: "100%",
+};
+
+const selectionToolbarStyle: CSSProperties = {
+  borderBottom: "1px solid var(--color-border)",
+  padding: 12,
 };
 
 const dialogHeaderTitleStyle: CSSProperties = {
@@ -301,6 +309,19 @@ const isValidUrl = (value: string) => {
   }
 };
 
+const isValidMediaAssetUrl = (value: string) => {
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return true;
+  }
+
+  if (trimmedValue.startsWith("/uploads/")) {
+    return true;
+  }
+
+  return isValidUrl(trimmedValue);
+};
+
 type CreateEmptyFormStateParameters = {
   mode: UserFormMode;
 };
@@ -376,18 +397,13 @@ const getLocalizedTags = ({ language, user }: GetLocalizedTagsParameters) => {
 };
 
 type FormatDateTimeParameters = {
-  formatter: Intl.DateTimeFormat;
+  language: string;
+  timeZone: string;
   value: string;
 };
 
-const formatDateTime = ({ formatter, value }: FormatDateTimeParameters) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return formatter.format(date);
-};
+const formatDateTime = ({ language, timeZone, value }: FormatDateTimeParameters) =>
+  formatDateTimeInTimeZone({ language, timeZone, value });
 
 const compareDate = (left: string, right: string) =>
   new Date(left).getTime() - new Date(right).getTime();
@@ -505,9 +521,10 @@ const UserActionsCell = ({ isNarrow, onDelete, onEdit }: UserActionsCellProps) =
     return (
       <div style={actionsCellStyle}>
         <MoreMenu
-          label={t("admin.userManagement.actions")}
-          icon={<MoreHorizontal size={16} />}
           alignment="end"
+          className="admin-list-actions-menu"
+          icon={<MoreHorizontal size={16} />}
+          label={t("admin.userManagement.actions")}
           presentation="adaptive"
           items={[
             {
@@ -531,25 +548,29 @@ const UserActionsCell = ({ isNarrow, onDelete, onEdit }: UserActionsCellProps) =
 
   return (
     <HStack gap={1} hAlign="center" style={actionsCellStyle}>
-      <IconButton
-        label={t("admin.userManagement.edit")}
-        icon={<Pencil size={16} />}
-        variant="ghost"
-        size="sm"
-        onClick={onEdit}
-      />
-      <IconButton
-        label={t("admin.userManagement.delete")}
-        icon={<Trash2 size={16} />}
-        variant="ghost"
-        size="sm"
-        onClick={onDelete}
-      />
+      <AdminActionTooltip label={t("admin.userManagement.edit")}>
+        <IconButton
+          label={t("admin.userManagement.edit")}
+          icon={<Pencil size={16} />}
+          variant="ghost"
+          size="sm"
+          onClick={onEdit}
+        />
+      </AdminActionTooltip>
+      <AdminActionTooltip label={t("admin.userManagement.delete")}>
+        <IconButton
+          label={t("admin.userManagement.delete")}
+          icon={<Trash2 size={16} />}
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+        />
+      </AdminActionTooltip>
     </HStack>
   );
 };
 
-export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPageProps) {
+export function UsersManagementPage({ authToken, isNarrow, timeZone }: UsersManagementPageProps) {
   const { i18n, t } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
   const [usersData, setUsersData] = useState<UserManagementList>(EMPTY_USER_MANAGEMENT_LIST);
@@ -564,32 +585,26 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
   const [userForm, setUserForm] = useState<UserFormState>();
   const [attemptedSave, setAttemptedSave] = useState(false);
   const [deletingUser, setDeletingUser] = useState<ManagedUser>();
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [banner, setBanner] = useState<AdminFeedbackBannerState>();
-  const dateFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(language, {
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }),
-    [language],
-  );
   const collator = useMemo(
     () => new Intl.Collator(language, { numeric: true, sensitivity: "base" }),
     [language],
   );
 
-  const getUserManagementErrorMessage = useCallback((error: unknown, fallback: string) => {
-    const message = getErrorMessage(error, fallback);
-    const translationKey = USER_MANAGEMENT_ERROR_KEYS[message];
-    if (translationKey === undefined) {
-      return message;
-    }
+  const getUserManagementErrorMessage = useCallback(
+    (error: unknown, fallback: string) => {
+      const message = getErrorMessage(error, fallback);
+      const translationKey = USER_MANAGEMENT_ERROR_KEYS[message];
+      if (translationKey === undefined) {
+        return message;
+      }
 
-    return t(translationKey);
-  }, [t]);
+      return t(translationKey);
+    },
+    [t],
+  );
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -608,10 +623,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         setPage(nextUsersData.pageInfo.page);
       }
     } catch (error) {
-      const message = getUserManagementErrorMessage(
-        error,
-        t("admin.userManagement.loadFailed"),
-      );
+      const message = getUserManagementErrorMessage(error, t("admin.userManagement.loadFailed"));
       setBanner(
         createAdminFeedbackBanner({
           description: message,
@@ -652,10 +664,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
           return;
         }
 
-        const message = getUserManagementErrorMessage(
-          error,
-          t("admin.userManagement.loadFailed"),
-        );
+        const message = getUserManagementErrorMessage(error, t("admin.userManagement.loadFailed"));
         setBanner(
           createAdminFeedbackBanner({
             description: message,
@@ -707,6 +716,14 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
   });
   const sortablePlugin = useTableSortable<UserTableRow, UserSortKey>(sortConfig);
   const stickyColumnsPlugin = useTableStickyColumns<UserTableRow>({ endKeys: ["actions"] });
+  const selectedUsers = useMemo(
+    () => sortedData.filter((user) => selectedUserIds.has(user.id)),
+    [selectedUserIds, sortedData],
+  );
+  const selectedUserCount = selectedUsers.length;
+  const isAllVisibleUsersSelected =
+    sortedData.length > 0 && sortedData.every((user) => selectedUserIds.has(user.id));
+  const isVisibleUserSelectionIndeterminate = selectedUserCount > 0 && !isAllVisibleUsersSelected;
   const columnWidths = useMemo(() => {
     const notificationText = (user: UserTableRow) => {
       const notifications = [
@@ -729,7 +746,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         maxWidth: 190,
         minWidth: 150,
         values: sortedData.map((user) =>
-          formatDateTime({ formatter: dateFormatter, value: user.createdAt }),
+          formatDateTime({ language, timeZone, value: user.createdAt }),
         ),
       }),
       displayName: createAdaptiveColumnWidth({
@@ -738,8 +755,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         minWidth: 280,
         padding: 84,
         values: sortedData.map(
-          (user) =>
-            `${getDisplayName({ language, user })} @${user.username} / ${user.email}`,
+          (user) => `${getDisplayName({ language, user })} @${user.username} / ${user.email}`,
         ),
       }),
       notifications: createAdaptiveColumnWidth({
@@ -769,11 +785,59 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         maxWidth: 190,
         minWidth: 150,
         values: sortedData.map((user) =>
-          formatDateTime({ formatter: dateFormatter, value: user.updatedAt }),
+          formatDateTime({ language, timeZone, value: user.updatedAt }),
         ),
       }),
     };
-  }, [dateFormatter, language, sortedData, t]);
+  }, [language, sortedData, t, timeZone]);
+
+  useEffect(() => {
+    const visibleUserIds = new Set(usersData.users.map((user) => user.id));
+
+    setSelectedUserIds((current) => {
+      const nextSelectedUserIds = new Set(
+        Array.from(current).filter((userId) => visibleUserIds.has(userId)),
+      );
+
+      return nextSelectedUserIds.size === current.size ? current : nextSelectedUserIds;
+    });
+  }, [usersData.users]);
+
+  const toggleUserSelection = useCallback((userId: string, isSelected: boolean) => {
+    setSelectedUserIds((current) => {
+      const nextSelectedUserIds = new Set(current);
+      if (isSelected) {
+        nextSelectedUserIds.add(userId);
+      } else {
+        nextSelectedUserIds.delete(userId);
+      }
+
+      return nextSelectedUserIds;
+    });
+  }, []);
+
+  const toggleAllVisibleUsers = useCallback(
+    (isSelected: boolean) => {
+      setSelectedUserIds((current) => {
+        const nextSelectedUserIds = new Set(current);
+
+        for (const user of sortedData) {
+          if (isSelected) {
+            nextSelectedUserIds.add(user.id);
+          } else {
+            nextSelectedUserIds.delete(user.id);
+          }
+        }
+
+        return nextSelectedUserIds;
+      });
+    },
+    [sortedData],
+  );
+
+  const clearSelectedUsers = useCallback(() => {
+    setSelectedUserIds(new Set());
+  }, []);
 
   const tagZhValues = useMemo(() => splitValues(userForm?.tagsZh ?? ""), [userForm?.tagsZh]);
   const tagZhItems = useMemo(() => createTagItems(tagZhValues), [tagZhValues]);
@@ -845,7 +909,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
       nextErrors.password = t("admin.userManagement.validation.passwordTooShort");
     }
 
-    if (!isValidUrl(form.avatarUrl)) {
+    if (!isValidMediaAssetUrl(form.avatarUrl)) {
       nextErrors.avatarUrl = t("admin.settings.validation.avatarInvalid");
     }
 
@@ -856,7 +920,8 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
     return nextErrors;
   };
 
-  const formErrors = userForm !== undefined && attemptedSave ? validateForm(userForm) : EMPTY_ERRORS;
+  const formErrors =
+    userForm !== undefined && attemptedSave ? validateForm(userForm) : EMPTY_ERRORS;
 
   type CreateSaveSuccessBannerParameters = {
     profileTranslation?: AdminProfileTranslation;
@@ -867,19 +932,14 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
     profileTranslation,
     title,
   }: CreateSaveSuccessBannerParameters) => {
-    if (
-      profileTranslation === undefined ||
-      profileTranslation.status === "not-needed"
-    ) {
+    if (profileTranslation === undefined || profileTranslation.status === "not-needed") {
       return createAdminFeedbackBanner({
         status: "success",
         title,
       });
     }
 
-    const targetLocales = profileTranslation.targetLocales ?? [
-      profileTranslation.targetLocale,
-    ];
+    const targetLocales = profileTranslation.targetLocales ?? [profileTranslation.targetLocale];
     const targetLanguage = t(
       targetLocales.length > 1
         ? "admin.settings.translationTarget.both"
@@ -915,7 +975,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         });
       default: {
         const exhaustiveStatus: never = profileTranslation.status;
-        throw new Error(`Unhandled translation status: ${exhaustiveStatus}`);
+        throw new Error("Unhandled translation status.", { cause: exhaustiveStatus });
       }
     }
   };
@@ -944,10 +1004,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
     } catch (error) {
       setBanner(
         createAdminFeedbackBanner({
-          description: getUserManagementErrorMessage(
-            error,
-            t("admin.userManagement.loadFailed"),
-          ),
+          description: getUserManagementErrorMessage(error, t("admin.userManagement.loadFailed")),
           status: "error",
           title: t("admin.userManagement.loadFailed"),
         }),
@@ -1047,10 +1104,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
     } catch (error) {
       setBanner(
         createAdminFeedbackBanner({
-          description: getUserManagementErrorMessage(
-            error,
-            t("admin.userManagement.deleteFailed"),
-          ),
+          description: getUserManagementErrorMessage(error, t("admin.userManagement.deleteFailed")),
           status: "error",
           title: t("admin.userManagement.deleteFailed"),
         }),
@@ -1060,8 +1114,107 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
     }
   };
 
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUsers.length === 0) {
+      setIsBulkDeleteOpen(false);
+      return;
+    }
+
+    setIsDeletingUser(true);
+
+    const results: BulkDeleteResult[] = [];
+    for (const user of selectedUsers) {
+      try {
+        await deleteManagedUser({
+          token: authToken,
+          userId: user.id,
+        });
+        results.push({ ok: true });
+      } catch (error) {
+        results.push({ error, ok: false });
+      }
+    }
+
+    const deletedCount = results.filter((result) => result.ok).length;
+    const failedResults = results.filter(
+      (result): result is Extract<BulkDeleteResult, { ok: false }> => !result.ok,
+    );
+
+    if (failedResults.length === 0) {
+      setBanner(
+        createAdminFeedbackBanner({
+          description: t("admin.userManagement.bulkDeleteSuccessDescription", {
+            count: deletedCount,
+          }),
+          status: "success",
+          title: t("admin.userManagement.bulkDeleteSuccess"),
+        }),
+      );
+      clearSelectedUsers();
+    } else {
+      const firstFailedResult = failedResults[0];
+      const fallbackDescription = t("admin.userManagement.bulkDeletePartialDescription", {
+        deleted: deletedCount,
+        failed: failedResults.length,
+      });
+
+      setBanner(
+        createAdminFeedbackBanner({
+          description:
+            firstFailedResult === undefined
+              ? fallbackDescription
+              : getUserManagementErrorMessage(firstFailedResult.error, fallbackDescription),
+          status: deletedCount > 0 ? "warning" : "error",
+          title:
+            deletedCount > 0
+              ? t("admin.userManagement.bulkDeletePartial")
+              : t("admin.userManagement.deleteFailed"),
+        }),
+      );
+      setSelectedUserIds(
+        new Set(selectedUsers.filter((_, index) => !results[index]?.ok).map((user) => user.id)),
+      );
+    }
+
+    setIsBulkDeleteOpen(false);
+    setIsDeletingUser(false);
+    await loadUsers();
+  };
+
   const columns = useMemo<TableColumn<UserTableRow>[]>(
     () => [
+      {
+        align: "center",
+        header: (
+          <CheckboxInput
+            label={t("admin.userManagement.selectAll")}
+            isLabelHidden
+            value={
+              isAllVisibleUsersSelected
+                ? true
+                : isVisibleUserSelectionIndeterminate
+                  ? "indeterminate"
+                  : false
+            }
+            isDisabled={sortedData.length === 0 || isDeletingUser}
+            onChange={(isSelected) => toggleAllVisibleUsers(isSelected)}
+          />
+        ),
+        key: "selection",
+        resizable: false,
+        width: pixel(56),
+        renderCell: (user) => (
+          <CheckboxInput
+            label={t("admin.userManagement.selectUser", {
+              name: getDisplayName({ language, user }),
+            })}
+            isLabelHidden
+            value={selectedUserIds.has(user.id)}
+            isDisabled={isDeletingUser}
+            onChange={(isSelected) => toggleUserSelection(user.id, isSelected)}
+          />
+        ),
+      },
       {
         align: "center",
         key: "displayName",
@@ -1070,10 +1223,12 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         width: columnWidths.displayName,
         renderCell: (user) => {
           const displayName = getDisplayName({ language, user });
+          const avatarUrl =
+            user.avatarUrl === undefined ? undefined : resolveAdminAssetUrl(user.avatarUrl);
 
           return (
             <HStack gap={3} hAlign="center" vAlign="center" style={userIdentityStyle}>
-              <Avatar src={user.avatarUrl} name={displayName} size="sm" />
+              <Avatar src={avatarUrl} name={displayName} size="sm" />
               <VStack gap={0} style={userIdentityTextStyle}>
                 <Text type="body" weight="semibold" maxLines={1}>
                   {displayName}
@@ -1130,7 +1285,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         width: columnWidths.createdAt,
         renderCell: (user) => (
           <Text type="body" maxLines={1}>
-            {formatDateTime({ formatter: dateFormatter, value: user.createdAt })}
+            {formatDateTime({ language, timeZone, value: user.createdAt })}
           </Text>
         ),
       },
@@ -1142,7 +1297,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         width: columnWidths.updatedAt,
         renderCell: (user) => (
           <Text type="body" maxLines={1}>
-            {formatDateTime({ formatter: dateFormatter, value: user.updatedAt })}
+            {formatDateTime({ language, timeZone, value: user.updatedAt })}
           </Text>
         ),
       },
@@ -1163,7 +1318,20 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
         ),
       },
     ],
-    [columnWidths, dateFormatter, isNarrow, language, t],
+    [
+      columnWidths,
+      isAllVisibleUsersSelected,
+      isDeletingUser,
+      isNarrow,
+      isVisibleUserSelectionIndeterminate,
+      language,
+      selectedUserIds,
+      sortedData.length,
+      t,
+      timeZone,
+      toggleAllVisibleUsers,
+      toggleUserSelection,
+    ],
   );
 
   const hasInitialLoadingState = isLoading && usersData.users.length === 0;
@@ -1279,9 +1447,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
                       onChange={(value) => updateFormField("email", value)}
                       isRequired
                       status={
-                        formErrors.email
-                          ? { type: "error", message: formErrors.email }
-                          : undefined
+                        formErrors.email ? { type: "error", message: formErrors.email } : undefined
                       }
                     />
                     <TextInput
@@ -1397,11 +1563,7 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
             footer={
               <LayoutFooter hasDivider padding={isNarrow ? 3 : 4}>
                 <HStack gap={2} hAlign="end" wrap="wrap">
-                  <Button
-                    label={t("actions.cancel")}
-                    variant="ghost"
-                    onClick={closeUserForm}
-                  />
+                  <Button label={t("actions.cancel")} variant="ghost" onClick={closeUserForm} />
                   <Button
                     label={isSavingUser ? t("actions.saving") : t("admin.userManagement.save")}
                     icon={<Save size={16} />}
@@ -1475,6 +1637,32 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
       </Card>
 
       <Card padding={0} style={tableCardStyle}>
+        {selectedUserCount > 0 && (
+          <HStack
+            gap={2}
+            hAlign="between"
+            vAlign="center"
+            wrap="wrap"
+            style={selectionToolbarStyle}
+          >
+            <Text type="body" weight="semibold">
+              {t("admin.userManagement.selectedCount", { count: selectedUserCount })}
+            </Text>
+            <HStack gap={2} vAlign="center" wrap="wrap">
+              <Button
+                label={t("admin.userManagement.clearSelection")}
+                variant="ghost"
+                onClick={clearSelectedUsers}
+              />
+              <Button
+                label={t("admin.userManagement.bulkDelete")}
+                icon={<Trash2 size={16} />}
+                variant="destructive"
+                onClick={() => setIsBulkDeleteOpen(true)}
+              />
+            </HStack>
+          </HStack>
+        )}
         {hasInitialLoadingState ? (
           <HStack gap={2} vAlign="center" style={{ padding: isNarrow ? 16 : 24 }}>
             <Spinner size="sm" />
@@ -1555,8 +1743,30 @@ export function UsersManagementPage({ authToken, isNarrow }: UsersManagementPage
             void handleDeleteUser();
           }}
           onOpenChange={(isOpen) => {
-            if (!isOpen) {
+            if (!isOpen && !isDeletingUser) {
               setDeletingUser(undefined);
+            }
+          }}
+        />
+      )}
+
+      {isBulkDeleteOpen && (
+        <AlertDialog
+          isOpen
+          title={t("admin.userManagement.bulkDeleteTitle")}
+          description={t("admin.userManagement.bulkDeleteDescription", {
+            count: selectedUserCount,
+          })}
+          cancelLabel={t("actions.cancel")}
+          actionLabel={t("admin.userManagement.bulkDelete")}
+          actionVariant="destructive"
+          isActionLoading={isDeletingUser}
+          onAction={() => {
+            void handleBulkDeleteUsers();
+          }}
+          onOpenChange={(isOpen) => {
+            if (!isOpen && !isDeletingUser) {
+              setIsBulkDeleteOpen(false);
             }
           }}
         />

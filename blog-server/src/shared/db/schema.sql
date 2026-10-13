@@ -53,12 +53,26 @@ CREATE TABLE IF NOT EXISTS users (
   blog_url text,
   comment_email_notifications boolean NOT NULL DEFAULT false,
   new_post_email_notifications boolean NOT NULL DEFAULT false,
+  last_login_at timestamptz,
+  last_login_time_zone text,
+  last_login_time_zone_offset_minutes integer,
+  last_login_ip inet,
+  last_login_location jsonb,
+  last_login_device jsonb,
+  last_login_method varchar(40),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT users_role_check CHECK (role IN ('admin', 'user'))
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_time_zone text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_time_zone_offset_minutes integer;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip inet;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_location jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_device jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_method varchar(40);
 
 UPDATE users
 SET role = 'admin'
@@ -80,6 +94,11 @@ BEGIN
   END IF;
 END;
 $$;
+
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_last_login_method_check;
+ALTER TABLE users
+  ADD CONSTRAINT users_last_login_method_check
+  CHECK (last_login_method IS NULL OR last_login_method IN ('password', 'github', 'google', 'apple'));
 
 DROP INDEX IF EXISTS admin_users_username_unique;
 DROP INDEX IF EXISTS admin_users_email_unique;
@@ -180,9 +199,22 @@ CREATE TABLE IF NOT EXISTS site_settings (
   copyright text,
   comments_enabled boolean NOT NULL DEFAULT true,
   resend_domain text,
+  time_zone text NOT NULL DEFAULT 'Asia/Shanghai',
+  r2_enabled boolean NOT NULL DEFAULT false,
+  r2_account_id text,
+  r2_bucket text,
+  r2_access_key_id text,
+  r2_public_base_url text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS time_zone text NOT NULL DEFAULT 'Asia/Shanghai';
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_account_id text;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_bucket text;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_access_key_id text;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_public_base_url text;
 
 INSERT INTO site_settings (id)
 VALUES (1)
@@ -219,15 +251,122 @@ CREATE TABLE IF NOT EXISTS encrypted_settings (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT encrypted_settings_known_key CHECK (
-    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key')
+    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key', 'r2_secret_access_key')
   )
 );
+
+ALTER TABLE encrypted_settings DROP CONSTRAINT IF EXISTS encrypted_settings_known_key;
+ALTER TABLE encrypted_settings
+  ADD CONSTRAINT encrypted_settings_known_key CHECK (
+    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key', 'r2_secret_access_key')
+  );
 
 DROP TRIGGER IF EXISTS encrypted_settings_set_updated_at ON encrypted_settings;
 CREATE TRIGGER encrypted_settings_set_updated_at
   BEFORE UPDATE ON encrypted_settings
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS auth_provider_settings (
+  provider text PRIMARY KEY,
+  display_name text NOT NULL,
+  enabled boolean NOT NULL DEFAULT false,
+  client_id text,
+  client_secret_encrypted text,
+  redirect_uri text,
+  scopes text[] NOT NULL DEFAULT ARRAY[]::text[],
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT auth_provider_settings_provider_check CHECK (provider IN ('github', 'google'))
+);
+
+ALTER TABLE auth_provider_settings ADD COLUMN IF NOT EXISTS display_name text;
+ALTER TABLE auth_provider_settings ADD COLUMN IF NOT EXISTS enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE auth_provider_settings ADD COLUMN IF NOT EXISTS client_id text;
+ALTER TABLE auth_provider_settings ADD COLUMN IF NOT EXISTS client_secret_encrypted text;
+ALTER TABLE auth_provider_settings ADD COLUMN IF NOT EXISTS redirect_uri text;
+ALTER TABLE auth_provider_settings ADD COLUMN IF NOT EXISTS scopes text[] NOT NULL DEFAULT ARRAY[]::text[];
+
+ALTER TABLE auth_provider_settings DROP CONSTRAINT IF EXISTS auth_provider_settings_provider_check;
+ALTER TABLE auth_provider_settings
+  ADD CONSTRAINT auth_provider_settings_provider_check CHECK (provider IN ('github', 'google'));
+
+UPDATE auth_provider_settings
+SET display_name = CASE provider
+  WHEN 'github' THEN 'GitHub'
+  WHEN 'google' THEN 'Google'
+  ELSE provider
+END
+WHERE display_name IS NULL;
+
+ALTER TABLE auth_provider_settings ALTER COLUMN display_name SET NOT NULL;
+
+DROP TRIGGER IF EXISTS auth_provider_settings_set_updated_at ON auth_provider_settings;
+CREATE TRIGGER auth_provider_settings_set_updated_at
+  BEFORE UPDATE ON auth_provider_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+INSERT INTO auth_provider_settings (provider, display_name, enabled, scopes)
+VALUES
+  ('github', 'GitHub', false, ARRAY['read:user', 'user:email']::text[]),
+  ('google', 'Google', false, ARRAY['openid', 'profile', 'email']::text[])
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS user_oauth_accounts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider text NOT NULL,
+  provider_user_id text NOT NULL,
+  provider_username text,
+  provider_email text,
+  avatar_url text,
+  profile_url text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_oauth_accounts_provider_check CHECK (provider IN ('github', 'google'))
+);
+
+ALTER TABLE user_oauth_accounts DROP CONSTRAINT IF EXISTS user_oauth_accounts_provider_check;
+ALTER TABLE user_oauth_accounts
+  ADD CONSTRAINT user_oauth_accounts_provider_check CHECK (provider IN ('github', 'google'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_accounts_provider_user_unique
+  ON user_oauth_accounts (provider, user_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_accounts_provider_user_id_unique
+  ON user_oauth_accounts (provider, provider_user_id);
+
+CREATE INDEX IF NOT EXISTS user_oauth_accounts_user_id_idx
+  ON user_oauth_accounts (user_id);
+
+DROP TRIGGER IF EXISTS user_oauth_accounts_set_updated_at ON user_oauth_accounts;
+CREATE TRIGGER user_oauth_accounts_set_updated_at
+  BEFORE UPDATE ON user_oauth_accounts
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS oauth_login_states (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider text NOT NULL,
+  state_hash text NOT NULL,
+  code_verifier text NOT NULL,
+  return_to text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT oauth_login_states_provider_check CHECK (provider IN ('github', 'google'))
+);
+
+ALTER TABLE oauth_login_states DROP CONSTRAINT IF EXISTS oauth_login_states_provider_check;
+ALTER TABLE oauth_login_states
+  ADD CONSTRAINT oauth_login_states_provider_check CHECK (provider IN ('github', 'google'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_login_states_hash_unique
+  ON oauth_login_states (state_hash);
+
+CREATE INDEX IF NOT EXISTS oauth_login_states_expires_at_idx
+  ON oauth_login_states (expires_at);
 
 CREATE TABLE IF NOT EXISTS filing_records (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -252,3 +391,740 @@ CREATE TRIGGER filing_records_set_updated_at
   BEFORE UPDATE ON filing_records
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS media_folders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(80) NOT NULL,
+  slug varchar(100) NOT NULL,
+  description text NOT NULL DEFAULT '',
+  system_key varchar(40),
+  is_protected boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS media_folders_slug_unique
+  ON media_folders (lower(slug));
+
+CREATE UNIQUE INDEX IF NOT EXISTS media_folders_system_key_unique
+  ON media_folders (system_key)
+  WHERE system_key IS NOT NULL;
+
+DROP TRIGGER IF EXISTS media_folders_set_updated_at ON media_folders;
+CREATE TRIGGER media_folders_set_updated_at
+  BEFORE UPDATE ON media_folders
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+INSERT INTO media_folders (name, slug, description, system_key, is_protected)
+VALUES
+  ('文章', 'article-covers', '文章封面和正文插图可以集中存储到这里。', 'article-covers', true),
+  ('头像', 'avatars', '用户头像可以集中存储到这里。', 'avatars', true),
+  ('评论', 'comments', '评论图片可以集中存储到这里。', 'comments', true),
+  ('站点', 'site', '站点 Logo、favicon 和主页封面可以集中存储到这里。', 'site', true),
+  ('导航图标', 'website-icons', '导航页网站图标可以集中存储到这里。', 'website-icons', true),
+  ('媒体库', 'media', '后台媒体库默认上传目录。', 'media', true)
+ON CONFLICT DO NOTHING;
+
+UPDATE media_folders
+SET
+  name = '文章',
+  description = '文章封面和正文插图可以集中存储到这里。'
+WHERE system_key = 'article-covers'
+  AND (
+    name = '文章封面'
+    OR description = '文章封面可以集中存储到这里。'
+  );
+
+CREATE TABLE IF NOT EXISTS media_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  file_name varchar(255) NOT NULL,
+  file_format varchar(20) NOT NULL,
+  file_type text NOT NULL,
+  file_size_bytes bigint NOT NULL CHECK (file_size_bytes >= 0),
+  access_url text NOT NULL,
+  uploaded_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  folder_id uuid REFERENCES media_folders(id) ON DELETE SET NULL,
+  storage_provider varchar(20) NOT NULL DEFAULT 'local',
+  storage_key text,
+  storage_bucket text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT media_assets_file_type_check CHECK (file_type IN ('image', 'video', 'document')),
+  CONSTRAINT media_assets_storage_provider_check CHECK (storage_provider IN ('local', 'r2'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS media_assets_access_url_unique
+  ON media_assets (access_url);
+
+CREATE INDEX IF NOT EXISTS media_assets_type_created_at_idx
+  ON media_assets (file_type, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_assets_uploaded_by_idx
+  ON media_assets (uploaded_by);
+
+CREATE INDEX IF NOT EXISTS media_assets_folder_created_at_idx
+  ON media_assets (folder_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS media_assets_storage_provider_created_at_idx
+  ON media_assets (storage_provider, created_at DESC);
+
+DROP TRIGGER IF EXISTS media_assets_set_updated_at ON media_assets;
+CREATE TRIGGER media_assets_set_updated_at
+  BEFORE UPDATE ON media_assets
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS article_categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(120) NOT NULL,
+  slug varchar(140) NOT NULL,
+  description text,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS article_categories_slug_unique
+  ON article_categories (lower(slug));
+
+CREATE INDEX IF NOT EXISTS article_categories_sort_idx
+  ON article_categories (sort_order, created_at);
+
+DROP TRIGGER IF EXISTS article_categories_set_updated_at ON article_categories;
+CREATE TRIGGER article_categories_set_updated_at
+  BEFORE UPDATE ON article_categories
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS article_categories_en (
+  category_id uuid PRIMARY KEY REFERENCES article_categories(id) ON DELETE CASCADE,
+  name varchar(120),
+  description text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS article_categories_en_set_updated_at ON article_categories_en;
+CREATE TRIGGER article_categories_en_set_updated_at
+  BEFORE UPDATE ON article_categories_en
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS article_tags (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(120) NOT NULL,
+  slug varchar(140) NOT NULL,
+  color varchar(40),
+  description text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS article_tags_slug_unique
+  ON article_tags (lower(slug));
+
+CREATE INDEX IF NOT EXISTS article_tags_created_at_idx
+  ON article_tags (created_at DESC);
+
+DROP TRIGGER IF EXISTS article_tags_set_updated_at ON article_tags;
+CREATE TRIGGER article_tags_set_updated_at
+  BEFORE UPDATE ON article_tags
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS article_tags_en (
+  tag_id uuid PRIMARY KEY REFERENCES article_tags(id) ON DELETE CASCADE,
+  name varchar(120),
+  description text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS article_tags_en_set_updated_at ON article_tags_en;
+CREATE TRIGGER article_tags_en_set_updated_at
+  BEFORE UPDATE ON article_tags_en
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS article_contributors (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(100) NOT NULL,
+  avatar_url text,
+  link_url text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS article_contributors_name_idx
+  ON article_contributors (lower(name), created_at DESC);
+
+DROP TRIGGER IF EXISTS article_contributors_set_updated_at ON article_contributors;
+CREATE TRIGGER article_contributors_set_updated_at
+  BEFORE UPDATE ON article_contributors
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS articles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  title varchar(220) NOT NULL,
+  slug varchar(240) NOT NULL,
+  summary text,
+  content_mdx text NOT NULL DEFAULT '',
+  cover_image_url text,
+  status varchar(24) NOT NULL DEFAULT 'draft',
+  read_count integer NOT NULL DEFAULT 0,
+  is_pinned boolean NOT NULL DEFAULT false,
+  published_at timestamptz,
+  scheduled_publish_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT articles_status_check CHECK (status IN ('draft', 'published', 'scheduled'))
+);
+
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS author_id uuid REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS summary text;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS content_mdx text NOT NULL DEFAULT '';
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS cover_image_url text;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS read_count integer NOT NULL DEFAULT 0;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS is_pinned boolean NOT NULL DEFAULT false;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS published_at timestamptz;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS scheduled_publish_at timestamptz;
+ALTER TABLE articles DROP CONSTRAINT IF EXISTS articles_status_check;
+ALTER TABLE articles
+  ADD CONSTRAINT articles_status_check CHECK (status IN ('draft', 'published', 'scheduled'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS articles_slug_unique
+  ON articles (lower(slug));
+
+CREATE INDEX IF NOT EXISTS articles_status_published_at_idx
+  ON articles (status, published_at DESC NULLS LAST);
+
+CREATE INDEX IF NOT EXISTS articles_created_at_idx
+  ON articles (created_at DESC);
+
+DROP TRIGGER IF EXISTS articles_set_updated_at ON articles;
+CREATE TRIGGER articles_set_updated_at
+  BEFORE UPDATE ON articles
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS articles_en (
+  article_id uuid PRIMARY KEY REFERENCES articles(id) ON DELETE CASCADE,
+  title varchar(220),
+  summary text,
+  content_mdx text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS articles_en_set_updated_at ON articles_en;
+CREATE TRIGGER articles_en_set_updated_at
+  BEFORE UPDATE ON articles_en
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS article_category_links (
+  article_id uuid NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  category_id uuid NOT NULL REFERENCES article_categories(id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (article_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS article_category_links_category_idx
+  ON article_category_links (category_id, article_id);
+
+CREATE TABLE IF NOT EXISTS article_tag_links (
+  article_id uuid NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  tag_id uuid NOT NULL REFERENCES article_tags(id) ON DELETE RESTRICT,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (article_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS article_tag_links_tag_idx
+  ON article_tag_links (tag_id, article_id);
+
+CREATE TABLE IF NOT EXISTS article_contributor_links (
+  article_id uuid NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  contributor_id uuid NOT NULL REFERENCES article_contributors(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (article_id, contributor_id)
+);
+
+CREATE INDEX IF NOT EXISTS article_contributor_links_contributor_idx
+  ON article_contributor_links (contributor_id, article_id);
+
+CREATE TABLE IF NOT EXISTS comments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  target_type varchar(24) NOT NULL DEFAULT 'article',
+  article_id uuid REFERENCES articles(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id uuid REFERENCES comments(id) ON DELETE SET NULL,
+  content text NOT NULL,
+  status varchar(24) NOT NULL DEFAULT 'approved',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
+  comment_ip inet,
+  comment_location jsonb,
+  comment_device jsonb,
+  CONSTRAINT comments_target_type_check CHECK (target_type IN ('article', 'guestbook')),
+  CONSTRAINT comments_status_check CHECK (status IN ('pending', 'approved', 'rejected')),
+  CONSTRAINT comments_target_ref_check CHECK (
+    (target_type = 'article' AND article_id IS NOT NULL)
+    OR (target_type = 'guestbook' AND article_id IS NULL)
+  )
+);
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS target_type varchar(24) NOT NULL DEFAULT 'article';
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS article_id uuid REFERENCES articles(id) ON DELETE CASCADE;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS parent_id uuid REFERENCES comments(id) ON DELETE SET NULL;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS content text NOT NULL DEFAULT '';
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS status varchar(24) NOT NULL DEFAULT 'approved';
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS comment_ip inet;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS comment_location jsonb;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS comment_device jsonb;
+ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_target_type_check;
+ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_status_check;
+ALTER TABLE comments DROP CONSTRAINT IF EXISTS comments_target_ref_check;
+ALTER TABLE comments
+  ADD CONSTRAINT comments_target_type_check CHECK (target_type IN ('article', 'guestbook'));
+ALTER TABLE comments
+  ADD CONSTRAINT comments_status_check CHECK (status IN ('pending', 'approved', 'rejected'));
+ALTER TABLE comments
+  ADD CONSTRAINT comments_target_ref_check CHECK (
+    (target_type = 'article' AND article_id IS NOT NULL)
+    OR (target_type = 'guestbook' AND article_id IS NULL)
+  );
+
+CREATE INDEX IF NOT EXISTS comments_article_created_at_idx
+  ON comments (article_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS comments_target_created_at_idx
+  ON comments (target_type, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS comments_user_idx
+  ON comments (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS comments_parent_idx
+  ON comments (parent_id, created_at);
+
+CREATE INDEX IF NOT EXISTS comments_status_idx
+  ON comments (status, deleted_at);
+
+DROP TRIGGER IF EXISTS comments_set_updated_at ON comments;
+CREATE TRIGGER comments_set_updated_at
+  BEFORE UPDATE ON comments
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+INSERT INTO article_categories (name, slug, description, sort_order)
+VALUES
+  ('部署运维', 'deployment-ops', '记录部署、自动化和运维相关实践。', 0),
+  ('前端工程', 'frontend-engineering', '记录前端体验、组件和工程化。', 1)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_categories_en (category_id, name, description)
+SELECT id, 'Deployment Ops', 'Notes on deployment, automation, and operations.'
+FROM article_categories
+WHERE slug = 'deployment-ops'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_categories_en (category_id, name, description)
+SELECT id, 'Frontend Engineering', 'Notes on frontend experience, components, and tooling.'
+FROM article_categories
+WHERE slug = 'frontend-engineering'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_tags (name, slug, color, description)
+VALUES
+  ('LeiBlog', 'leiblog', '#6366f1', 'LeiBlog 项目记录。'),
+  ('Docker', 'docker', '#ef4444', '容器和部署相关内容。'),
+  ('PostgreSQL', 'postgresql', '#8b5cf6', '数据库与数据建模。'),
+  ('React', 'react', '#0ea5e9', '前端 UI 与交互。'),
+  ('TypeScript', 'typescript', '#2563eb', 'TypeScript 类型设计与代码示例。')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_tags_en (tag_id, name, description)
+SELECT id, name, CASE slug
+  WHEN 'leiblog' THEN 'LeiBlog project notes.'
+  WHEN 'docker' THEN 'Containers and deployment.'
+  WHEN 'postgresql' THEN 'Database and data modeling.'
+  WHEN 'react' THEN 'Frontend UI and interaction.'
+  WHEN 'typescript' THEN 'TypeScript type design and code examples.'
+  ELSE description
+END
+FROM article_tags
+WHERE slug IN ('leiblog', 'docker', 'postgresql', 'react', 'typescript')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO articles (
+  title,
+  slug,
+  summary,
+  content_mdx,
+  cover_image_url,
+  status,
+  is_pinned,
+  published_at
+)
+VALUES
+  (
+    'LeiBlog 后台设置国际化记录',
+    'admin-settings-i18n',
+    '记录后台设置页、站点资料和双语字段接入时的关键设计。',
+    E'## 背景\n\nLeiBlog 的后台设置需要同时维护中文和英文公开资料，并让前台能够按站点语言读取对应内容。\n\n## 实现要点\n\n- 资料字段按语言分组保存。\n- 站点配置提供统一的公开接口。\n- 头像、Logo 和封面统一走媒体库资源。\n\n## 后续\n\n继续把文章、分类、标签和归档等公开内容接入同一套数据源。',
+    null,
+    'published',
+    true,
+    now()
+  ),
+  (
+    'PostgreSQL 内容结构整理',
+    'postgresql-content-structure',
+    '用分类、标签和文章关系表整理内容模型，方便前台索引与后台管理。',
+    E'## 内容模型\n\n文章本体保存标题、摘要、正文、封面、发布状态和发布时间。\n\n## 关系设计\n\n分类和标签通过关联表连接文章，便于一个文章拥有多个分类和多个标签。\n\n## 查询\n\n前台列表只读取已发布内容，后台列表可以查看草稿、定时和已发布内容。',
+    null,
+    'published',
+    false,
+    now() - interval '3 days'
+  ),
+  (
+    'TypeScript 代码块展示测试',
+    'typescript-codeblock-demo',
+    '验证文章阅读页使用 Astryx CodeBlock 渲染 TypeScript 代码块。',
+    $markdown$## 示例目标
+
+这篇文章用于确认 fenced code 会交给 Astryx CodeBlock 渲染，并保留语言标签与复制按钮。
+
+## TypeScript 示例
+
+```ts article-link.ts
+type ArticleRoute = {
+  slug: string;
+  title: string;
+  publishedAt: Date;
+};
+
+const formatRoute = ({ slug, title }: ArticleRoute) =>
+  `/articles/${slug}?title=${encodeURIComponent(title)}`;
+
+export const createArticleLink = (article: ArticleRoute) => ({
+  href: formatRoute(article),
+  label: article.title,
+});
+```
+
+## 展示结果
+
+阅读页应该显示 Astryx 的代码块样式、语言标记和复制操作。$markdown$,
+    null,
+    'published',
+    false,
+    now() - interval '1 day'
+  )
+ON CONFLICT DO NOTHING;
+
+INSERT INTO articles_en (article_id, title, summary, content_mdx)
+SELECT
+  id,
+  'LeiBlog Admin Settings i18n Notes',
+  'Notes on connecting admin settings, site profile, and bilingual public fields.',
+  E'## Background\n\nLeiBlog admin settings need to maintain both Chinese and English public profile fields, while the frontend reads the copy that matches the selected site language.\n\n## Key Points\n\n- Profile fields are stored by language.\n- Site settings provide one public API.\n- Avatars, logos, and covers are managed through the media library.\n\n## Next\n\nContinue connecting articles, categories, tags, and archives to the same data source.'
+FROM articles
+WHERE slug = 'admin-settings-i18n'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO articles_en (article_id, title, summary, content_mdx)
+SELECT
+  id,
+  'PostgreSQL Content Structure',
+  'Organize content with category, tag, and article relation tables for frontend indexes and admin management.',
+  E'## Content Model\n\nThe article table stores title, summary, body, cover, publishing state, and publish time.\n\n## Relations\n\nCategories and tags connect to articles through relation tables, so one article can have multiple categories and tags.\n\n## Querying\n\nThe frontend only reads published content, while the admin list can inspect draft, scheduled, and published articles.'
+FROM articles
+WHERE slug = 'postgresql-content-structure'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO articles_en (article_id, title, summary, content_mdx)
+SELECT
+  id,
+  'TypeScript Code Block Demo',
+  'Verify that the article reading page renders TypeScript fences with Astryx CodeBlock.',
+  $markdown$## Demo Goal
+
+This article confirms that fenced code is rendered through Astryx CodeBlock with a language label and copy action.
+
+## TypeScript Example
+
+```ts article-link.ts
+type ArticleRoute = {
+  slug: string;
+  title: string;
+  publishedAt: Date;
+};
+
+const formatRoute = ({ slug, title }: ArticleRoute) =>
+  `/articles/${slug}?title=${encodeURIComponent(title)}`;
+
+export const createArticleLink = (article: ArticleRoute) => ({
+  href: formatRoute(article),
+  label: article.title,
+});
+```
+
+## Result
+
+The reading page should show Astryx styling, language metadata, and the copy control.$markdown$
+FROM articles
+WHERE slug = 'typescript-codeblock-demo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_category_links (article_id, category_id)
+SELECT articles.id, article_categories.id
+FROM articles
+CROSS JOIN article_categories
+WHERE articles.slug = 'admin-settings-i18n'
+  AND article_categories.slug = 'frontend-engineering'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_category_links (article_id, category_id)
+SELECT articles.id, article_categories.id
+FROM articles
+CROSS JOIN article_categories
+WHERE articles.slug = 'postgresql-content-structure'
+  AND article_categories.slug = 'deployment-ops'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_category_links (article_id, category_id)
+SELECT articles.id, article_categories.id
+FROM articles
+CROSS JOIN article_categories
+WHERE articles.slug = 'typescript-codeblock-demo'
+  AND article_categories.slug = 'frontend-engineering'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_tag_links (article_id, tag_id)
+SELECT articles.id, article_tags.id
+FROM articles
+CROSS JOIN article_tags
+WHERE articles.slug = 'admin-settings-i18n'
+  AND article_tags.slug IN ('leiblog', 'react')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_tag_links (article_id, tag_id)
+SELECT articles.id, article_tags.id
+FROM articles
+CROSS JOIN article_tags
+WHERE articles.slug = 'postgresql-content-structure'
+  AND article_tags.slug IN ('leiblog', 'postgresql')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO article_tag_links (article_id, tag_id)
+SELECT articles.id, article_tags.id
+FROM articles
+CROSS JOIN article_tags
+WHERE articles.slug = 'typescript-codeblock-demo'
+  AND article_tags.slug IN ('leiblog', 'react', 'typescript')
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS navigation_groups (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name varchar(100) NOT NULL,
+  name_en varchar(100),
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE navigation_groups
+  ADD COLUMN IF NOT EXISTS name_en varchar(100);
+
+CREATE UNIQUE INDEX IF NOT EXISTS navigation_groups_name_unique
+  ON navigation_groups (lower(name));
+
+CREATE INDEX IF NOT EXISTS navigation_groups_sort_order_idx
+  ON navigation_groups (sort_order, created_at);
+
+DROP TRIGGER IF EXISTS navigation_groups_set_updated_at ON navigation_groups;
+CREATE TRIGGER navigation_groups_set_updated_at
+  BEFORE UPDATE ON navigation_groups
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS navigation_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id uuid NOT NULL REFERENCES navigation_groups(id) ON DELETE RESTRICT,
+  name varchar(160) NOT NULL,
+  url varchar(2048) NOT NULL,
+  note varchar(500),
+  icon_url varchar(2048),
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS navigation_items_group_sort_order_idx
+  ON navigation_items (group_id, sort_order, created_at);
+
+DROP TRIGGER IF EXISTS navigation_items_set_updated_at ON navigation_items;
+CREATE TRIGGER navigation_items_set_updated_at
+  BEFORE UPDATE ON navigation_items
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_id text NOT NULL,
+  token_hash text NOT NULL,
+  user_agent text,
+  ip inet,
+  login_method varchar(40) NOT NULL DEFAULT 'password',
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz,
+  CONSTRAINT auth_sessions_login_method_check CHECK (
+    login_method IN ('password', 'oauth', 'github', 'google', 'apple')
+  )
+);
+
+ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS ip inet;
+ALTER TABLE auth_sessions DROP CONSTRAINT IF EXISTS auth_sessions_login_method_check;
+ALTER TABLE auth_sessions
+  ADD CONSTRAINT auth_sessions_login_method_check CHECK (
+    login_method IN ('password', 'oauth', 'github', 'google', 'apple')
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_sessions_session_id_unique
+  ON auth_sessions (session_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS auth_sessions_token_hash_unique
+  ON auth_sessions (token_hash);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_user_id_idx
+  ON auth_sessions (user_id);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_expires_at_idx
+  ON auth_sessions (expires_at);
+
+CREATE INDEX IF NOT EXISTS auth_sessions_ip_created_at_idx
+  ON auth_sessions (ip, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS login_audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  ip inet,
+  location jsonb,
+  device jsonb,
+  user_agent text,
+  login_method varchar(40) NOT NULL DEFAULT 'password',
+  time_zone text,
+  time_zone_offset_minutes integer,
+  success boolean NOT NULL,
+  failure_reason text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT login_audit_logs_login_method_check CHECK (
+    login_method IN ('password', 'github', 'google', 'apple')
+  )
+);
+
+ALTER TABLE login_audit_logs ADD COLUMN IF NOT EXISTS login_method varchar(40) NOT NULL DEFAULT 'password';
+ALTER TABLE login_audit_logs ADD COLUMN IF NOT EXISTS time_zone text;
+ALTER TABLE login_audit_logs ADD COLUMN IF NOT EXISTS time_zone_offset_minutes integer;
+ALTER TABLE login_audit_logs DROP CONSTRAINT IF EXISTS login_audit_logs_login_method_check;
+ALTER TABLE login_audit_logs
+  ADD CONSTRAINT login_audit_logs_login_method_check CHECK (
+    login_method IN ('password', 'github', 'google', 'apple')
+  );
+
+CREATE INDEX IF NOT EXISTS login_audit_logs_user_created_at_idx
+  ON login_audit_logs (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS login_audit_logs_created_at_idx
+  ON login_audit_logs (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email varchar(254) NOT NULL,
+  code_hash text NOT NULL,
+  purpose varchar(40) NOT NULL,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT email_verification_codes_purpose_check CHECK (
+	    purpose IN (
+	      'register',
+	      'password_reset',
+	      'email_change_current',
+	      'email_change_new',
+	      'password_change',
+	      'admin_api_key_reveal',
+	      'admin_auth_provider_secret_reveal'
+	    )
+	  )
+	);
+
+ALTER TABLE email_verification_codes
+  DROP CONSTRAINT IF EXISTS email_verification_codes_purpose_check;
+
+ALTER TABLE email_verification_codes
+  ADD CONSTRAINT email_verification_codes_purpose_check CHECK (
+	    purpose IN (
+	      'register',
+	      'password_reset',
+	      'email_change_current',
+	      'email_change_new',
+	      'password_change',
+	      'admin_api_key_reveal',
+	      'admin_auth_provider_secret_reveal'
+	    )
+	  );
+
+CREATE INDEX IF NOT EXISTS email_verification_codes_email_purpose_idx
+  ON email_verification_codes (lower(email), purpose, created_at DESC);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_email_locale text NOT NULL DEFAULT 'zh-CN'
+  CHECK (notification_email_locale IN ('zh-CN', 'en'));
+
+-- Existing public content must not generate a historical notification blast on upgrade.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'articles' AND column_name = 'notification_enqueued_at') THEN
+    ALTER TABLE articles ADD COLUMN notification_enqueued_at timestamptz;
+    UPDATE articles SET notification_enqueued_at = now() WHERE status = 'published';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'comments' AND column_name = 'notification_enqueued_at') THEN
+    ALTER TABLE comments ADD COLUMN notification_enqueued_at timestamptz;
+    UPDATE comments SET notification_enqueued_at = now() WHERE status = 'approved';
+  END IF;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS email_notification_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind text NOT NULL CHECK (kind IN ('new_article', 'comment_reply', 'comment_admin')),
+  recipient_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id uuid REFERENCES articles(id) ON DELETE CASCADE,
+  comment_id uuid REFERENCES comments(id) ON DELETE CASCADE,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'skipped', 'failed')),
+  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  message jsonb,
+  available_at timestamptz NOT NULL DEFAULT now(),
+  locked_until timestamptz,
+  lock_token uuid,
+  first_attempt_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((kind = 'new_article' AND article_id IS NOT NULL AND comment_id IS NULL)
+    OR (kind IN ('comment_reply', 'comment_admin') AND comment_id IS NOT NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_article_recipient_unique
+  ON email_notification_jobs (article_id, recipient_id) WHERE kind = 'new_article';
+CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_comment_recipient_unique
+  ON email_notification_jobs (comment_id, recipient_id) WHERE comment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS email_notification_jobs_pending_idx
+  ON email_notification_jobs (available_at, created_at) WHERE status = 'pending';

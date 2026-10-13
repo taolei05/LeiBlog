@@ -13,6 +13,7 @@ export const getSql = () => {
   sqlClient = postgres(env.databaseUrl, {
     max: 10,
     transform: postgres.camel,
+    onnotice: () => {},
   });
 
   return sqlClient;

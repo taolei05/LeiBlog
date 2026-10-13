@@ -5,5 +5,8 @@ export const runMigrations = async () => {
   const schemaSql = await schemaFile.text();
   const sql = getSql();
 
-  await sql.unsafe(schemaSql);
+  await sql.begin(async (transaction) => {
+    await transaction`SELECT pg_advisory_xact_lock(1818585442, 1)`;
+    await transaction.unsafe(schemaSql);
+  });
 };

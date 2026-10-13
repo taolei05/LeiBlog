@@ -7,4 +7,9 @@ bun.lockb
 dist
 build
 coverage
+uploads
 *.log
+*.pem
+*.key
+*.p12
+*.pfx

@@ -12,6 +12,7 @@ import { IconButton } from "@astryxdesign/core/IconButton";
 import { Layout, LayoutContent, LayoutFooter, LayoutHeader } from "@astryxdesign/core/Layout";
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
+import { Selector } from "@astryxdesign/core/Selector";
 import { HStack, StackItem, VStack } from "@astryxdesign/core/Stack";
 import { Step, Stepper } from "@astryxdesign/core/Stepper";
 import { Switch } from "@astryxdesign/core/Switch";
@@ -24,7 +25,16 @@ import { Moon, Sun } from "lucide-react";
 
 import { APP_LANGUAGES, changeAppLanguage, normalizeLanguage } from "../../../../shared/i18n";
 import type { AdminAuthState, InitialSetupPayload } from "../../../../shared/admin-api";
-import { completeInitialSetup } from "../../../../shared/admin-api";
+import { completeInitialSetup, uploadInitialSetupMediaAsset } from "../../../../shared/admin-api";
+import { MediaAssetField, MultiMediaAssetField } from "../components/media-asset-field";
+import {
+  createTimeZoneOptions,
+  formatCurrentMinuteInTimeZone,
+  formatTimeZoneOffset,
+  getSystemTimeZone,
+  isValidTimeZone,
+  normalizeTimeZone,
+} from "../../../../shared/time-zone";
 
 type ErrorMap = Record<string, string>;
 
@@ -63,15 +73,6 @@ const MOBILE_FULL_WIDTH_STYLE: CSSProperties = {
   minWidth: 0,
   width: "100%",
 };
-const AVATAR_PREVIEW_STYLE: CSSProperties = { maxWidth: 128 };
-const AVATAR_PREVIEW_IMAGE_STYLE: CSSProperties = {
-  borderRadius: 8,
-  display: "block",
-  height: 80,
-  objectFit: "cover",
-  width: 80,
-};
-
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const DATE_TIME_MINUTE_PATTERN = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
 
@@ -83,17 +84,6 @@ const splitValues = (raw: string) =>
 
 const createItemId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const padDateUnit = (value: number) => value.toString().padStart(2, "0");
-
-const formatCurrentMinute = () => {
-  const now = new Date();
-
-  return [
-    `${now.getFullYear()}-${padDateUnit(now.getMonth() + 1)}-${padDateUnit(now.getDate())}`,
-    `${padDateUnit(now.getHours())}:${padDateUnit(now.getMinutes())}`,
-  ].join(" ");
-};
 
 const isValidMinuteTimestamp = (value: string) => {
   const match = DATE_TIME_MINUTE_PATTERN.exec(value);
@@ -127,6 +117,19 @@ const isValidUrl = (value: string) => {
   }
 };
 
+const isValidMediaAssetUrl = (value: string) => {
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return true;
+  }
+
+  if (trimmedValue.startsWith("/uploads/")) {
+    return true;
+  }
+
+  return isValidUrl(trimmedValue);
+};
+
 const addRequiredError = (errors: ErrorMap, key: string, value: string, message: string) => {
   if (!value.trim()) {
     errors[key] = message;
@@ -136,6 +139,12 @@ const addRequiredError = (errors: ErrorMap, key: string, value: string, message:
 const addUrlError = (errors: ErrorMap, key: string, value: string, message: string) => {
   const trimmedValue = value.trim();
   if (trimmedValue && !isValidUrl(trimmedValue)) {
+    errors[key] = message;
+  }
+};
+
+const addMediaAssetUrlError = (errors: ErrorMap, key: string, value: string, message: string) => {
+  if (!isValidMediaAssetUrl(value)) {
     errors[key] = message;
   }
 };
@@ -213,6 +222,7 @@ export function InitialSetupPage({
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File>();
   const [bio, setBio] = useState("");
   const [tags, setTags] = useState(defaultTags);
   const [hasCustomizedTags, setHasCustomizedTags] = useState(false);
@@ -222,13 +232,20 @@ export function InitialSetupPage({
   const [blogUrl, setBlogUrl] = useState("");
 
   const [siteName, setSiteName] = useState("");
-  const [foundedAt, setFoundedAt] = useState(() => formatCurrentMinute());
+  const [timeZone, setTimeZone] = useState(() => getSystemTimeZone());
+  const [foundedAt, setFoundedAt] = useState(() =>
+    formatCurrentMinuteInTimeZone(getSystemTimeZone()),
+  );
   const [siteDescription, setSiteDescription] = useState("");
   const [coverUrls, setCoverUrls] = useState("");
+  const [coverFiles, setCoverFiles] = useState<File[]>([]);
   const [homepageCopy, setHomepageCopy] = useState("");
   const [lightLogoUrl, setLightLogoUrl] = useState("");
+  const [lightLogoFile, setLightLogoFile] = useState<File>();
   const [darkLogoUrl, setDarkLogoUrl] = useState("");
+  const [darkLogoFile, setDarkLogoFile] = useState<File>();
   const [faviconUrl, setFaviconUrl] = useState("");
+  const [faviconFile, setFaviconFile] = useState<File>();
 
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
@@ -254,8 +271,10 @@ export function InitialSetupPage({
   const tagValues = useMemo(() => splitValues(tags), [tags]);
   const coverUrlValues = useMemo(() => splitValues(coverUrls), [coverUrls]);
   const keywordValues = useMemo(() => splitValues(seoKeywords), [seoKeywords]);
-  const avatarPreviewUrl = avatarUrl.trim();
-  const canPreviewAvatar = Boolean(avatarPreviewUrl) && isValidUrl(avatarPreviewUrl);
+  const timeZoneOptions = useMemo(
+    () => createTimeZoneOptions({ selectedTimeZone: timeZone }),
+    [timeZone],
+  );
 
   const updateSocialLink = (id: string, field: LinkItemField, value: string) => {
     setSocialLinks((items) =>
@@ -296,7 +315,12 @@ export function InitialSetupPage({
     if (password.trim() && password.length < 8) {
       administrator.password = t("initialSetup.validation.passwordTooShort");
     }
-    addUrlError(administrator, "avatarUrl", avatarUrl, t("initialSetup.validation.avatarInvalid"));
+    addMediaAssetUrlError(
+      administrator,
+      "avatarUrl",
+      avatarUrl,
+      t("initialSetup.validation.avatarInvalid"),
+    );
     addUrlError(administrator, "blogUrl", blogUrl, t("initialSetup.validation.blogInvalid"));
     socialLinks.forEach((link) => {
       addUrlError(
@@ -311,17 +335,35 @@ export function InitialSetupPage({
     if (foundedAt.trim() && !isValidMinuteTimestamp(foundedAt.trim())) {
       site.foundedAt = t("initialSetup.validation.minuteTimestampInvalid");
     }
+    if (!isValidTimeZone(timeZone)) {
+      site.timeZone = t("initialSetup.validation.timeZoneInvalid");
+    }
     coverUrlValues.forEach((url, index) => {
-      addUrlError(
+      addMediaAssetUrlError(
         site,
         "coverUrls",
         url,
         t("initialSetup.validation.coverInvalid", { index: index + 1 }),
       );
     });
-    addUrlError(site, "lightLogoUrl", lightLogoUrl, t("initialSetup.validation.lightLogoInvalid"));
-    addUrlError(site, "darkLogoUrl", darkLogoUrl, t("initialSetup.validation.darkLogoInvalid"));
-    addUrlError(site, "faviconUrl", faviconUrl, t("initialSetup.validation.faviconInvalid"));
+    addMediaAssetUrlError(
+      site,
+      "lightLogoUrl",
+      lightLogoUrl,
+      t("initialSetup.validation.lightLogoInvalid"),
+    );
+    addMediaAssetUrlError(
+      site,
+      "darkLogoUrl",
+      darkLogoUrl,
+      t("initialSetup.validation.darkLogoInvalid"),
+    );
+    addMediaAssetUrlError(
+      site,
+      "faviconUrl",
+      faviconUrl,
+      t("initialSetup.validation.faviconInvalid"),
+    );
 
     const basics: ErrorMap = {};
 
@@ -347,6 +389,7 @@ export function InitialSetupPage({
     socialLinks,
     siteName,
     foundedAt,
+    timeZone,
     siteDescription,
     coverUrls,
     homepageCopy,
@@ -388,14 +431,28 @@ export function InitialSetupPage({
     setAttempted((previous) => new Set(previous).add(index));
   };
 
-  const createSetupPayload = (): InitialSetupPayload => {
+  type CreateSetupPayloadParameters = {
+    targetAvatarUrl?: string;
+    targetCoverUrlValues?: string[];
+    targetDarkLogoUrl?: string;
+    targetFaviconUrl?: string;
+    targetLightLogoUrl?: string;
+  };
+
+  const createSetupPayload = ({
+    targetAvatarUrl = avatarUrl.trim(),
+    targetCoverUrlValues = coverUrlValues,
+    targetDarkLogoUrl = darkLogoUrl.trim(),
+    targetFaviconUrl = faviconUrl.trim(),
+    targetLightLogoUrl = lightLogoUrl.trim(),
+  }: CreateSetupPayloadParameters = {}): InitialSetupPayload => {
     return {
       admin: {
         name: adminName.trim(),
         username: username.trim(),
         password,
         email: email.trim(),
-        avatarUrl: avatarUrl.trim(),
+        avatarUrl: targetAvatarUrl,
         bio: bio.trim(),
         tags: tagValues,
         tagLocale: language,
@@ -413,11 +470,12 @@ export function InitialSetupPage({
         siteName: siteName.trim(),
         foundedAt: foundedAt.trim(),
         siteDescription: siteDescription.trim(),
-        coverUrls: coverUrlValues,
+        coverUrls: targetCoverUrlValues,
         homepageCopy: homepageCopy.trim(),
-        lightLogoUrl: lightLogoUrl.trim(),
-        darkLogoUrl: darkLogoUrl.trim(),
-        faviconUrl: faviconUrl.trim(),
+        lightLogoUrl: targetLightLogoUrl,
+        darkLogoUrl: targetDarkLogoUrl,
+        faviconUrl: targetFaviconUrl,
+        timeZone: normalizeTimeZone(timeZone),
       },
       basics: {
         seoTitle: seoTitle.trim(),
@@ -443,6 +501,15 @@ export function InitialSetupPage({
     };
   };
 
+  const uploadSetupFile = async ({ file, folderSlug }: { file: File; folderSlug: string }) => {
+    const uploadedAsset = await uploadInitialSetupMediaAsset({
+      file,
+      folderSlug,
+    });
+
+    return uploadedAsset.accessUrl;
+  };
+
   const goNext = async () => {
     if (isSubmitting) {
       return;
@@ -458,7 +525,50 @@ export function InitialSetupPage({
     if (isLastStep) {
       setIsSubmitting(true);
       try {
-        const nextAuthState = await completeInitialSetup(createSetupPayload());
+        const targetAvatarUrl =
+          avatarFile === undefined
+            ? avatarUrl.trim()
+            : await uploadSetupFile({ file: avatarFile, folderSlug: "avatars" });
+        const uploadedCoverUrls =
+          coverFiles.length > 0
+            ? await Promise.all(
+                coverFiles.map((file) => uploadSetupFile({ file, folderSlug: "site" })),
+              )
+            : [];
+        const targetLightLogoUrl =
+          lightLogoFile === undefined
+            ? lightLogoUrl.trim()
+            : await uploadSetupFile({ file: lightLogoFile, folderSlug: "site" });
+        const targetDarkLogoUrl =
+          darkLogoFile === undefined
+            ? darkLogoUrl.trim()
+            : await uploadSetupFile({ file: darkLogoFile, folderSlug: "site" });
+        const targetFaviconUrl =
+          faviconFile === undefined
+            ? faviconUrl.trim()
+            : await uploadSetupFile({ file: faviconFile, folderSlug: "site" });
+        const targetCoverUrlValues = [...coverUrlValues, ...uploadedCoverUrls];
+
+        setAvatarUrl(targetAvatarUrl);
+        setCoverUrls(targetCoverUrlValues.join("\n"));
+        setLightLogoUrl(targetLightLogoUrl);
+        setDarkLogoUrl(targetDarkLogoUrl);
+        setFaviconUrl(targetFaviconUrl);
+        setAvatarFile(undefined);
+        setCoverFiles([]);
+        setLightLogoFile(undefined);
+        setDarkLogoFile(undefined);
+        setFaviconFile(undefined);
+
+        const nextAuthState = await completeInitialSetup(
+          createSetupPayload({
+            targetAvatarUrl,
+            targetCoverUrlValues,
+            targetDarkLogoUrl,
+            targetFaviconUrl,
+            targetLightLogoUrl,
+          }),
+        );
         onComplete(nextAuthState);
       } catch (error) {
         const message = error instanceof Error ? error.message : t("initialSetup.submit.failed");
@@ -646,30 +756,24 @@ export function InitialSetupPage({
                       }
                     />
                   </Grid>
-                  <TextInput
+                  <MediaAssetField
                     label={t("initialSetup.admin.avatarUrl")}
-                    ref={fieldRefs.avatarUrl}
                     value={avatarUrl}
                     onChange={setAvatarUrl}
+                    localFile={avatarFile}
+                    localImageEditorKind="avatar"
+                    onLocalFileChange={setAvatarFile}
+                    folderSlug="avatars"
+                    allowMediaLibrary={false}
                     placeholder={t("initialSetup.admin.avatarPlaceholder")}
+                    previewVariant="avatar"
+                    isDisabled={isSubmitting}
                     status={
                       currentErrors.avatarUrl
                         ? { type: "error", message: currentErrors.avatarUrl }
                         : undefined
                     }
                   />
-                  {canPreviewAvatar && (
-                    <Card variant="muted" padding={4} style={AVATAR_PREVIEW_STYLE}>
-                      <VStack gap={2}>
-                        <Text type="label">{t("initialSetup.admin.avatarPreview")}</Text>
-                        <img
-                          alt={t("initialSetup.admin.avatarPreviewAlt")}
-                          src={avatarPreviewUrl}
-                          style={AVATAR_PREVIEW_IMAGE_STYLE}
-                        />
-                      </VStack>
-                    </Card>
-                  )}
                   <TextArea
                     label={t("initialSetup.admin.bio")}
                     ref={fieldRefs.bio}
@@ -822,7 +926,33 @@ export function InitialSetupPage({
                         label={t("actions.now")}
                         variant="secondary"
                         width={isNarrow ? "100%" : undefined}
-                        onClick={() => setFoundedAt(formatCurrentMinute())}
+                        onClick={() => setFoundedAt(formatCurrentMinuteInTimeZone(timeZone))}
+                      />
+                    </HStack>
+                    <HStack gap={2} vAlign="end" wrap="wrap">
+                      <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : undefined}>
+                        <Selector
+                          label={t("initialSetup.site.timeZone")}
+                          options={timeZoneOptions}
+                          value={timeZone}
+                          onChange={setTimeZone}
+                          hasSearch
+                          searchPlaceholder={t("initialSetup.site.timeZoneSearch")}
+                          description={t("initialSetup.site.timeZoneDescription", {
+                            offset: formatTimeZoneOffset({ timeZone }),
+                          })}
+                          status={
+                            currentErrors.timeZone
+                              ? { type: "error", message: currentErrors.timeZone }
+                              : undefined
+                          }
+                        />
+                      </StackItem>
+                      <Button
+                        label={t("initialSetup.site.useSystemTimeZone")}
+                        variant="secondary"
+                        width={isNarrow ? "100%" : undefined}
+                        onClick={() => setTimeZone(getSystemTimeZone())}
                       />
                     </HStack>
                   </Grid>
@@ -839,25 +969,20 @@ export function InitialSetupPage({
                         : undefined
                     }
                   />
-                  <TextArea
+                  <MultiMediaAssetField
                     label={t("initialSetup.site.covers")}
-                    ref={fieldRefs.coverUrls}
-                    rows={4}
-                    value={coverUrls}
-                    onChange={setCoverUrls}
+                    values={coverUrlValues}
+                    localFiles={coverFiles}
+                    onChange={(values) => setCoverUrls(values.join("\n"))}
+                    onLocalFilesChange={setCoverFiles}
+                    folderSlug="site"
+                    allowMediaLibrary={false}
                     placeholder={t("initialSetup.site.coversPlaceholder")}
-                    description={t("initialSetup.site.coversDescription")}
+                    isDisabled={isSubmitting}
                     status={
                       currentErrors.coverUrls
                         ? { type: "error", message: currentErrors.coverUrls }
-                        : coverUrlValues.length > 0
-                          ? {
-                              type: "success",
-                              message: t("initialSetup.site.coversAdded", {
-                                count: coverUrlValues.length,
-                              }),
-                            }
-                          : undefined
+                        : undefined
                     }
                   />
                   <TextArea
@@ -874,36 +999,49 @@ export function InitialSetupPage({
                     }
                   />
                   <Grid columns={{ minWidth: 260 }} gap={3}>
-                    <TextInput
+                    <MediaAssetField
                       label={t("initialSetup.site.lightLogo")}
-                      ref={fieldRefs.lightLogoUrl}
                       value={lightLogoUrl}
                       onChange={setLightLogoUrl}
+                      localFile={lightLogoFile}
+                      onLocalFileChange={setLightLogoFile}
+                      folderSlug="site"
+                      allowMediaLibrary={false}
                       placeholder={t("initialSetup.site.lightLogoPlaceholder")}
+                      isDisabled={isSubmitting}
                       status={
                         currentErrors.lightLogoUrl
                           ? { type: "error", message: currentErrors.lightLogoUrl }
                           : undefined
                       }
                     />
-                    <TextInput
+                    <MediaAssetField
                       label={t("initialSetup.site.darkLogo")}
-                      ref={fieldRefs.darkLogoUrl}
                       value={darkLogoUrl}
                       onChange={setDarkLogoUrl}
+                      localFile={darkLogoFile}
+                      onLocalFileChange={setDarkLogoFile}
+                      folderSlug="site"
+                      allowMediaLibrary={false}
                       placeholder={t("initialSetup.site.darkLogoPlaceholder")}
+                      isDisabled={isSubmitting}
                       status={
                         currentErrors.darkLogoUrl
                           ? { type: "error", message: currentErrors.darkLogoUrl }
                           : undefined
                       }
                     />
-                    <TextInput
+                    <MediaAssetField
                       label={t("initialSetup.site.favicon")}
-                      ref={fieldRefs.faviconUrl}
                       value={faviconUrl}
                       onChange={setFaviconUrl}
+                      localFile={faviconFile}
+                      onLocalFileChange={setFaviconFile}
+                      folderSlug="site"
+                      allowMediaLibrary={false}
                       placeholder={t("initialSetup.site.faviconPlaceholder")}
+                      previewVariant="favicon"
+                      isDisabled={isSubmitting}
                       status={
                         currentErrors.faviconUrl
                           ? { type: "error", message: currentErrors.faviconUrl }
@@ -1141,9 +1279,12 @@ export function InitialSetupPage({
                         <MetadataListItem label={t("initialSetup.summary.site")}>
                           {siteName.trim() || missingText} / {foundedAt.trim() || missingText}
                         </MetadataListItem>
+                        <MetadataListItem label={t("initialSetup.summary.timeZone")}>
+                          {timeZone}
+                        </MetadataListItem>
                         <MetadataListItem label={t("initialSetup.summary.covers")}>
                           {t("initialSetup.summary.coversCount", {
-                            count: coverUrlValues.length,
+                            count: coverUrlValues.length + coverFiles.length,
                           })}
                         </MetadataListItem>
                         <MetadataListItem label={t("initialSetup.summary.seoKeywords")}>

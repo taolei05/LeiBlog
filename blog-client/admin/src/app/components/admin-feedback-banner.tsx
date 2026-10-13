@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 
 import { Banner } from "@astryxdesign/core/Banner";
 
-export type AdminFeedbackBannerStatus = "success" | "warning" | "error";
+export type AdminFeedbackBannerStatus = "info" | "success" | "warning" | "error";
 
 export type AdminFeedbackBannerState = {
   id: number;
@@ -22,9 +22,9 @@ const ADMIN_FEEDBACK_BANNER_STYLE: CSSProperties = {
   left: "50%",
   maxWidth: "calc(100vw - 32px)",
   position: "fixed",
-  top: 16,
+  top: "calc(env(safe-area-inset-top) + 16px)",
   transform: "translateX(-50%)",
-  width: "max-content",
+  width: "min(420px, calc(100vw - 32px))",
   zIndex: 1000,
 };
 

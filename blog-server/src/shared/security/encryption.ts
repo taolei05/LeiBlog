@@ -26,8 +26,10 @@ export const encryptSecret = ({ value, secret }: SecretParams) => {
 };
 
 export const decryptSecret = ({ value, secret }: SecretParams) => {
-  const [version, ivText, authTagText, encryptedText] = value.split(":");
+  const parts = value.split(":");
+  const [version, ivText, authTagText, encryptedText] = parts;
   if (
+    parts.length !== 4 ||
     version !== ENCRYPTED_VALUE_VERSION ||
     ivText === undefined ||
     authTagText === undefined ||
@@ -36,11 +38,21 @@ export const decryptSecret = ({ value, secret }: SecretParams) => {
     throw new Error("Encrypted secret has an unsupported format.");
   }
 
-  const decipher = createDecipheriv(ALGORITHM, deriveKey(secret), Buffer.from(ivText, "base64"));
-  decipher.setAuthTag(Buffer.from(authTagText, "base64"));
+  const iv = Buffer.from(ivText, "base64");
+  const authTag = Buffer.from(authTagText, "base64");
+  const encrypted = Buffer.from(encryptedText, "base64");
+  if (
+    iv.length !== IV_LENGTH ||
+    authTag.length !== 16 ||
+    iv.toString("base64") !== ivText ||
+    authTag.toString("base64") !== authTagText ||
+    encrypted.toString("base64") !== encryptedText
+  ) {
+    throw new Error("Encrypted secret has an unsupported format.");
+  }
 
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedText, "base64")),
-    decipher.final(),
-  ]).toString("utf8");
+  const decipher = createDecipheriv(ALGORITHM, deriveKey(secret), iv, { authTagLength: 16 });
+  decipher.setAuthTag(authTag);
+
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 };

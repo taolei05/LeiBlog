@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -45,12 +45,37 @@ import { TopNav, TopNavHeading } from "@astryxdesign/core/TopNav";
 import { useMediaQuery } from "@astryxdesign/core/hooks";
 import type { ThemeMode } from "@astryxdesign/core/theme";
 
-import { AdminSettingsPage } from "../admin-settings/page";
-import { SiteSettingsPage } from "../site-settings/page";
-import { UsersManagementPage } from "../table-filter/page";
+import { AdminAsyncContent } from "../components/admin-async-content";
 import type { AdminUser, SiteSettings } from "../../../../shared/admin-api";
-import { getSiteSettings } from "../../../../shared/admin-api";
+import { getSiteSettings, resolveAdminAssetUrl } from "../../../../shared/admin-api";
 import { APP_LANGUAGES, changeAppLanguage, normalizeLanguage } from "../../../../shared/i18n";
+import { normalizeTimeZone } from "../../../../shared/time-zone";
+
+const AdminSettingsPage = lazy(async () => ({
+  default: (await import("../admin-settings/page")).AdminSettingsPage,
+}));
+const BackupPage = lazy(async () => ({ default: (await import("../backup/page")).BackupPage }));
+const ContentManagementPage = lazy(async () => ({
+  default: (await import("../content-management/page")).ContentManagementPage,
+}));
+const AdminDashboardPage = lazy(async () => ({
+  default: (await import("../dashboard/page")).AdminDashboardPage,
+}));
+const LoginMethodsPage = lazy(async () => ({
+  default: (await import("../login-methods/page")).LoginMethodsPage,
+}));
+const MediaLibraryPage = lazy(async () => ({
+  default: (await import("../media-library/page")).MediaLibraryPage,
+}));
+const NavigationManagementPage = lazy(async () => ({
+  default: (await import("../navigation/page")).NavigationManagementPage,
+}));
+const SiteSettingsPage = lazy(async () => ({
+  default: (await import("../site-settings/page")).SiteSettingsPage,
+}));
+const UsersManagementPage = lazy(async () => ({
+  default: (await import("../table-filter/page")).UsersManagementPage,
+}));
 
 type AdminPageId =
   | "dashboard"
@@ -355,14 +380,33 @@ export function AdminShellPage({
   const activeDescription = t(activePage.item.descriptionKey);
   const activeSectionTitle = t(activePage.section.labelKey);
   const isActivePagePlaceholder =
-    activePageId !== "admin-settings" && activePageId !== "site-settings" && activePageId !== "users";
+    activePageId !== "dashboard" &&
+    activePageId !== "admin-settings" &&
+    activePageId !== "backups" &&
+    activePageId !== "categories" &&
+    activePageId !== "comments" &&
+    activePageId !== "contributors" &&
+    activePageId !== "login-methods" &&
+    activePageId !== "media" &&
+    activePageId !== "navigation" &&
+    activePageId !== "posts" &&
+    activePageId !== "site-settings" &&
+    activePageId !== "tags" &&
+    activePageId !== "users";
   const displayName = user.name ?? user.username;
   const lightLogoUrl = siteSettings?.site.lightLogoUrl.trim() ?? "";
   const darkLogoUrl = siteSettings?.site.darkLogoUrl.trim() ?? "";
+  const siteTimeZone = normalizeTimeZone(siteSettings?.site.timeZone);
   const activeLogoUrl = isDarkTheme ? darkLogoUrl || lightLogoUrl : lightLogoUrl || darkLogoUrl;
+  const accountAvatarUrl =
+    user.avatarUrl === undefined ? undefined : resolveAdminAssetUrl(user.avatarUrl);
   const brandLogo =
     activeLogoUrl.length > 0 ? (
-      <img alt={t("admin.product")} src={activeLogoUrl} style={topNavLogoImageStyle} />
+      <img
+        alt={t("admin.product")}
+        src={resolveAdminAssetUrl(activeLogoUrl)}
+        style={topNavLogoImageStyle}
+      />
     ) : (
       <BookOpen size={20} />
     );
@@ -379,7 +423,7 @@ export function AdminShellPage({
             description: t("admin.confirm.logout.description"),
             actionLabel: t("admin.confirm.logout.action"),
           }
-      : undefined;
+        : undefined;
 
   useEffect(() => {
     let isMounted = true;
@@ -429,7 +473,7 @@ export function AdminShellPage({
   const accountPopoverContent = (
     <VStack gap={3} style={accountPopoverStyle}>
       <HStack gap={2} vAlign="center">
-        <Avatar src={user.avatarUrl} name={displayName} size="sm" />
+        <Avatar src={accountAvatarUrl} name={displayName} size="sm" />
         <VStack gap={0} style={topNavAccountTextStyle}>
           <Text type="label" style={topNavAccountTextStyle}>
             {displayName}
@@ -504,7 +548,7 @@ export function AdminShellPage({
           >
             <Button label={displayName} variant="ghost" size="sm">
               <HStack gap={2} vAlign="center">
-                <Avatar src={user.avatarUrl} name={displayName} size="sm" />
+                <Avatar src={accountAvatarUrl} name={displayName} size="sm" />
                 {!isNarrow && (
                   <VStack gap={0} style={topNavAccountTextStyle}>
                     <Text type="label" style={topNavAccountTextStyle}>
@@ -540,7 +584,14 @@ export function AdminShellPage({
               isSelected={activePageId === item.id}
               endContent={
                 activePageId === item.id &&
+                item.id !== "dashboard" &&
                 item.id !== "admin-settings" &&
+                item.id !== "backups" &&
+                item.id !== "categories" &&
+                item.id !== "login-methods" &&
+                item.id !== "media" &&
+                item.id !== "navigation" &&
+                item.id !== "posts" &&
                 item.id !== "site-settings" &&
                 item.id !== "users" ? (
                   <Badge label={t("admin.placeholder.dev")} variant="neutral" />
@@ -606,31 +657,82 @@ export function AdminShellPage({
           }
           content={
             <LayoutContent padding={isNarrow ? 3 : 4}>
-              <VStack gap={4}>
-                {activePageId === "admin-settings" ? (
-                  <AdminSettingsPage
-                    authToken={authToken}
-                    user={user}
-                    isNarrow={isNarrow}
-                    onUserUpdated={onUserUpdated}
-                  />
-                ) : activePageId === "site-settings" ? (
-                  <SiteSettingsPage
-                    authToken={authToken}
-                    isNarrow={isNarrow}
-                    onSettingsUpdated={setSiteSettings}
-                  />
-                ) : activePageId === "users" ? (
-                  <UsersManagementPage authToken={authToken} isNarrow={isNarrow} />
-                ) : (
-                  <PlaceholderPage
-                    title={activeTitle}
-                    description={activeDescription}
-                    sectionTitle={activeSectionTitle}
-                    isNarrow={isNarrow}
-                  />
-                )}
-              </VStack>
+              <AdminAsyncContent key={activePageId}>
+                <VStack gap={4}>
+                  {activePageId === "dashboard" ? (
+                    <AdminDashboardPage
+                      authToken={authToken}
+                      isNarrow={isNarrow}
+                      language={language}
+                      siteSettings={siteSettings}
+                      timeZone={siteTimeZone}
+                      user={user}
+                      onOpenBlog={onOpenBlog}
+                      onPageChange={(pageId) => setActivePageId(pageId)}
+                    />
+                  ) : activePageId === "admin-settings" ? (
+                    <AdminSettingsPage
+                      authToken={authToken}
+                      user={user}
+                      isNarrow={isNarrow}
+                      timeZone={siteTimeZone}
+                      onUserUpdated={onUserUpdated}
+                    />
+                  ) : activePageId === "site-settings" ? (
+                    <SiteSettingsPage
+                      authToken={authToken}
+                      isNarrow={isNarrow}
+                      onSettingsUpdated={setSiteSettings}
+                    />
+                  ) : activePageId === "users" ? (
+                    <UsersManagementPage
+                      authToken={authToken}
+                      isNarrow={isNarrow}
+                      timeZone={siteTimeZone}
+                    />
+                  ) : activePageId === "media" ? (
+                    <MediaLibraryPage
+                      authToken={authToken}
+                      isNarrow={isNarrow}
+                      timeZone={siteTimeZone}
+                    />
+                  ) : activePageId === "posts" ||
+                    activePageId === "categories" ||
+                    activePageId === "comments" ||
+                    activePageId === "contributors" ||
+                    activePageId === "tags" ? (
+                    <ContentManagementPage
+                      authToken={authToken}
+                      initialView={
+                        activePageId === "posts"
+                          ? "articles"
+                          : activePageId === "categories"
+                            ? "categories"
+                            : activePageId === "comments"
+                              ? "comments"
+                              : activePageId === "contributors"
+                                ? "contributors"
+                                : "tags"
+                      }
+                      isNarrow={isNarrow}
+                      timeZone={siteTimeZone}
+                    />
+                  ) : activePageId === "navigation" ? (
+                    <NavigationManagementPage authToken={authToken} isNarrow={isNarrow} />
+                  ) : activePageId === "login-methods" ? (
+                    <LoginMethodsPage authToken={authToken} isNarrow={isNarrow} />
+                  ) : activePageId === "backups" ? (
+                    <BackupPage authToken={authToken} isNarrow={isNarrow} timeZone={siteTimeZone} />
+                  ) : (
+                    <PlaceholderPage
+                      title={activeTitle}
+                      description={activeDescription}
+                      sectionTitle={activeSectionTitle}
+                      isNarrow={isNarrow}
+                    />
+                  )}
+                </VStack>
+              </AdminAsyncContent>
             </LayoutContent>
           }
         />

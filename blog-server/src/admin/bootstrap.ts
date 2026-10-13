@@ -22,31 +22,27 @@ export const ensureBootstrapAdmin = async () => {
   }
 
   const sql = getSql();
-  const rows = await sql<CountRow[]>`
-    SELECT count(*)::text AS count
-    FROM users
-    WHERE role = ${USER_ROLE.Admin}
-  `;
-
-  const row = rows[0];
-  if (row !== undefined && Number(row.count) > 0) {
-    return;
-  }
-
-  const passwordHash = await Bun.password.hash(password);
-  const preparedProfile = await prepareUserProfileInput({
-    profile: {
-      name: env.adminBootstrapName ?? "",
-      bio: "",
-      tags: env.adminBootstrapTags,
-    },
-    sourceLocale: "zh-CN",
-  });
-  const profileWrite = resolveUserProfileWrite({
-    prepared: preparedProfile,
-  });
-
   await sql.begin(async (transaction) => {
+    await transaction`SELECT pg_advisory_xact_lock(1818585442, 2)`;
+    const rows = await transaction<CountRow[]>`
+      SELECT count(*)::text AS count FROM users WHERE role = ${USER_ROLE.Admin}
+    `;
+    if (Number(rows[0]?.count ?? 0) > 0) {
+      return;
+    }
+    const passwordHash = await Bun.password.hash(password);
+    const preparedProfile = await prepareUserProfileInput({
+      profile: {
+        name: env.adminBootstrapName ?? "",
+        bio: "",
+        tags: env.adminBootstrapTags,
+      },
+      sourceLocale: "zh-CN",
+    });
+    const profileWrite = resolveUserProfileWrite({
+      prepared: preparedProfile,
+    });
+
     const insertedUsers = await transaction<BootstrapUserRow[]>`
       INSERT INTO users (
         role,
@@ -76,7 +72,6 @@ export const ensureBootstrapAdmin = async () => {
       sql: transaction,
       userId: insertedUser.id,
     });
+    console.log(`Bootstrapped admin user "${env.adminBootstrapUsername}".`);
   });
-
-  console.log(`Bootstrapped admin user "${env.adminBootstrapUsername}".`);
 };

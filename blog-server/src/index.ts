@@ -1,70 +1,43 @@
-import { cors } from "@elysiajs/cors";
-import { Elysia } from "elysia";
-
-import { ensureBootstrapAdmin } from "./admin/bootstrap";
-import { adminRoutes } from "./admin/routes";
-import { blogRoutes } from "./blog/routes";
-import { closeSql } from "./shared/db/postgres";
-import { closeRedis } from "./shared/db/redis";
-import { runMigrations } from "./shared/db/migrate";
+import { createApp, closeAppRuntime, prepareAppRuntime } from "./app";
 import { env } from "./shared/env";
-import { healthRoutes } from "./shared/health-routes";
-import { USER_PROFILE_LOCALE_HEADER } from "./shared/profile-tags";
+import { MAX_BACKUP_REQUEST_BYTES } from "./shared/request-body";
+import { startEmailNotificationWorker } from "./shared/email-notifications";
 
-const parseCorsOrigin = (origin: string) => {
-  const lastSlashIndex = origin.lastIndexOf("/");
-  if (!origin.startsWith("/") || lastSlashIndex === 0) {
-    return origin;
-  }
+await prepareAppRuntime();
 
-  const pattern = origin.slice(1, lastSlashIndex);
-  const flags = origin.slice(lastSlashIndex + 1);
-
-  return new RegExp(pattern, flags);
-};
-
-const resolveCorsOrigin = () => {
-  if (env.corsOrigins.includes("*")) {
-    return true;
-  }
-
-  return env.corsOrigins.map(parseCorsOrigin);
-};
-
-const startServer = async () => {
-  await runMigrations();
-  await ensureBootstrapAdmin();
-
-  const app = new Elysia()
-    .use(
-      cors({
-        origin: resolveCorsOrigin(),
-        allowedHeaders: ["Content-Type", "Authorization", USER_PROFILE_LOCALE_HEADER],
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      }),
-    )
-    .get("/", () => ({ ok: true, service: "LeiBlog server" }))
-    .use(healthRoutes)
-    .use(adminRoutes)
-    .use(blogRoutes)
-    .listen({
-      hostname: env.hostname,
-      port: env.port,
-    });
-
-  console.log(`LeiBlog server is running at ${app.server?.hostname}:${app.server?.port}`);
-};
-
-const shutdown = async () => {
-  await Promise.all([closeRedis(), closeSql()]);
-};
-
-process.on("SIGINT", () => {
-  void shutdown().finally(() => process.exit(0));
+const app = createApp().listen({
+  hostname: env.hostname,
+  port: env.port,
+  maxRequestBodySize: MAX_BACKUP_REQUEST_BYTES,
 });
 
-process.on("SIGTERM", () => {
-  void shutdown().finally(() => process.exit(0));
+console.log(`LeiBlog server is running at ${app.server?.hostname}:${app.server?.port}`);
+const notificationWorker = startEmailNotificationWorker();
+
+let isShuttingDown = false;
+
+const shutdown = async (signal: NodeJS.Signals) => {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`Received ${signal}, shutting down LeiBlog server`);
+
+  const results = await Promise.allSettled([app.stop(), notificationWorker.stop()]);
+  results.push(...(await Promise.allSettled([closeAppRuntime()])));
+  const hasFailure = results.some((result) => result.status === "rejected");
+  if (hasFailure) {
+    console.error("LeiBlog server failed to shut down cleanly", results);
+  }
+
+  process.exit(hasFailure ? 1 : 0);
+};
+
+process.once("SIGINT", () => {
+  void shutdown("SIGINT");
 });
 
-await startServer();
+process.once("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});

@@ -1,9 +1,11 @@
-import { StrictMode, useCallback, useEffect, useState } from "react";
+import { lazy, StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 
 import "@astryxdesign/core/reset.css";
 import "@astryxdesign/core/astryx.css";
+import "altcha";
+import "altcha/i18n/all";
 import "./styles.css";
 
 import { Center } from "@astryxdesign/core/Center";
@@ -23,14 +25,26 @@ import type {
   AdminFeedbackBannerState,
   CreateAdminFeedbackBannerParams,
 } from "./app/components/admin-feedback-banner";
-import { AdminShellPage } from "./app/admin-shell/page";
-import { InitialSetupPage } from "./app/initial-setup/page";
+import { AdminAsyncContent } from "./app/components/admin-async-content";
 import { LoginPage } from "./app/login-card/page";
-import { getAdminMe, getAdminSetupStatus, logoutAdmin } from "../../shared/admin-api";
+import {
+  getAdminMe,
+  getAdminSetupStatus,
+  COOKIE_ADMIN_AUTH_TOKEN,
+  logoutAdmin,
+} from "../../shared/admin-api";
+import { createAuthSessionGuard } from "../../shared/auth-session";
 import type { AdminAuthState, AdminSetupStatus, AdminUser } from "../../shared/admin-api";
 import { normalizeLanguage } from "../../shared/i18n";
 import { neutralTheme } from "../../shared/themes/neutral/neutral";
 import "../../shared/themes/neutral/neutral.css";
+
+const AdminShellPage = lazy(async () => ({
+  default: (await import("./app/admin-shell/page")).AdminShellPage,
+}));
+const InitialSetupPage = lazy(async () => ({
+  default: (await import("./app/initial-setup/page")).InitialSetupPage,
+}));
 
 const ASTRYX_MESSAGES: MessagesByLocale = { "zh-CN": zhCN };
 const THEME_STORAGE_KEY = "leiblog-theme";
@@ -62,68 +76,22 @@ const getInitialThemeMode = (): AppThemeMode => {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 };
 
-const isStoredAdminUser = (value: unknown): value is AdminUser => {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-
-  return (
-    typeof record.id === "string" &&
-    record.role === "admin" &&
-    typeof record.username === "string" &&
-    typeof record.email === "string" &&
-    Array.isArray(record.tags) &&
-    record.tags.every((tag) => typeof tag === "string") &&
-    typeof record.commentEmailNotifications === "boolean" &&
-    typeof record.newPostEmailNotifications === "boolean"
-  );
-};
-
-const isStoredAdminAuthState = (value: unknown): value is AdminAuthState => {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const record = value as Record<string, unknown>;
-  return typeof record.token === "string" && isStoredAdminUser(record.user);
-};
-
-const readStoredAuthState = () => {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  const rawState = window.localStorage.getItem(ADMIN_AUTH_STORAGE_KEY);
-  if (rawState === null) {
-    return undefined;
-  }
-
-  const parsedState: unknown = JSON.parse(rawState);
-  return isStoredAdminAuthState(parsedState) ? parsedState : undefined;
-};
-
-const writeStoredAuthState = (authState: AdminAuthState) => {
-  window.localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(authState));
-};
-
 const clearStoredAuthState = () => {
-  window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+  } catch {
+    // In-memory state can still be cleared when browser storage is unavailable.
+  }
 };
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 
-const getAdminDisplayName = (user: AdminUser) => {
-  const name = user.name?.trim();
-  return name ? name : user.username;
-};
-
 function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps) {
   const { i18n, t } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
   const [authState, setAuthState] = useState<AdminAuthState | undefined>();
+  const [authSessionGuard] = useState(createAuthSessionGuard);
   const [setupStatus, setSetupStatus] = useState<AdminSetupStatus | undefined>();
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [feedbackBanner, setFeedbackBanner] = useState<AdminFeedbackBannerState>();
@@ -134,11 +102,13 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
 
   useEffect(() => {
     let isMounted = true;
+    const isCurrentSession = authSessionGuard.capture();
 
     const checkStartupState = async () => {
+      clearStoredAuthState();
       try {
         const nextSetupStatus = await getAdminSetupStatus();
-        if (!isMounted) {
+        if (!isMounted || !isCurrentSession()) {
           return;
         }
 
@@ -157,21 +127,18 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
           window.history.replaceState(null, "", ADMIN_HOME_PATH);
         }
 
-        const storedState = readStoredAuthState();
-        if (storedState === undefined) {
+        const user = await getAdminMe(COOKIE_ADMIN_AUTH_TOKEN, language);
+        if (!isMounted || !isCurrentSession()) {
           return;
         }
 
-        const user = await getAdminMe(storedState.token, language);
-        if (!isMounted) {
-          return;
-        }
-
-        const nextState = { token: storedState.token, user };
-        writeStoredAuthState(nextState);
+        const nextState = { token: COOKIE_ADMIN_AUTH_TOKEN, user };
         setAuthState(nextState);
       } catch {
-        clearStoredAuthState();
+        if (isMounted && isCurrentSession()) {
+          clearStoredAuthState();
+          setAuthState(undefined);
+        }
       } finally {
         if (isMounted) {
           setIsCheckingSession(false);
@@ -184,15 +151,11 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
     return () => {
       isMounted = false;
     };
-  }, [language]);
+  }, [authSessionGuard, language]);
 
   const handleAuthenticated = (nextAuthState: AdminAuthState) => {
-    writeStoredAuthState(nextAuthState);
+    authSessionGuard.invalidate();
     setAuthState(nextAuthState);
-    showFeedbackBanner({
-      status: "success",
-      title: t("admin.toast.loginSuccess", { name: getAdminDisplayName(nextAuthState.user) }),
-    });
   };
 
   const handleAuthenticationFailed = (message: string) => {
@@ -203,8 +166,8 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
   };
 
   const handleSetupComplete = (nextAuthState: AdminAuthState) => {
+    authSessionGuard.invalidate();
     setSetupStatus({ hasAdmin: true, requiresSetup: false });
-    writeStoredAuthState(nextAuthState);
     setAuthState(nextAuthState);
     window.history.replaceState(null, "", ADMIN_HOME_PATH);
     showFeedbackBanner({
@@ -221,6 +184,7 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
   };
 
   const handleLogout = async () => {
+    authSessionGuard.invalidate();
     const token = authState?.token;
 
     if (token !== undefined) {
@@ -243,17 +207,20 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
     });
   };
 
-  const handleUserUpdated = useCallback((user: AdminUser) => {
-    setAuthState((currentState) => {
-      if (currentState === undefined) {
-        return currentState;
-      }
+  const handleUserUpdated = useCallback(
+    (user: AdminUser) => {
+      authSessionGuard.invalidate();
+      setAuthState((currentState) => {
+        if (currentState === undefined) {
+          return currentState;
+        }
 
-      const nextState = { token: currentState.token, user };
-      writeStoredAuthState(nextState);
-      return nextState;
-    });
-  }, []);
+        const nextState = { token: currentState.token, user };
+        return nextState;
+      });
+    },
+    [authSessionGuard],
+  );
 
   const handleOpenBlog = () => {
     showFeedbackBanner({
@@ -274,10 +241,7 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
   };
 
   const feedbackBannerNode = (
-    <AdminFeedbackBanner
-      banner={feedbackBanner}
-      onDismiss={() => setFeedbackBanner(undefined)}
-    />
+    <AdminFeedbackBanner banner={feedbackBanner} onDismiss={() => setFeedbackBanner(undefined)} />
   );
 
   if (isCheckingSession) {
@@ -292,12 +256,14 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
     return (
       <>
         {feedbackBannerNode}
-        <InitialSetupPage
-          themeMode={themeMode}
-          onToggleThemeMode={onToggleThemeMode}
-          onComplete={handleSetupComplete}
-          onSubmitFailed={handleSetupFailed}
-        />
+        <AdminAsyncContent fullPage key="setup">
+          <InitialSetupPage
+            themeMode={themeMode}
+            onToggleThemeMode={onToggleThemeMode}
+            onComplete={handleSetupComplete}
+            onSubmitFailed={handleSetupFailed}
+          />
+        </AdminAsyncContent>
       </>
     );
   }
@@ -307,8 +273,11 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
       <>
         {feedbackBannerNode}
         <LoginPage
+          themeMode={themeMode}
+          onToggleThemeMode={onToggleThemeMode}
           onAuthenticated={handleAuthenticated}
           onAuthenticationFailed={handleAuthenticationFailed}
+          onFeedback={showFeedbackBanner}
         />
       </>
     );
@@ -317,15 +286,17 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
   return (
     <>
       {feedbackBannerNode}
-      <AdminShellPage
-        authToken={authState.token}
-        user={authState.user}
-        themeMode={themeMode}
-        onToggleThemeMode={onToggleThemeMode}
-        onUserUpdated={handleUserUpdated}
-        onLogout={handleLogout}
-        onOpenBlog={handleOpenBlog}
-      />
+      <AdminAsyncContent fullPage key="authenticated">
+        <AdminShellPage
+          authToken={authState.token}
+          user={authState.user}
+          themeMode={themeMode}
+          onToggleThemeMode={onToggleThemeMode}
+          onUserUpdated={handleUserUpdated}
+          onLogout={handleLogout}
+          onOpenBlog={handleOpenBlog}
+        />
+      </AdminAsyncContent>
     </>
   );
 }

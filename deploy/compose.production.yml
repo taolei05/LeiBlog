@@ -1,0 +1,106 @@
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logging
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?}"]
+    environment: { REDISCLI_AUTH: "${REDIS_PASSWORD:?}" }
+    volumes: ["redis-data:/data"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *logging
+  api:
+    image: ${LEIBLOG_PROJECT_NAME:-leiblog}-api:local
+    build: { context: ./source/blog-server }
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:mode=1777,size=128m"]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_ORIGIN:-https://${SITE_HOST:?}}
+      CORS_ORIGINS: ${PUBLIC_SITE_ORIGIN:-https://${SITE_HOST:?}}
+      DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:?}
+      CONFIG_ENCRYPTION_SECRET: ${CONFIG_ENCRYPTION_SECRET:?}
+      ALTCHA_SECRET: ${ALTCHA_SECRET:?}
+      TRUSTED_PROXY_IPS: ${PROXY_IP:-172.30.197.2}
+      UPLOADS_DIR: /data/uploads
+      UPLOADS_URL_PREFIX: /uploads
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+    volumes: ["./uploads:/data/uploads"]
+    networks:
+      edge: { ipv4_address: "${API_IP:-172.30.197.3}" }
+      data:
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:3000/api/health'); if(!r.ok || !(await r.json()).ok) process.exit(1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    stop_grace_period: 30s
+    logging: *logging
+  web:
+    image: ${LEIBLOG_PROJECT_NAME:-leiblog}-web:local
+    build: { context: ./source/blog-client }
+    restart: unless-stopped
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777,size=64m"]
+    environment: { SITE_HOST: "${SITE_HOST:?}" }
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes: ["caddy-data:/data", "caddy-config:/config"]
+    networks:
+      edge: { ipv4_address: "${PROXY_IP:-172.30.197.2}" }
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *logging
+
+networks:
+  edge:
+    ipam:
+      config: [{ subnet: "${PROXY_SUBNET:-172.30.197.0/29}" }]
+  data: { internal: true }
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:

@@ -8,12 +8,11 @@ import {
   upsertUsersEnProfile,
 } from "../../shared/profile-tags";
 import { encryptSecret } from "../../shared/security/encryption";
+import { normalizeTimeZone, parseMinuteTimestampInTimeZone } from "../../shared/time-zone";
 import type { AdminProfile, UserRecord } from "../auth/types";
 import { USER_ROLE } from "../auth/types";
 import { toLocalizedAdminProfile } from "../auth/service";
 import type { EncryptedSettingKey } from "../settings/service";
-
-const DATE_TIME_MINUTE_PATTERN = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
 
 export const INITIAL_SETUP_FAILURE = {
   AdminExists: "admin-exists",
@@ -59,6 +58,7 @@ type InitialSetupSiteInput = {
   lightLogoUrl: string;
   darkLogoUrl: string;
   faviconUrl: string;
+  timeZone: string;
 };
 
 type InitialSetupBasicsInput = {
@@ -106,38 +106,6 @@ const optionalText = (value: string) => {
 const normalizeTextArray = (values: string[]) =>
   values.map((value) => value.trim()).filter((value) => value.length > 0);
 
-const parseMinuteTimestamp = (value: string) => {
-  const trimmedValue = optionalText(value);
-  if (trimmedValue === null) {
-    return null;
-  }
-
-  const match = DATE_TIME_MINUTE_PATTERN.exec(trimmedValue);
-  if (match === null) {
-    return undefined;
-  }
-
-  const [, yearText = "", monthText = "", dayText = "", hourText = "", minuteText = ""] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const date = new Date(year, month - 1, day, hour, minute);
-
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day ||
-    date.getHours() !== hour ||
-    date.getMinutes() !== minute
-  ) {
-    return undefined;
-  }
-
-  return date;
-};
-
 const countAdmins = async () => {
   const sql = getSql();
   const rows = await sql<CountRow[]>`
@@ -162,7 +130,15 @@ export const getAdminSetupStatus = async () => {
 export const completeInitialSetup = async (
   input: CompleteInitialSetupInput,
 ): Promise<CompleteInitialSetupResult> => {
-  const foundedAt = parseMinuteTimestamp(input.site.foundedAt);
+  if ((await countAdmins()) > 0) {
+    return { ok: false, reason: INITIAL_SETUP_FAILURE.AdminExists };
+  }
+
+  const timeZone = normalizeTimeZone(input.site.timeZone);
+  const foundedAt = parseMinuteTimestampInTimeZone({
+    timeZone,
+    value: input.site.foundedAt,
+  });
   if (foundedAt === undefined) {
     return { ok: false, reason: INITIAL_SETUP_FAILURE.InvalidFoundedAt };
   }
@@ -289,7 +265,8 @@ export const completeInitialSetup = async (
         seo_keywords,
         copyright,
         comments_enabled,
-        resend_domain
+        resend_domain,
+        time_zone
       )
       VALUES (
         1,
@@ -306,7 +283,8 @@ export const completeInitialSetup = async (
         ${transaction.array(normalizeTextArray(input.basics.seoKeywords), 25)}::text[],
         ${optionalText(input.basics.copyright)},
         ${input.basics.commentsEnabled},
-        ${optionalText(input.basics.resendDomain)}
+        ${optionalText(input.basics.resendDomain)},
+        ${timeZone}
       )
       ON CONFLICT (id)
       DO UPDATE SET
@@ -323,7 +301,8 @@ export const completeInitialSetup = async (
         seo_keywords = EXCLUDED.seo_keywords,
         copyright = EXCLUDED.copyright,
         comments_enabled = EXCLUDED.comments_enabled,
-        resend_domain = EXCLUDED.resend_domain
+        resend_domain = EXCLUDED.resend_domain,
+        time_zone = EXCLUDED.time_zone
     `;
 
     const encryptedSettings = [
