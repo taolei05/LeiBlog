@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-LEIBLOG_SCRIPT_VERSION="0.3.1"
+LEIBLOG_SCRIPT_VERSION="0.3.2"
 LEIBLOG_BASE_DIR="${LEIBLOG_BASE_DIR:-/var/leiblog}"
 LEIBLOG_PROJECT_NAME="${LEIBLOG_PROJECT_NAME:-leiblog}"
 LEIBLOG_REPO_BRANCH="${LEIBLOG_REPO_BRANCH:-main}"
@@ -68,7 +68,7 @@ load_env_file() {
     [[ "$line" == *=* ]] || die "无效配置行"
     key="${line%%=*}"; value="${line#*=}"
     case "$key" in
-      LEIBLOG_DEPLOYMENT_FORMAT|LEIBLOG_PROJECT_NAME|SITE_HOST|HTTP_PORT|HTTPS_PORT|PROXY_SUBNET|PROXY_IP|API_IP|POSTGRES_USER|POSTGRES_DB|POSTGRES_PASSWORD|REDIS_PASSWORD|JWT_SECRET|CONFIG_ENCRYPTION_SECRET|ALTCHA_SECRET|ADMIN_BOOTSTRAP_USERNAME|ADMIN_BOOTSTRAP_EMAIL|ADMIN_BOOTSTRAP_PASSWORD) ;;
+      LEIBLOG_DEPLOYMENT_FORMAT|LEIBLOG_PROJECT_NAME|SITE_HOST|HTTP_PORT|HTTPS_PORT|PROXY_SUBNET|PROXY_IP|API_IP|POSTGRES_USER|POSTGRES_DB|POSTGRES_PASSWORD|REDIS_PASSWORD|JWT_SECRET|CONFIG_ENCRYPTION_SECRET|ALTCHA_SECRET|SETUP_TOKEN|ADMIN_BOOTSTRAP_USERNAME|ADMIN_BOOTSTRAP_EMAIL|ADMIN_BOOTSTRAP_PASSWORD) ;;
       *) die "未知配置字段: $key";;
     esac
     [[ "$value" =~ ^[A-Za-z0-9@:/.,_+=-]*$ ]] || die "配置只支持未经引号包裹的单行安全值: $key"
@@ -96,9 +96,7 @@ validate_env() {
   [[ "$HTTPS_PORT" == 443 ]] || PUBLIC_SITE_ORIGIN="$PUBLIC_SITE_ORIGIN:$HTTPS_PORT"
   export PUBLIC_SITE_ORIGIN
   [[ "${POSTGRES_USER:-}" =~ ^[a-z][a-z0-9_]{1,40}$ && "${POSTGRES_DB:-}" =~ ^[a-z][a-z0-9_]{1,40}$ ]] || die "无效 PostgreSQL 用户或库名"
-  [[ "${ADMIN_BOOTSTRAP_USERNAME:-}" =~ ^[A-Za-z0-9_-]{2,40}$ ]] || die "无效管理员用户名"
-  [[ "${ADMIN_BOOTSTRAP_EMAIL:-}" =~ ^[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || die "无效管理员邮箱"
-  [[ -z "${ADMIN_BOOTSTRAP_PASSWORD:-}" || "$ADMIN_BOOTSTRAP_PASSWORD" =~ ^[a-f0-9]{48}$ ]] || die "初始密码必须由部署脚本生成，之后在后台修改"
+  [[ -z "${SETUP_TOKEN:-}" || "$SETUP_TOKEN" =~ ^[a-f0-9]{48}$ ]] || die "初始化令牌必须是独立随机生成的 48 位十六进制值"
   [[ "${PROXY_SUBNET:-}" =~ ^[0-9.]+/[0-9]+$ && "${PROXY_IP:-}" =~ ^[0-9.]+$ && "${API_IP:-}" =~ ^[0-9.]+$ ]] || die "无效代理网段"
   [[ "$PROXY_IP" != "$API_IP" ]] || die "代理和 API 的地址不能相同"
 }
@@ -128,13 +126,8 @@ prompt_domain() {
 }
 write_env_if_missing() {
   [[ ! -f "$ENV_FILE" ]] || return 0
-  local domain email username password
+  local domain
   domain="$(prompt_domain "${1:-}")"
-  email="${LEIBLOG_ADMIN_EMAIL:-}"
-  if [[ -z "$email" && -t 0 ]]; then read -r -p '管理员真实邮箱: ' email; fi
-  [[ -n "$email" ]] || die "请提供 LEIBLOG_ADMIN_EMAIL"
-  username="${LEIBLOG_ADMIN_USERNAME:-admin}"
-  password="$(openssl rand -hex 24)"
   umask 077
   printf '%s\n' \
     'LEIBLOG_DEPLOYMENT_FORMAT=2' "LEIBLOG_PROJECT_NAME=$LEIBLOG_PROJECT_NAME" "SITE_HOST=$domain" \
@@ -143,10 +136,9 @@ write_env_if_missing() {
     'POSTGRES_USER=leiblog' 'POSTGRES_DB=leiblog' \
     "POSTGRES_PASSWORD=$(openssl rand -hex 32)" "REDIS_PASSWORD=$(openssl rand -hex 32)" \
     "JWT_SECRET=$(openssl rand -hex 32)" "CONFIG_ENCRYPTION_SECRET=$(openssl rand -hex 32)" "ALTCHA_SECRET=$(openssl rand -hex 32)" \
-    "ADMIN_BOOTSTRAP_USERNAME=$username" "ADMIN_BOOTSTRAP_EMAIL=$email" "ADMIN_BOOTSTRAP_PASSWORD=$password" > "$ENV_FILE"
+    "SETUP_TOKEN=$(openssl rand -hex 24)" > "$ENV_FILE"
   load_env_file; validate_env
-  printf 'Username: %s\nEmail: %s\nPassword: %s\n' "$username" "$email" "$password" > "${LEIBLOG_BASE_DIR}/bootstrap-credentials.txt"
-  chmod 600 "$ENV_FILE" "${LEIBLOG_BASE_DIR}/bootstrap-credentials.txt"
+  chmod 600 "$ENV_FILE"
 }
 validate_archive() {
   local archive="$1" kind="$2" listing names expanded maximum="${LEIBLOG_MAX_ARCHIVE_BYTES:-10737418240}"
@@ -224,16 +216,6 @@ install_cli_command() {
 start_services() {
   compose config --quiet
   compose up -d --wait --wait-timeout 180 --remove-orphans
-}
-clear_bootstrap_password() {
-  load_env_file
-  if [[ -n "$ADMIN_BOOTSTRAP_PASSWORD" ]]; then
-    local count
-    count="$(compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM users WHERE role='admin'")"
-    [[ "$count" -ge 1 ]] || die "管理员创建失败"
-    upsert_env_value ADMIN_BOOTSTRAP_PASSWORD ''
-    compose up -d --no-deps --wait --wait-timeout 180 api
-  fi
 }
 check_public_site() {
   load_env_file
@@ -325,16 +307,22 @@ restore_leiblog() (
 deploy_release() {
   local domain="${2:-}"
   write_env_if_missing "$domain"
+  load_env_file
+  if [[ -z "${SETUP_TOKEN:-}" ]]; then upsert_env_value SETUP_TOKEN "$(openssl rand -hex 24)"; fi
   load_env_file; validate_env; assert_instance
   backup_before_deployment
   fetch_source
   compose build --pull
   start_services
-  clear_bootstrap_password
   check_public_site
   install_cli_file "$SOURCE_DIR/deploy/leiblog.sh"
   info "后台地址: https://${SITE_HOST}/admin"
-  info "首次登录信息位于 $LEIBLOG_BASE_DIR/bootstrap-credentials.txt；登录后修改密码并删除该文件"
+  local count
+  count="$(compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM users WHERE role='admin'")"
+  if [[ "$count" == 0 ]]; then
+    info "初始化地址: ${PUBLIC_SITE_ORIGIN}/admin/setup"
+    info "SETUP_TOKEN: $SETUP_TOKEN"
+  fi
 }
 show_usage() {
   printf '%s\n' "LeiBlog 新项目生产部署 $LEIBLOG_SCRIPT_VERSION" \
@@ -348,7 +336,7 @@ show_usage() {
     '  doctor                       检查配置、容器、HTTPS 与页面入口' \
     '  backup | restore <file>      备份或恢复新项目数据' \
     '  uninstall [--purge]          停止服务；--purge 永久删除数据' \
-    '默认目录 /var/leiblog；LEIBLOG_ADMIN_EMAIL 必须提供真实邮箱。' \
+    '默认目录 /var/leiblog；安装后通过 /admin/setup 和 SETUP_TOKEN 创建管理员。' \
     '可配置 LEIBLOG_BASE_DIR、LEIBLOG_PROJECT_NAME、LEIBLOG_SOURCE_DIR、LEIBLOG_REPO_ARCHIVE_URL。' \
     '禁止在旧项目的部署目录和 Compose 项目名上直接安装。'
 }

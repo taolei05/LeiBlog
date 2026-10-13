@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 import { Elysia, status } from "elysia";
 
@@ -15,6 +15,17 @@ type RequestRateLimit = {
 };
 
 type ConsumeRateLimit = (input: RequestRateLimit & { ip: string }) => Promise<number>;
+
+export const hasValidSetupToken = ({ request, token }: { request: Request; token: string | undefined }) => {
+  const supplied = request.headers.get("X-Setup-Token");
+  if (token === undefined || supplied === null || supplied.length > 256) {
+    return false;
+  }
+  return timingSafeEqual(
+    createHash("sha256").update(token).digest(),
+    createHash("sha256").update(supplied).digest(),
+  );
+};
 
 export const readRequestRateLimit = (request: Request): RequestRateLimit => {
   const path = new URL(request.url).pathname;
@@ -86,12 +97,15 @@ export const createRequestSecurity = ({
       if (!isAllowedWriteRequest({ request, allowedOrigins })) {
         return status(403, { message: "Request origin is not allowed." });
       }
-      if (path.startsWith("/api/admin/setup/") && Bun.env.NODE_ENV === "production") {
-        const setupStatusPath = path === "/api/admin/setup/status";
-        if (!setupStatusPath) {
+      if (
+        path.startsWith("/api/admin/setup/") &&
+        path !== "/api/admin/setup/status" &&
+        request.method !== "OPTIONS" &&
+        (Bun.env.NODE_ENV === "production" || env.setupToken !== undefined)
+      ) {
+        if (!hasValidSetupToken({ request, token: env.setupToken })) {
           return status(403, {
-            message:
-              "Run initial setup locally or configure a bootstrap administrator before production deployment.",
+            message: "Invalid setup token. Use the SETUP_TOKEN from the deployment configuration.",
           });
         }
       }

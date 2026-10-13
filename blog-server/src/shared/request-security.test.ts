@@ -3,9 +3,24 @@ import { Elysia, t } from "elysia";
 import { cors } from "@elysiajs/cors";
 
 import { isAllowedOrigin, isAllowedWriteRequest, parseCorsOrigins } from "./cors-policy";
-import { createRequestSecurity } from "./request-security";
+import { createRequestSecurity, hasValidSetupToken } from "./request-security";
 
 const allowedOrigins = parseCorsOrigins(["https://blog.example.com"]);
+
+describe("initial setup authorization", () => {
+  const token = "a".repeat(48);
+  test("requires the configured token for initialization and media uploads", () => {
+    for (const supplied of [null, "", "wrong", "a".repeat(49)]) {
+      const headers = new Headers();
+      if (supplied !== null) headers.set("X-Setup-Token", supplied);
+      expect(hasValidSetupToken({ request: new Request("http://localhost", { headers }), token })).toBe(false);
+    }
+    expect(hasValidSetupToken({
+      request: new Request("http://localhost", { headers: { "X-Setup-Token": token } }), token,
+    })).toBe(true);
+    expect(hasValidSetupToken({ request: new Request("http://localhost"), token: undefined })).toBe(false);
+  });
+});
 
 describe("cross-site request protection", () => {
   test("refuses credentialed wildcard and unanchored patterns", () => {

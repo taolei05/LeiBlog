@@ -30,11 +30,7 @@ type ServerEnv = {
   uploadsDir: string;
   uploadsUrlPrefix: string;
   uploadMaxFileSizeBytes: number;
-  adminBootstrapUsername: string;
-  adminBootstrapPassword?: string;
-  adminBootstrapEmail: string;
-  adminBootstrapName?: string;
-  adminBootstrapTags: string[];
+  setupToken?: string;
 };
 
 const readText = ({ name, fallback }: { name: string; fallback?: string }) => {
@@ -133,20 +129,7 @@ export const env: ServerEnv = Object.freeze({
     name: "UPLOAD_MAX_FILE_SIZE_BYTES",
     fallback: 20 * 1024 * 1024,
   }),
-  adminBootstrapUsername: readRequiredText({
-    name: "ADMIN_BOOTSTRAP_USERNAME",
-    fallback: "admin",
-  }),
-  adminBootstrapPassword: readText({ name: "ADMIN_BOOTSTRAP_PASSWORD" }),
-  adminBootstrapEmail: readRequiredText({
-    name: "ADMIN_BOOTSTRAP_EMAIL",
-    fallback: "admin@example.com",
-  }),
-  adminBootstrapName: readText({ name: "ADMIN_BOOTSTRAP_NAME" }),
-  adminBootstrapTags: readCsv({
-    name: "ADMIN_BOOTSTRAP_TAGS",
-    fallback: ["administrator"],
-  }),
+  setupToken: readText({ name: "SETUP_TOKEN" }),
 });
 
 parseCorsOrigins(env.corsOrigins);
@@ -170,10 +153,9 @@ if (isProduction) {
     throw new Error("DATABASE_URL and REDIS_URL must be explicitly configured in production.");
   }
   if (
-    env.adminBootstrapPassword !== undefined &&
-    (env.adminBootstrapPassword.length < 12 ||
-      /change[-_ ]|example/i.test(env.adminBootstrapPassword))
+    env.setupToken !== undefined &&
+    (env.setupToken.length < 32 || /change[-_ ]|example/i.test(env.setupToken))
   ) {
-    throw new Error("ADMIN_BOOTSTRAP_PASSWORD must be a strong non-placeholder password.");
+    throw new Error("SETUP_TOKEN must be a strong non-placeholder token.");
   }
 }

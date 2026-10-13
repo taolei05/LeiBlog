@@ -44,7 +44,8 @@ describe("production configuration", () => {
     }
   });
 
-  test("refuses default bootstrap passwords", () => {
-    expect(checkEnvironment({ ADMIN_BOOTSTRAP_PASSWORD: "change-me-now" }).exitCode).not.toBe(0);
+  test("refuses weak initialization tokens", () => {
+    expect(checkEnvironment({ SETUP_TOKEN: "change-me-now" }).exitCode).not.toBe(0);
+    expect(checkEnvironment({ SETUP_TOKEN: "a".repeat(48) }).exitCode).toBe(0);
   });
 });

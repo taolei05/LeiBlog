@@ -41,10 +41,7 @@ if restore_leiblog "$LEIBLOG_BASE_DIR/corrupt.tar.gz"; then
 fi
 [[ "$(compose exec -T api bun -e "console.log(await Bun.file('/data/uploads/fixture.txt').text())")" == before-failed-restore ]]
 load_env_file
-[[ -n "$ADMIN_BOOTSTRAP_PASSWORD" ]] || { echo 'The test fixture password was unexpectedly lost.' >&2; exit 1; }
-clear_bootstrap_password
-load_env_file
-[[ -z "$ADMIN_BOOTSTRAP_PASSWORD" ]]
+[[ -n "$SETUP_TOKEN" ]] || { echo 'The setup token was unexpectedly lost.' >&2; exit 1; }
 count="$(compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM users WHERE role='admin'")"
 [[ "$count" == 1 ]]
-printf '%s\n' 'Real retained-volume recovery, deployment backup/restore, encryption-key preservation and bootstrap secret removal checks passed.'
+printf '%s\n' 'Real retained-volume recovery, deployment backup/restore and encryption-key preservation checks passed.'

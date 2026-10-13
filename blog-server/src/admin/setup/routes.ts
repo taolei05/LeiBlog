@@ -86,6 +86,7 @@ export const adminSetupRoutes = new Elysia({ prefix: "/api/admin/setup" })
     response: t.Object({
       hasAdmin: t.Boolean(),
       requiresSetup: t.Boolean(),
+      requiresSetupToken: t.Boolean(),
     }),
   })
   .post(

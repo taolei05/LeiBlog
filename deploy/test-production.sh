@@ -31,8 +31,7 @@ printf '%s\n' "LEIBLOG_PROJECT_NAME=$project" 'SITE_HOST=blog.example.test' \
   'POSTGRES_USER=leiblog_test' 'POSTGRES_DB=leiblog_test_production' \
   "POSTGRES_PASSWORD=$(openssl rand -hex 32)" "REDIS_PASSWORD=$(openssl rand -hex 32)" \
   "JWT_SECRET=$(openssl rand -hex 32)" "CONFIG_ENCRYPTION_SECRET=$(openssl rand -hex 32)" "ALTCHA_SECRET=$(openssl rand -hex 32)" \
-  'ADMIN_BOOTSTRAP_USERNAME=testadmin' 'ADMIN_BOOTSTRAP_EMAIL=testadmin@example.test' \
-  "ADMIN_BOOTSTRAP_PASSWORD=$(openssl rand -hex 24)" > "$temporary/.env"
+  "SETUP_TOKEN=$(openssl rand -hex 24)" > "$temporary/.env"
 printf '%s\n' \
   'services:' \
   '  api:' \
@@ -66,12 +65,24 @@ admin="$(request "$url/admin/site-settings")"
 [[ "$home" != "$admin" && "$admin" == *'<title>LeiBlog Admin</title>'* ]]
 request --head "$url/" | grep -qi 'Content-Security-Policy:'
 request --head "$url/admin/site-settings" | grep -qi 'Cache-Control: no-store'
+request "$url/api/admin/setup/status" | grep -q '"requiresSetup":true'
+request "$url/api/blog/settings" >/dev/null
+empty_count() {
+  compose exec -T postgres psql -U leiblog_test -d leiblog_test_production -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM site_settings) + (SELECT count(*) FROM auth_provider_settings) + (SELECT count(*) FROM media_folders) + (SELECT count(*) FROM articles) + (SELECT count(*) FROM article_categories) + (SELECT count(*) FROM article_tags) + (SELECT count(*) FROM article_contributors) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM navigation_groups) + (SELECT count(*) FROM navigation_items) + (SELECT count(*) FROM media_assets)'
+}
+[[ "$(empty_count)" == 0 ]]
+compose exec -T api bun -e 'import {runMigrations} from "./src/shared/db/migrate.ts"; import {closeSql} from "./src/shared/db/postgres.ts"; await Promise.all([runMigrations(),runMigrations()]); await closeSql();'
+[[ "$(empty_count)" == 0 ]]
+compose exec -T api bun -e "for(const path of ['initial','media']){for(const token of ['', 'wrong']){const r=await fetch('http://127.0.0.1:3000/api/admin/setup/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Setup-Token':token},body:'{}'});if(r.status!==403)process.exit(1)}}"
+compose exec -T api bun -e 'import {env} from "./src/shared/env.ts"; const form=new FormData();form.set("file",new File([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+cE+0AAAAASUVORK5CYII=","base64")],"test.png",{type:"image/png"}));form.set("folderSlug","avatars");const r=await fetch("http://127.0.0.1:3000/api/admin/setup/media",{method:"POST",headers:{"X-Setup-Token":env.setupToken},body:form});if(!r.ok || (await r.json()).item.folderSlug!=="avatars")throw new Error("Lazy system folder upload failed");'
+setup_input='const input={admin:{name:"",username:"testadmin",email:"testadmin@example.test",password:"test-only-strong-password",avatarUrl:"",bio:"",tags:[],tagLocale:"zh-CN",socialLinks:[],blogUrl:"",commentEmailNotifications:false,newPostEmailNotifications:false},site:{siteName:"Test Blog",foundedAt:"2026-01-01 00:00",siteDescription:"",coverUrls:[],homepageCopy:"",lightLogoUrl:"",darkLogoUrl:"",faviconUrl:"",timeZone:"Asia/Shanghai"},basics:{seoTitle:"",seoDescription:"",seoKeywords:[],copyright:"",commentsEnabled:true,resendDomain:"",resendApiKey:"",deeplApiKey:"",ipGeolocationApiKey:""},filings:{icpRecords:[],policeRecordNumber:"",policeRecordUrl:""}};'
+compose exec -T api bun -e "$setup_input"'import {env} from "./src/shared/env.ts"; const r=await fetch("http://127.0.0.1:3000/api/admin/setup/initial",{method:"POST",headers:{"Content-Type":"application/json","X-Setup-Token":env.setupToken},body:JSON.stringify(input)}); if(!r.ok)throw new Error("Token-protected setup failed: "+r.status);'
 request "$url/api/admin/setup/status" | grep -q '"requiresSetup":false'
 count="$(compose exec -T postgres psql -U leiblog_test -d leiblog_test_production -Atc "SELECT count(*) FROM users WHERE role='admin'")"
 [[ "$count" == 1 ]]
-compose exec -T api bun -e "const r=await fetch('http://127.0.0.1:3000/api/admin/setup/initial',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); if(r.status!==403)process.exit(1)"
+compose exec -T api bun -e "$setup_input"'import {env} from "./src/shared/env.ts"; const r=await fetch("http://127.0.0.1:3000/api/admin/setup/initial",{method:"POST",headers:{"Content-Type":"application/json","X-Setup-Token":env.setupToken},body:JSON.stringify(input)}); if(r.status!==409)process.exit(1);'
 compose exec -T postgres psql -v ON_ERROR_STOP=1 -U leiblog_test -d leiblog_test_production -c "DELETE FROM users WHERE username='testadmin'" >/dev/null
-compose exec -T api bun -e 'import {runMigrations} from "./src/shared/db/migrate.ts"; import {ensureBootstrapAdmin} from "./src/admin/bootstrap.ts"; import {closeSql} from "./src/shared/db/postgres.ts"; await Promise.all([runMigrations(),runMigrations()]); await Promise.all([ensureBootstrapAdmin(),ensureBootstrapAdmin()]); await closeSql();'
+compose exec -T api bun -e "$setup_input"'import {completeInitialSetup} from "./src/admin/setup/service.ts"; import {closeSql} from "./src/shared/db/postgres.ts"; const results=await Promise.all([completeInitialSetup(input),completeInitialSetup(input)]); if(results.filter(r=>r.ok).length!==1)throw new Error("Concurrent setup failed"); await closeSql();'
 count="$(compose exec -T postgres psql -U leiblog_test -d leiblog_test_production -Atc "SELECT count(*) FROM users WHERE role='admin'")"
 [[ "$count" == 1 ]]
 compose exec -T api bun -e 'import {env} from "./src/shared/env.ts"; if(env.publicSiteUrl!=="https://blog.example.test" || process.getuid()!==1000)process.exit(1);'

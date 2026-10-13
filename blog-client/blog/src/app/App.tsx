@@ -998,8 +998,8 @@ const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
       pinnedEmpty: "暂无置顶文章。",
     },
     author: {
-      bio: "一个没用的前端开发者。",
-      name: "十七更好",
+      bio: "",
+      name: "站点作者",
       website: "个人主页",
     },
     brandDescription: "写代码、做产品，也记录一些真正有用的小事。",
@@ -1300,8 +1300,8 @@ const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
       pinnedEmpty: "No pinned articles yet.",
     },
     author: {
-      bio: "A quiet frontend developer.",
-      name: "Seventeen Is Better",
+      bio: "",
+      name: "Site author",
       website: "Website",
     },
     brandDescription: "Code, products, and small notes that are actually useful.",
@@ -5126,9 +5126,11 @@ function AuthorPanel({ copy, siteAuthor }: AuthorPanelProps) {
       </div>
       <div className="home-author-card__body">
         <Heading level={3}>{authorName}</Heading>
-        <Text as="p" color="secondary">
-          {authorDescription}
-        </Text>
+        {authorDescription.length > 0 ? (
+          <Text as="p" color="secondary">
+            {authorDescription}
+          </Text>
+        ) : null}
         {siteAuthor.username.length > 0 ? (
           <Text as="p" className="home-author-card__username" color="secondary">
             @{siteAuthor.username}

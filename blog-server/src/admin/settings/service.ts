@@ -845,12 +845,6 @@ const readAdminSocialLinks = async (userId: string) => {
 
 const readSiteSettingsRow = async () => {
   const sql = getSql();
-  await sql`
-    INSERT INTO site_settings (id)
-    VALUES (1)
-    ON CONFLICT (id) DO NOTHING
-  `;
-
   const rows = await sql<SiteSettingsRow[]>`
     SELECT
       site_name,

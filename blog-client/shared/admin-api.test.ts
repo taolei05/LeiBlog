@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   COOKIE_ADMIN_AUTH_TOKEN,
   getAdminMe,
+  getAdminSetupStatus,
   getPublicGuestbookComments,
   getPublicSiteSettings,
   isAdminAuthState,
@@ -23,6 +24,23 @@ const adminUser = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shared API response validation", () => {
+  it("reads the initialization token requirement without exposing a secret", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          hasAdmin: false,
+          requiresSetup: true,
+          requiresSetupToken: true,
+        }),
+      ),
+    );
+    expect(await getAdminSetupStatus()).toEqual({
+      hasAdmin: false,
+      requiresSetup: true,
+      requiresSetupToken: true,
+    });
+  });
   it("sends the chosen notification email language with profile preferences", async () => {
     vi.stubGlobal(
       "fetch",

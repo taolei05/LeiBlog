@@ -124,6 +124,7 @@ export const getAdminSetupStatus = async () => {
   return {
     hasAdmin,
     requiresSetup: !hasAdmin,
+    requiresSetupToken: Bun.env.NODE_ENV === "production" || env.setupToken !== undefined,
   };
 };
 

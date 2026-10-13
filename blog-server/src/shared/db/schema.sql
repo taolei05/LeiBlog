@@ -216,10 +216,6 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_bucket text;
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_access_key_id text;
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS r2_public_base_url text;
 
-INSERT INTO site_settings (id)
-VALUES (1)
-ON CONFLICT (id) DO NOTHING;
-
 DROP TRIGGER IF EXISTS site_settings_set_updated_at ON site_settings;
 CREATE TRIGGER site_settings_set_updated_at
   BEFORE UPDATE ON site_settings
@@ -306,12 +302,6 @@ CREATE TRIGGER auth_provider_settings_set_updated_at
   BEFORE UPDATE ON auth_provider_settings
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
-
-INSERT INTO auth_provider_settings (provider, display_name, enabled, scopes)
-VALUES
-  ('github', 'GitHub', false, ARRAY['read:user', 'user:email']::text[]),
-  ('google', 'Google', false, ARRAY['openid', 'profile', 'email']::text[])
-ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS user_oauth_accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -415,16 +405,6 @@ CREATE TRIGGER media_folders_set_updated_at
   BEFORE UPDATE ON media_folders
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
-
-INSERT INTO media_folders (name, slug, description, system_key, is_protected)
-VALUES
-  ('文章', 'article-covers', '文章封面和正文插图可以集中存储到这里。', 'article-covers', true),
-  ('头像', 'avatars', '用户头像可以集中存储到这里。', 'avatars', true),
-  ('评论', 'comments', '评论图片可以集中存储到这里。', 'comments', true),
-  ('站点', 'site', '站点 Logo、favicon 和主页封面可以集中存储到这里。', 'site', true),
-  ('导航图标', 'website-icons', '导航页网站图标可以集中存储到这里。', 'website-icons', true),
-  ('媒体库', 'media', '后台媒体库默认上传目录。', 'media', true)
-ON CONFLICT DO NOTHING;
 
 UPDATE media_folders
 SET
@@ -720,215 +700,6 @@ CREATE TRIGGER comments_set_updated_at
   BEFORE UPDATE ON comments
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
-
-INSERT INTO article_categories (name, slug, description, sort_order)
-VALUES
-  ('部署运维', 'deployment-ops', '记录部署、自动化和运维相关实践。', 0),
-  ('前端工程', 'frontend-engineering', '记录前端体验、组件和工程化。', 1)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_categories_en (category_id, name, description)
-SELECT id, 'Deployment Ops', 'Notes on deployment, automation, and operations.'
-FROM article_categories
-WHERE slug = 'deployment-ops'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_categories_en (category_id, name, description)
-SELECT id, 'Frontend Engineering', 'Notes on frontend experience, components, and tooling.'
-FROM article_categories
-WHERE slug = 'frontend-engineering'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_tags (name, slug, color, description)
-VALUES
-  ('LeiBlog', 'leiblog', '#6366f1', 'LeiBlog 项目记录。'),
-  ('Docker', 'docker', '#ef4444', '容器和部署相关内容。'),
-  ('PostgreSQL', 'postgresql', '#8b5cf6', '数据库与数据建模。'),
-  ('React', 'react', '#0ea5e9', '前端 UI 与交互。'),
-  ('TypeScript', 'typescript', '#2563eb', 'TypeScript 类型设计与代码示例。')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_tags_en (tag_id, name, description)
-SELECT id, name, CASE slug
-  WHEN 'leiblog' THEN 'LeiBlog project notes.'
-  WHEN 'docker' THEN 'Containers and deployment.'
-  WHEN 'postgresql' THEN 'Database and data modeling.'
-  WHEN 'react' THEN 'Frontend UI and interaction.'
-  WHEN 'typescript' THEN 'TypeScript type design and code examples.'
-  ELSE description
-END
-FROM article_tags
-WHERE slug IN ('leiblog', 'docker', 'postgresql', 'react', 'typescript')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO articles (
-  title,
-  slug,
-  summary,
-  content_mdx,
-  cover_image_url,
-  status,
-  is_pinned,
-  published_at
-)
-VALUES
-  (
-    'LeiBlog 后台设置国际化记录',
-    'admin-settings-i18n',
-    '记录后台设置页、站点资料和双语字段接入时的关键设计。',
-    E'## 背景\n\nLeiBlog 的后台设置需要同时维护中文和英文公开资料，并让前台能够按站点语言读取对应内容。\n\n## 实现要点\n\n- 资料字段按语言分组保存。\n- 站点配置提供统一的公开接口。\n- 头像、Logo 和封面统一走媒体库资源。\n\n## 后续\n\n继续把文章、分类、标签和归档等公开内容接入同一套数据源。',
-    null,
-    'published',
-    true,
-    now()
-  ),
-  (
-    'PostgreSQL 内容结构整理',
-    'postgresql-content-structure',
-    '用分类、标签和文章关系表整理内容模型，方便前台索引与后台管理。',
-    E'## 内容模型\n\n文章本体保存标题、摘要、正文、封面、发布状态和发布时间。\n\n## 关系设计\n\n分类和标签通过关联表连接文章，便于一个文章拥有多个分类和多个标签。\n\n## 查询\n\n前台列表只读取已发布内容，后台列表可以查看草稿、定时和已发布内容。',
-    null,
-    'published',
-    false,
-    now() - interval '3 days'
-  ),
-  (
-    'TypeScript 代码块展示测试',
-    'typescript-codeblock-demo',
-    '验证文章阅读页使用 Astryx CodeBlock 渲染 TypeScript 代码块。',
-    $markdown$## 示例目标
-
-这篇文章用于确认 fenced code 会交给 Astryx CodeBlock 渲染，并保留语言标签与复制按钮。
-
-## TypeScript 示例
-
-```ts article-link.ts
-type ArticleRoute = {
-  slug: string;
-  title: string;
-  publishedAt: Date;
-};
-
-const formatRoute = ({ slug, title }: ArticleRoute) =>
-  `/articles/${slug}?title=${encodeURIComponent(title)}`;
-
-export const createArticleLink = (article: ArticleRoute) => ({
-  href: formatRoute(article),
-  label: article.title,
-});
-```
-
-## 展示结果
-
-阅读页应该显示 Astryx 的代码块样式、语言标记和复制操作。$markdown$,
-    null,
-    'published',
-    false,
-    now() - interval '1 day'
-  )
-ON CONFLICT DO NOTHING;
-
-INSERT INTO articles_en (article_id, title, summary, content_mdx)
-SELECT
-  id,
-  'LeiBlog Admin Settings i18n Notes',
-  'Notes on connecting admin settings, site profile, and bilingual public fields.',
-  E'## Background\n\nLeiBlog admin settings need to maintain both Chinese and English public profile fields, while the frontend reads the copy that matches the selected site language.\n\n## Key Points\n\n- Profile fields are stored by language.\n- Site settings provide one public API.\n- Avatars, logos, and covers are managed through the media library.\n\n## Next\n\nContinue connecting articles, categories, tags, and archives to the same data source.'
-FROM articles
-WHERE slug = 'admin-settings-i18n'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO articles_en (article_id, title, summary, content_mdx)
-SELECT
-  id,
-  'PostgreSQL Content Structure',
-  'Organize content with category, tag, and article relation tables for frontend indexes and admin management.',
-  E'## Content Model\n\nThe article table stores title, summary, body, cover, publishing state, and publish time.\n\n## Relations\n\nCategories and tags connect to articles through relation tables, so one article can have multiple categories and tags.\n\n## Querying\n\nThe frontend only reads published content, while the admin list can inspect draft, scheduled, and published articles.'
-FROM articles
-WHERE slug = 'postgresql-content-structure'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO articles_en (article_id, title, summary, content_mdx)
-SELECT
-  id,
-  'TypeScript Code Block Demo',
-  'Verify that the article reading page renders TypeScript fences with Astryx CodeBlock.',
-  $markdown$## Demo Goal
-
-This article confirms that fenced code is rendered through Astryx CodeBlock with a language label and copy action.
-
-## TypeScript Example
-
-```ts article-link.ts
-type ArticleRoute = {
-  slug: string;
-  title: string;
-  publishedAt: Date;
-};
-
-const formatRoute = ({ slug, title }: ArticleRoute) =>
-  `/articles/${slug}?title=${encodeURIComponent(title)}`;
-
-export const createArticleLink = (article: ArticleRoute) => ({
-  href: formatRoute(article),
-  label: article.title,
-});
-```
-
-## Result
-
-The reading page should show Astryx styling, language metadata, and the copy control.$markdown$
-FROM articles
-WHERE slug = 'typescript-codeblock-demo'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_category_links (article_id, category_id)
-SELECT articles.id, article_categories.id
-FROM articles
-CROSS JOIN article_categories
-WHERE articles.slug = 'admin-settings-i18n'
-  AND article_categories.slug = 'frontend-engineering'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_category_links (article_id, category_id)
-SELECT articles.id, article_categories.id
-FROM articles
-CROSS JOIN article_categories
-WHERE articles.slug = 'postgresql-content-structure'
-  AND article_categories.slug = 'deployment-ops'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_category_links (article_id, category_id)
-SELECT articles.id, article_categories.id
-FROM articles
-CROSS JOIN article_categories
-WHERE articles.slug = 'typescript-codeblock-demo'
-  AND article_categories.slug = 'frontend-engineering'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_tag_links (article_id, tag_id)
-SELECT articles.id, article_tags.id
-FROM articles
-CROSS JOIN article_tags
-WHERE articles.slug = 'admin-settings-i18n'
-  AND article_tags.slug IN ('leiblog', 'react')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_tag_links (article_id, tag_id)
-SELECT articles.id, article_tags.id
-FROM articles
-CROSS JOIN article_tags
-WHERE articles.slug = 'postgresql-content-structure'
-  AND article_tags.slug IN ('leiblog', 'postgresql')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO article_tag_links (article_id, tag_id)
-SELECT articles.id, article_tags.id
-FROM articles
-CROSS JOIN article_tags
-WHERE articles.slug = 'typescript-codeblock-demo'
-  AND article_tags.slug IN ('leiblog', 'react', 'typescript')
-ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS navigation_groups (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

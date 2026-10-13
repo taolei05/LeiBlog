@@ -777,6 +777,7 @@ export type ManagedUserPayload = {
 export type AdminSetupStatus = {
   hasAdmin: boolean;
   requiresSetup: boolean;
+  requiresSetupToken?: boolean;
 };
 
 type InitialSetupLink = {
@@ -790,6 +791,7 @@ type InitialSetupFilingRecord = {
 };
 
 export type InitialSetupPayload = {
+  setupToken?: string;
   admin: {
     name: string;
     username: string;
@@ -1201,6 +1203,7 @@ type UploadInitialSetupMediaAssetParameters = {
   file: File;
   fileName?: string;
   folderSlug?: string;
+  setupToken?: string;
 };
 
 type UpdateMediaAssetParameters = {
@@ -2740,7 +2743,11 @@ const isAdminSetupStatus = (value: unknown): value is AdminSetupStatus => {
 
   const record = value as Record<string, unknown>;
 
-  return typeof record.hasAdmin === "boolean" && typeof record.requiresSetup === "boolean";
+  return (
+    typeof record.hasAdmin === "boolean" &&
+    typeof record.requiresSetup === "boolean" &&
+    (record.requiresSetupToken === undefined || typeof record.requiresSetupToken === "boolean")
+  );
 };
 
 export const getAdminSetupStatus = async () => {
@@ -3089,11 +3096,12 @@ export const logoutBlogUser = async () => {
   return body;
 };
 
-export const completeInitialSetup = async (payload: InitialSetupPayload) => {
+export const completeInitialSetup = async ({ setupToken, ...payload }: InitialSetupPayload) => {
   const response = await fetch(`${API_BASE_URL}/api/admin/setup/initial`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Setup-Token": setupToken ?? "",
     },
     body: JSON.stringify(payload),
   });
@@ -3114,6 +3122,7 @@ export const uploadInitialSetupMediaAsset = async ({
   file,
   fileName,
   folderSlug,
+  setupToken,
 }: UploadInitialSetupMediaAssetParameters) => {
   const formData = new FormData();
   formData.set("file", file);
@@ -3127,6 +3136,7 @@ export const uploadInitialSetupMediaAsset = async ({
   const response = await fetch(`${API_BASE_URL}/api/admin/setup/media`, {
     body: formData,
     method: "POST",
+    headers: { "X-Setup-Token": setupToken ?? "" },
   });
   const body = await parseJson(response);
 

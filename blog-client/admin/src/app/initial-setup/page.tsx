@@ -55,6 +55,7 @@ type LinkItemField = "label" | "url";
 type FilingRecordField = "number" | "url";
 
 type InitialSetupPageProps = {
+  requiresSetupToken?: boolean;
   themeMode: Extract<ThemeMode, "light" | "dark">;
   onToggleThemeMode: () => void;
   onComplete: (authState: AdminAuthState) => void;
@@ -153,6 +154,7 @@ const formatList = (values: string[], emptyLabel: string) =>
   values.length > 0 ? values.join(", ") : emptyLabel;
 
 export function InitialSetupPage({
+  requiresSetupToken = false,
   themeMode,
   onToggleThemeMode,
   onComplete,
@@ -188,6 +190,7 @@ export function InitialSetupPage({
   );
 
   const fieldRefs = {
+    setupToken: useRef<HTMLInputElement>(null),
     adminName: useRef<HTMLInputElement>(null),
     username: useRef<HTMLInputElement>(null),
     password: useRef<HTMLInputElement>(null),
@@ -217,6 +220,7 @@ export function InitialSetupPage({
   const [step, setStep] = useState(0);
   const [attempted, setAttempted] = useState<ReadonlySet<number>>(new Set());
 
+  const [setupToken, setSetupToken] = useState("");
   const [adminName, setAdminName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -295,6 +299,14 @@ export function InitialSetupPage({
 
   const errorsByStep = useMemo<Array<ErrorMap>>(() => {
     const administrator: ErrorMap = {};
+    if (requiresSetupToken) {
+      addRequiredError(
+        administrator,
+        "setupToken",
+        setupToken,
+        t("initialSetup.admin.setupTokenRequired"),
+      );
+    }
     addRequiredError(
       administrator,
       "username",
@@ -393,6 +405,8 @@ export function InitialSetupPage({
     siteDescription,
     coverUrls,
     homepageCopy,
+    requiresSetupToken,
+    setupToken,
     lightLogoUrl,
     darkLogoUrl,
     faviconUrl,
@@ -447,6 +461,7 @@ export function InitialSetupPage({
     targetLightLogoUrl = lightLogoUrl.trim(),
   }: CreateSetupPayloadParameters = {}): InitialSetupPayload => {
     return {
+      setupToken: setupToken.trim(),
       admin: {
         name: adminName.trim(),
         username: username.trim(),
@@ -505,6 +520,7 @@ export function InitialSetupPage({
     const uploadedAsset = await uploadInitialSetupMediaAsset({
       file,
       folderSlug,
+      setupToken: setupToken.trim(),
     });
 
     return uploadedAsset.accessUrl;
@@ -702,6 +718,22 @@ export function InitialSetupPage({
                 </VStack>
                 <FormLayout defaultOptionality="optional">
                   <Grid columns={{ minWidth: 260 }} gap={3}>
+                    {requiresSetupToken ? (
+                      <TextInput
+                        label={t("initialSetup.admin.setupToken")}
+                        ref={fieldRefs.setupToken}
+                        isRequired
+                        type="password"
+                        value={setupToken}
+                        onChange={setSetupToken}
+                        placeholder={t("initialSetup.admin.setupTokenPlaceholder")}
+                        status={
+                          currentErrors.setupToken
+                            ? { type: "error", message: currentErrors.setupToken }
+                            : undefined
+                        }
+                      />
+                    ) : null}
                     <TextInput
                       label={t("initialSetup.admin.name")}
                       ref={fieldRefs.adminName}

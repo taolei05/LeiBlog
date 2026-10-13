@@ -4,7 +4,6 @@ import { cors } from "@elysiajs/cors";
 import { staticPlugin } from "@elysiajs/static";
 import { Elysia } from "elysia";
 
-import { ensureBootstrapAdmin } from "./admin/bootstrap";
 import { adminRoutes } from "./admin/routes";
 import { applyAdminCookieAuthentication } from "./admin/auth/cookie";
 import { blogRoutes } from "./blog/routes";
@@ -20,7 +19,6 @@ import { createRequestSecurity } from "./shared/request-security";
 
 export const prepareAppRuntime = async () => {
   await runMigrations();
-  await ensureBootstrapAdmin();
   await mkdir(env.uploadsDir, { recursive: true });
 };
 
@@ -34,7 +32,7 @@ export const createApp = () => {
             origin: request.headers.get("origin") ?? "",
             allowedOrigins,
           }),
-        allowedHeaders: ["Content-Type", "Authorization", USER_PROFILE_LOCALE_HEADER],
+        allowedHeaders: ["Content-Type", "Authorization", "X-Setup-Token", USER_PROFILE_LOCALE_HEADER],
         exposeHeaders: ["Retry-After"],
         credentials: true,
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

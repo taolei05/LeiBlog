@@ -583,17 +583,7 @@ export function AdminShellPage({
               icon={item.icon}
               isSelected={activePageId === item.id}
               endContent={
-                activePageId === item.id &&
-                item.id !== "dashboard" &&
-                item.id !== "admin-settings" &&
-                item.id !== "backups" &&
-                item.id !== "categories" &&
-                item.id !== "login-methods" &&
-                item.id !== "media" &&
-                item.id !== "navigation" &&
-                item.id !== "posts" &&
-                item.id !== "site-settings" &&
-                item.id !== "users" ? (
+                activePageId === item.id && isActivePagePlaceholder ? (
                   <Badge label={t("admin.placeholder.dev")} variant="neutral" />
                 ) : undefined
               }

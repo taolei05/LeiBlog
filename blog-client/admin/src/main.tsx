@@ -258,6 +258,7 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
         {feedbackBannerNode}
         <AdminAsyncContent fullPage key="setup">
           <InitialSetupPage
+            requiresSetupToken={setupStatus.requiresSetupToken ?? false}
             themeMode={themeMode}
             onToggleThemeMode={onToggleThemeMode}
             onComplete={handleSetupComplete}

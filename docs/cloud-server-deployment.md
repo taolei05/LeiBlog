@@ -5,7 +5,7 @@
 ## 上线前
 
 1. **先提交并推送本次完整改动到部署分支。** 当前脚本默认下载 `taolei05/LeiBlog` 的 `main` 源码。本地新增文件未推送时，远程安装命令不会获得它们，脚本会拒绝旧源码。
-2. 准备 Linux 服务器、真实域名与管理员邮箱。建议至少 2 核、4 GB 内存以及足够保存媒体、镜像和备份的磁盘；前端构建比运行时更耗内存。
+2. 准备 Linux 服务器和真实域名。建议至少 2 核、4 GB 内存以及足够保存媒体、镜像和备份的磁盘；前端构建比运行时更耗内存。
 3. 将域名 A/AAAA 记录指向服务器，允许入站 TCP 80/443；HTTP/3 可额外开放 UDP 443。不要开放数据库、Redis 或 API 的内部端口。
 4. 安装 Docker Compose v2，需支持 `up --wait`。未安装 Docker 时脚本会使用 Docker 官方安装器；不希望自动安装时设置 `LEIBLOG_INSTALL_DOCKER=0`。
 5. **不得覆盖旧项目的部署目录、数据库或 Compose 项目名。** 旧项目 `.env` 和备份格式不兼容。仍运行旧项目时，给新项目使用不同目录和项目名；80/443 被占用时先明确安排域名/端口切换。
@@ -18,7 +18,7 @@
 
 ```bash
 sudo bash deploy/leiblog.sh install-cli
-sudo env LEIBLOG_ADMIN_EMAIL=you@example.com leiblog install blog.example.com
+sudo leiblog install blog.example.com
 ```
 
 部署分支推送完成后，远程安装全局命令：
@@ -27,23 +27,24 @@ sudo env LEIBLOG_ADMIN_EMAIL=you@example.com leiblog install blog.example.com
 curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh -o leiblog.sh
 bash -n leiblog.sh
 sudo bash leiblog.sh install-cli
-sudo env LEIBLOG_ADMIN_EMAIL=you@example.com leiblog install blog.example.com
+sudo leiblog install blog.example.com
 ```
 
-脚本下载源码、构建镜像、创建私有网络与随机密钥，自动申请和续期 TLS 证书，等待 API 健康，然后检查公网 HTTPS、前台和后台入口。生产安装不使用旧项目 `SETUP_TOKEN` 或网页初始化。
+脚本下载源码、构建镜像、创建私有网络与随机密钥，自动申请和续期 TLS 证书，等待 API 健康，然后检查公网 HTTPS、前台和后台入口。
 
-初始登录资料只写入 `/var/leiblog/bootstrap-credentials.txt`，权限为 600，不输出密码到部署日志。管理员成功创建后，脚本清空 `.env` 中的初始密码并重建 API，避免长期留在容器环境中。
+首次部署不创建管理员，不插入演示文章、分类、标签或媒体文件夹，不写入预置站点资料。和旧项目一样，安装结束后显示 `/admin/setup` 初始化地址和 `SETUP_TOKEN`。令牌保存在权限 600 的 `.env` 中；初始化和初始化上传接口都必须验证此令牌，创建管理员后自动关闭，不会生成 `bootstrap-credentials.txt`。
 
 ```bash
-sudo cat /var/leiblog/bootstrap-credentials.txt
 sudo leiblog doctor
 ```
 
-登录 `https://blog.example.com/admin`，立即修改初始密码，然后删除上述凭据文件。在后台完善站点资料、Resend 发信域名/API key，以及需要使用的 OAuth、R2 和翻译配置。邮件发送域名需实际配置 SPF/DKIM，并验证邮件投递；OAuth 服务商需配置真实 HTTPS 回调地址。
+访问 `https://blog.example.com/admin/setup`，输入安装时显示的初始化令牌，自行设置管理员用户名、邮箱和密码，以及站点资料。令牌不能放进 URL、公开分享或提交到仓库。需要重新查看时，在服务器上运行 `sudo sed -n 's/^SETUP_TOKEN=//p' /var/leiblog/.env`。
+
+管理员创建前，网站没有业务内容；媒体系统目录在首次上传对应资源时才创建。初始化后，在后台完善 Resend 发信域名/API key，以及需要使用的 OAuth、R2 和翻译配置。邮件发送域名需实际配置 SPF/DKIM，并验证邮件投递；OAuth 服务商需配置真实 HTTPS 回调地址。
 
 ## 首次安装失败后重试
 
-如果源码已经下载，但镜像构建未完成，先更新全局脚本，然后重新运行 `install`。脚本会保留已有 `.env`、密钥和初始管理员凭据；仅在没有数据库容器或数据卷时跳过备份。已存在的数据卷即使容器停止或删除，也必须启动数据库并成功备份后才能继续。
+如果源码已经下载，但镜像构建未完成，先更新全局脚本，然后重新运行 `install`。脚本会保留已有 `.env`、密钥和初始化令牌；仅在没有数据库容器或数据卷时跳过备份。已存在的数据卷即使容器停止或删除，也必须启动数据库并成功备份后才能继续。普通 `install` 和 `update` 不会偷偷清空已有网站，重新初始化需要明确清理原数据。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/taolei05/LeiBlog/main/deploy/leiblog.sh -o leiblog.sh &&

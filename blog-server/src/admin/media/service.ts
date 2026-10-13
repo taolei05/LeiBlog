@@ -566,6 +566,23 @@ type ResolveMediaFolderParameters = {
 const resolveMediaFolder = async ({ folderSlug, sql }: ResolveMediaFolderParameters) => {
   const slug = folderSlug?.trim().toLocaleLowerCase() ?? "media";
 
+  const systemNames: Readonly<Record<string, string>> = {
+    "article-covers": "文章",
+    avatars: "头像",
+    comments: "评论",
+    site: "站点",
+    "website-icons": "导航图标",
+    media: "媒体库",
+  };
+  const systemName = Object.prototype.hasOwnProperty.call(systemNames, slug) ? systemNames[slug] : undefined;
+  if (systemName !== undefined) {
+    await sql`
+      INSERT INTO media_folders (name, slug, system_key, is_protected)
+      VALUES (${systemName}, ${slug}, ${slug}, true)
+      ON CONFLICT DO NOTHING
+    `;
+  }
+
   const rows = await sql<MediaFolderRow[]>`
     SELECT id, name, slug
     FROM media_folders
