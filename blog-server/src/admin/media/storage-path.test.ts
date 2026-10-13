@@ -78,9 +78,33 @@ test("serves uploads created after startup and stops serving them after deletion
   expect(await response.text()).toBe("uploaded after startup");
   const head = await app.handle(new Request(request(), { method: "HEAD" }));
   expect(head.status).toBe(200);
-  expect(await head.text()).toBe("");
+  expect(head.headers.get("content-length")).toBe(String("uploaded after startup".length));
   await rm(filePath);
   expect((await app.handle(request())).status).toBe(404);
+});
+
+test("serves matching GET and HEAD metadata over HTTP without a HEAD body", async () => {
+  const contents = "uploaded over HTTP";
+  await writeFile(join(fixtureRoot, "file.txt"), contents);
+  const app = createMediaFileRoutes({ root: fixtureRoot, prefix: "/uploads" }).listen({
+    hostname: "127.0.0.1",
+    port: 0,
+  });
+  try {
+    if (!app.server) throw new Error("Media test server did not start");
+    const url = new URL("/uploads/file.txt", app.server.url);
+    const get = await fetch(url);
+    expect(get.status).toBe(200);
+    expect(get.headers.get("content-length")).toBe(String(contents.length));
+    expect(await get.text()).toBe(contents);
+    const head = await fetch(url, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("content-length")).toBe(get.headers.get("content-length"));
+    expect(head.headers.get("content-type")).toBe(get.headers.get("content-type"));
+    expect(await head.text()).toBe("");
+  } finally {
+    await app.stop(true);
+  }
 });
 
 test("public upload routes reject hidden files, directories, traversal and symbolic links", async () => {

@@ -5,7 +5,7 @@ import type { Context } from "elysia";
 import { resolveSafeMediaStoragePath } from "./storage-path";
 
 export const createMediaFileRoutes = ({ root, prefix }: { root: string; prefix: string }) => {
-  const handleFile = async ({ params, request, set }: Pick<Context, "params" | "request" | "set">) => {
+  const handleFile = async ({ params, set }: Pick<Context, "params" | "set">) => {
     set.headers["Cache-Control"] = "no-store";
     const storageKey = params["*"];
     if (storageKey.split("/").some((part) => part.startsWith("."))) {
@@ -17,7 +17,8 @@ export const createMediaFileRoutes = ({ root, prefix }: { root: string; prefix: 
         return status(404, { message: "Resource was not found." });
       }
       const file = Bun.file(filePath);
-      const response = new Response(request.method === "HEAD" ? null : file, {
+      // Bun omits the HEAD body while retaining the file's length on the wire.
+      const response = new Response(file, {
         headers: {
           "Content-Type": file.type,
           "Content-Length": String(file.size),
