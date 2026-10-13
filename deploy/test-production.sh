@@ -42,6 +42,8 @@ printf '%s\n' \
   '    ipam: !reset {}' > "$temporary/test-compose.yml"
 awk '/^\{\$SITE_HOST\} \{/ { print; print "    tls internal"; next } { print }' "$root/blog-client/Caddyfile" > "$temporary/test.Caddyfile"
 printf '\n' >> "$temporary/test.Caddyfile"
+# Caddy cannot bypass the runner's file permissions after dropping capabilities.
+chmod 644 "$temporary/test.Caddyfile"
 compose config --quiet
 compose build
 compose up -d --wait --wait-timeout 240
