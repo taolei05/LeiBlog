@@ -19,6 +19,7 @@ import {
   FolderOpen,
   Home,
   KeyRound,
+  LayoutDashboard,
   Library,
   LogOut,
   Mail,
@@ -326,6 +327,7 @@ type FrontCopy = {
 type AuthCopy = {
   account: {
     adminRole: string;
+    openAdmin: string;
     entry: string;
     logoutCancel: string;
     logoutConfirm: string;
@@ -815,11 +817,12 @@ const tagsByLanguage: Record<AppLanguage, readonly HomeTaxonomyItem[]> = {
   ],
 };
 
-const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
+export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
   "zh-CN": {
     auth: {
       account: {
         adminRole: "管理员",
+        openAdmin: "前往后台",
         entry: "登录",
         logoutCancel: "取消",
         logoutConfirm: "确认退出",
@@ -1117,6 +1120,7 @@ const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
     auth: {
       account: {
         adminRole: "Admin",
+        openAdmin: "Go to admin",
         entry: "Sign in",
         logoutCancel: "Cancel",
         logoutConfirm: "Sign out",
@@ -1787,8 +1791,8 @@ type BlogRouterLinkProps = ComponentPropsWithRef<"a"> & {
   to?: string;
 };
 
-function isInternalRoute(path: string) {
-  return path.startsWith("/") && !path.startsWith("//");
+export function isInternalRoute(path: string) {
+  return path.startsWith("/") && !path.startsWith("//") && !/^\/admin(?:\/|[?#]|$)/.test(path);
 }
 
 function normalizeSearchText(value: string) {
@@ -3399,7 +3403,7 @@ function AccountProfileEditor({
   );
 }
 
-function SiteAccountBlock({
+export function SiteAccountBlock({
   authState,
   copy,
   onNavigate,
@@ -3465,6 +3469,17 @@ function SiteAccountBlock({
           variant="secondary"
           width="100%"
         />
+        {user.role === "admin" ? (
+          <Button
+            href="/admin/"
+            icon={<LayoutDashboard size={16} />}
+            label={copy.auth.account.openAdmin}
+            onClick={() => setIsAccountMenuOpen(false)}
+            size="md"
+            variant="ghost"
+            width="100%"
+          />
+        ) : null}
         <Button
           icon={<LogOut size={16} />}
           label={copy.auth.account.logout}
