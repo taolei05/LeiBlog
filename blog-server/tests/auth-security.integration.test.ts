@@ -500,6 +500,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     await configureGithub();
     const user = await createUser();
     await sql`UPDATE users SET email = 'victim@example.test' WHERE id = ${user.id}`;
+    await sql`UPDATE users SET comment_email_notifications = false, new_post_email_notifications = false WHERE id = ${user.id}`;
     const authorization = await oauth.createOAuthAuthorization({ providerValue: "github", sql });
     const input = {
       code: "synthetic-code",
@@ -511,9 +512,74 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     };
     const result = await oauth.completeOAuthLogin(input);
     expect(result.user.id).toBe(user.id);
+    expect(result.user.commentEmailNotifications).toBe(false);
+    expect(result.user.newPostEmailNotifications).toBe(false);
     await expect(oauth.completeOAuthLogin(input)).rejects.toMatchObject({
       reason: "oauth-state-invalid",
     });
+  });
+
+  test("new password and OAuth users default to both email notifications enabled", async () => {
+    await insertCode({ email: "signup@example.test", purpose: "register" });
+    const registered = await auth.registerBlogUser({
+      email: "signup@example.test",
+      emailCode: "123456",
+      username: "signup",
+      password: "test-original-password",
+    });
+    expect(registered.commentEmailNotifications).toBe(true);
+    expect(registered.newPostEmailNotifications).toBe(true);
+    await configureGithub();
+    const authorization = await oauth.createOAuthAuthorization({ providerValue: "github", sql });
+    const result = await oauth.completeOAuthLogin({
+      code: "synthetic-code",
+      providerValue: "github",
+      state: authorization.state,
+      requestMeta: meta,
+      sql,
+      fetcher: identityFetcher([{ email: "victim@example.test", primary: true, verified: true }]),
+    });
+    expect(result.user.commentEmailNotifications).toBe(true);
+    expect(result.user.newPostEmailNotifications).toBe(true);
+    await sql`UPDATE users SET comment_email_notifications = false, new_post_email_notifications = false WHERE id = ${registered.id}`;
+    await sql.unsafe(await Bun.file(new URL("../src/shared/db/schema.sql", import.meta.url)).text());
+    const login = await auth.loginBlogUser({
+      identifier: registered.username,
+      password: "test-original-password",
+      requestMeta: meta,
+    });
+    expect(login.commentEmailNotifications).toBe(false);
+    expect(login.newPostEmailNotifications).toBe(false);
+  });
+
+  test("profile panel patches preserve omitted fields and explicit notification opt-outs", async () => {
+    const user = await createUser("user");
+    await auth.updateBlogUserProfile({
+      userId: user.id,
+      username: user.username,
+      name: "Saved name",
+      avatarUrl: "/uploads/avatar.png",
+      bio: "Saved bio",
+      blogUrl: "https://example.test",
+      tags: ["Saved"],
+    });
+    const preferences = await auth.updateBlogUserProfile({
+      userId: user.id,
+      commentEmailNotifications: false,
+      newPostEmailNotifications: false,
+    });
+    expect(preferences.name).toBe("Saved name");
+    expect(preferences.avatarUrl).toBe("/uploads/avatar.png");
+    expect(preferences.bio).toBe("Saved bio");
+    expect(preferences.tags).toEqual(["Saved"]);
+    const cleared = await auth.updateBlogUserProfile({
+      userId: user.id, avatarUrl: "", name: "", tags: [],
+    });
+    expect(cleared.avatarUrl).toBeUndefined();
+    expect(cleared.name).toBeUndefined();
+    expect(cleared.tags).toEqual([]);
+    expect(cleared.commentEmailNotifications).toBe(false);
+    expect(cleared.newPostEmailNotifications).toBe(false);
   });
 
   test("OAuth callback rejects missing or mismatched browser state before token exchange", async () => {

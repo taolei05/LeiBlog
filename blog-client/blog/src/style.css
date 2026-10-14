@@ -613,35 +613,41 @@ input {
   padding: 16px;
 }
 
-.profile-section__heading {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: start;
-  gap: 9px;
+.profile-panel-group {
+  min-width: 0;
+  border: 1px solid var(--blog-border);
+  border-radius: 8px;
+  background: var(--blog-surface);
+  padding: 0 14px;
 }
 
-.profile-section__heading > svg {
-  display: block;
-  margin-top: 2px;
+.profile-panel-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  text-align: start;
+}
+
+.profile-panel-trigger > svg {
+  flex-shrink: 0;
   color: var(--blog-accent);
 }
 
-.profile-section__heading div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
+.profile-panel-group .profile-section {
+  border: 0;
+  border-radius: 0;
+  padding: 8px 0 16px;
 }
 
-.profile-section__heading strong {
-  color: var(--blog-text-strong);
-  font-size: 0.86rem;
-  font-weight: 900;
-}
-
-.profile-section__heading span {
-  color: var(--blog-text-muted);
-  font-size: 0.78rem;
-  line-height: 1.45;
+.profile-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--blog-border);
 }
 
 .profile-section__grid,
@@ -819,22 +825,6 @@ input {
   background: var(--blog-accent-hover);
 }
 
-.profile-center__actions {
-  position: sticky;
-  z-index: 1;
-  bottom: -26px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  border-top: 1px solid color-mix(in oklch, var(--blog-border) 72%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklch, var(--blog-surface) 20%, transparent),
-    var(--blog-surface) 34%
-  );
-  padding: 14px 0 0;
-}
-
 .profile-page {
   display: grid;
   width: min(1180px, calc(100% - 32px));
@@ -875,12 +865,6 @@ input {
   max-height: none;
   overflow: visible;
   padding-block: 34px 32px;
-}
-
-.profile-page .profile-center__actions {
-  position: static;
-  bottom: auto;
-  background: transparent;
 }
 
 .profile-page .profile-security-card {
@@ -2252,7 +2236,6 @@ input {
 
   .auth-code-row,
   .auth-social-buttons,
-  .profile-center__actions,
   .profile-security-code-row,
   .profile-section__grid,
   .profile-security-grid {
@@ -2306,7 +2289,6 @@ input {
     padding: 24px 20px 22px;
   }
 
-  .profile-center__actions,
   .profile-security-code-row,
   .profile-section__grid,
   .profile-security-grid {

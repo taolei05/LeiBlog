@@ -229,11 +229,27 @@ describe("shared API response validation", () => {
       }),
     );
     await updateBlogUserProfile({
-      username: "owner",
       notificationEmailLocale: "en",
       commentEmailNotifications: true,
       newPostEmailNotifications: false,
     });
+  });
+  it("sends explicit empty profile fields so they can be cleared independently", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (typeof init?.body !== "string") throw new Error("Expected a JSON profile payload");
+        expect(JSON.parse(init.body)).toEqual({
+          avatarUrl: "",
+          bio: "",
+          name: "",
+          blogUrl: "",
+          tags: [],
+        });
+        return Response.json({ user: adminUser });
+      }),
+    );
+    await updateBlogUserProfile({ avatarUrl: "", bio: "", name: "", blogUrl: "", tags: [] });
   });
   const publicSettings = {
     author: null,

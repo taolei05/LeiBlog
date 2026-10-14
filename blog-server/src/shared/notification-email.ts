@@ -1,5 +1,6 @@
 import type { ResolvedEmailBranding } from "../blog/auth/service";
 import { escapeHtml, renderLeiBlogEmailHtml } from "../blog/auth/service";
+import { renderEmailExcerpt } from "./email-content";
 
 type NotificationBodyParameters = {
   branding: ResolvedEmailBranding;
@@ -21,18 +22,18 @@ const renderNotificationBody = ({
   preferencesUrl,
 }: NotificationBodyParameters) => {
   const subject = rawSubject.replace(/[\r\n]+/g, " ").slice(0, 220);
-  const excerpt = rawExcerpt.slice(0, 2000);
+  const excerpt = renderEmailExcerpt(rawExcerpt, actionUrl);
   const manageLabel = branding.locale === "en" ? "Manage email notifications" : "管理邮件通知";
   return {
     subject,
-    text: `${description}\n\n${excerpt}\n\n${actionLabel}: ${actionUrl}\n\n${manageLabel}: ${preferencesUrl}`,
+    text: `${description}\n\n${excerpt.text}\n\n${actionLabel}: ${actionUrl}\n\n${manageLabel}: ${preferencesUrl}`,
     html: renderLeiBlogEmailHtml({
       branding,
       preheader: description,
       title: subject,
       bodyHtml: `
         <p style="margin:0 0 14px;color:#52525b;font-size:15px;line-height:1.7;">${escapeHtml(description)}</p>
-        <div style="margin:18px 0 0;padding:16px 18px;border:1px solid #e4e4e7;border-radius:18px;background:#fafafa;color:#27272a;font-size:14px;line-height:1.75;white-space:pre-wrap;word-break:break-word;">${escapeHtml(excerpt)}</div>
+        <div style="margin:18px 0 0;padding:16px 18px;border:1px solid #e4e4e7;border-radius:18px;background:#fafafa;color:#27272a;font-size:14px;line-height:1.75;word-break:break-word;">${excerpt.html}</div>
         <p style="margin:20px 0 0;"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;padding:11px 16px;border-radius:12px;background:#ec4899;color:#ffffff;font-size:14px;font-weight:800;line-height:1.2;text-decoration:none;">${escapeHtml(actionLabel)}</a></p>
         <p style="margin:20px 0 0;font-size:12px;line-height:1.7;"><a href="${escapeHtml(preferencesUrl)}" style="color:#71717a;">${escapeHtml(manageLabel)}</a></p>
       `,

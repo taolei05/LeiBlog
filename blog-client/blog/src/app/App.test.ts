@@ -13,7 +13,12 @@ vi.mock("react-photo-view", () => ({
   PhotoView: ({ children }: PropsWithChildren) => children,
 }));
 
-import { frontCopyByLanguage, isInternalRoute, SiteAccountBlock } from "./App";
+import {
+  AccountProfileEditor,
+  frontCopyByLanguage,
+  isInternalRoute,
+  SiteAccountBlock,
+} from "./App";
 
 const user: BlogUser = {
   id: "account",
@@ -65,5 +70,34 @@ describe("public SPA route boundary", () => {
   it.each(["/", "/profile", "/articles/example", "/admin-guide"])(
     "continues client navigation for public routes: %s",
     (path) => expect(isInternalRoute(path)).toBe(true),
+  );
+});
+
+describe("profile settings panels", () => {
+  it.each(["zh-CN", "en"] as const)(
+    "uses accessible collapsible sections with local actions in %s",
+    (language) => {
+      const copy = frontCopyByLanguage[language];
+      const markup = renderToStaticMarkup(
+        createElement(AccountProfileEditor, {
+          copy,
+          language,
+          user,
+          timeZone: "Asia/Shanghai",
+          panelMode: null,
+          onNotice: vi.fn(),
+          onPasswordChanged: vi.fn(),
+          onProfileUpdated: vi.fn(),
+        }),
+      );
+      expect(markup).toContain(copy.auth.profile.displayInfo);
+      expect(markup).toContain(copy.auth.profile.notificationsTitle);
+      expect(markup).toContain(copy.auth.profile.securityTitle);
+      expect(markup.match(/aria-expanded=/g)).toHaveLength(3);
+      expect(markup).toContain('class="profile-panel-actions"');
+      expect(markup).not.toContain('class="profile-center__actions"');
+      expect(markup).toContain(copy.auth.profile.cancel);
+      expect(markup).toContain(copy.auth.profile.save);
+    },
   );
 });

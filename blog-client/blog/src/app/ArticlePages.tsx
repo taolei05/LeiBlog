@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readArticleExcerptText } from "../../../shared/article-excerpt";
 import { UploadProgressList, useUploadProgress } from "../../../shared/upload-progress";
 import type { UploadProgress } from "../../../shared/upload-request";
 import type { ChangeEvent, CSSProperties, FormEvent, MouseEvent, ReactNode } from "react";
@@ -533,10 +534,7 @@ const readArticleExcerpt = ({
   const content = readArticleContent(article, language);
   const source = content.summary || article.summary || content.contentMdx;
 
-  return source
-    .replace(/[#*_`>\-[\]()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return readArticleExcerptText(source);
 };
 
 const readArticleReadingTime = ({

@@ -493,7 +493,7 @@ export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
         newPostEmailNotifications: t.Optional(t.Boolean()),
         notificationEmailLocale: t.Optional(t.Union([t.Literal("en"), t.Literal("zh-CN")])),
         tags: t.Optional(t.Array(t.String({ maxLength: 40 }), { maxItems: 12 })),
-        username: t.String({ minLength: 2, maxLength: 60 }),
+        username: t.Optional(t.String({ minLength: 2, maxLength: 60 })),
       }),
     },
   )

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Collapsible, CollapsibleGroup } from "@astryxdesign/core/Collapsible";
+import { readArticleExcerptText } from "../../../shared/article-excerpt";
 import type {
   ChangeEvent,
   ComponentPropsWithRef,
@@ -1562,10 +1564,7 @@ const readHomeArticleExcerpt = ({
   const content = readHomeArticleContent(article, language);
   const source = content.summary || article.summary || content.contentMdx;
 
-  return source
-    .replace(/[#*_`>\-[\]()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return readArticleExcerptText(source);
 };
 
 const readHomeArticleReadingTime = ({
@@ -2475,7 +2474,7 @@ type AccountProfileEditorProps = {
   user: BlogUser;
 };
 
-function AccountProfileEditor({
+export function AccountProfileEditor({
   copy,
   language,
   onNotice,
@@ -2501,7 +2500,9 @@ function AccountProfileEditor({
     createAccountPasswordChangeFormState(),
   );
   const [passwordMode, setPasswordMode] = useState<AccountPasswordVerificationMode>("password");
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingPanel, setSavingPanel] = useState<"profile" | "preferences" | null>(null);
+  const isSaving = savingPanel !== null;
+  const [openPanel, setOpenPanel] = useState("profile");
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [securityCodeClock, setSecurityCodeClock] = useState(() => Date.now());
@@ -2555,31 +2556,41 @@ function AccountProfileEditor({
   const previewAvatarUrl =
     avatarPreviewUrl ?? (savedAvatarUrl.length > 0 ? resolveApiAssetUrl(savedAvatarUrl) : "");
 
+  const savedTags = (user.tags ?? []).join(", ");
   useEffect(() => {
-    setProfileForm(createAccountProfileFormState(user));
+    setProfileForm((current) => ({
+      ...current,
+      avatarUrl: user.avatarUrl ?? "",
+      bio: user.bio ?? "",
+      blogUrl: user.blogUrl ?? "",
+      name: user.name ?? "",
+      username: user.username,
+      tags: savedTags,
+    }));
     setAvatarFile(undefined);
     setAvatarEditorFile(undefined);
     setAvatarPreviewUrl(undefined);
     if (avatarInputRef.current !== null) {
       avatarInputRef.current.value = "";
     }
+  }, [user.id, user.avatarUrl, user.bio, user.blogUrl, user.name, savedTags, user.username]);
+
+  useEffect(() => {
+    setProfileForm((current) => ({
+      ...current,
+      commentEmailNotifications: user.commentEmailNotifications ?? false,
+      newPostEmailNotifications: user.newPostEmailNotifications ?? false,
+    }));
+  }, [user.id, user.commentEmailNotifications, user.newPostEmailNotifications]);
+
+  useEffect(() => {
     setEmailForm(createAccountEmailChangeFormState());
     setPasswordForm(createAccountPasswordChangeFormState());
     setPasswordMode("password");
     setSecurityCodeCooldownEndsAt(createSecurityCodeState(0));
     setSecurityCodeValidMinutes(createSecurityCodeState(DEFAULT_EMAIL_CODE_VALID_MINUTES));
     setSecurityCodePurposeLoading(null);
-  }, [
-    user.avatarUrl,
-    user.bio,
-    user.blogUrl,
-    user.commentEmailNotifications,
-    user.name,
-    user.newPostEmailNotifications,
-    user.tags,
-    user.email,
-    user.username,
-  ]);
+  }, [user.id, user.email]);
 
   useEffect(() => {
     if (avatarFile === undefined) {
@@ -2610,27 +2621,33 @@ function AccountProfileEditor({
   }, [hasActiveSecurityCodeCooldown]);
 
   useEffect(() => {
-    if (panelMode === null) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      document
-        .getElementById(`profile-section-${panelMode}`)
-        ?.scrollIntoView({ block: "start", behavior: "smooth" });
-    });
+    const reveal = () => {
+      const hash = window.location.hash;
+      const section = panelMode ?? (hash === "#profile-section-preferences" ? "preferences" : null);
+      if (section === null) return;
+      setOpenPanel(section === "email" || section === "password" ? "security" : section);
+      window.requestAnimationFrame(() => {
+        document
+          .getElementById(`profile-section-${section}`)
+          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
+    };
+    reveal();
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
   }, [panelMode]);
 
-  async function handleSubmit() {
-    if (profileForm.username.trim().length < 2) {
+  async function handleSubmit(panel: "profile" | "preferences") {
+    if (isSaving) return;
+    if (panel === "profile" && profileForm.username.trim().length < 2) {
       onNotice({ tone: "error", text: profileCopy.usernameRequired });
       return;
     }
 
-    setIsSaving(true);
+    setSavingPanel(panel);
     try {
       const targetProfileForm =
-        avatarFile === undefined
+        panel === "preferences" || avatarFile === undefined
           ? profileForm
           : {
               ...profileForm,
@@ -2642,11 +2659,26 @@ function AccountProfileEditor({
                 })
               ).accessUrl,
             };
-      const updatedUser = await updateBlogUserProfile({
-        ...targetProfileForm,
-        notificationEmailLocale: language,
-        tags: parseProfileTags(targetProfileForm.tags),
-      });
+      const updatedUser = await updateBlogUserProfile(
+        panel === "preferences"
+          ? {
+              commentEmailNotifications: profileForm.commentEmailNotifications,
+              newPostEmailNotifications: profileForm.newPostEmailNotifications,
+              notificationEmailLocale: language,
+            }
+          : {
+              username: targetProfileForm.username,
+              name: targetProfileForm.name,
+              avatarUrl: targetProfileForm.avatarUrl,
+              bio: targetProfileForm.bio,
+              blogUrl: targetProfileForm.blogUrl,
+              tags: parseProfileTags(targetProfileForm.tags),
+            },
+      );
+      if (panel === "profile") {
+        setAvatarFile(undefined);
+        setAvatarPreviewUrl(undefined);
+      }
       onProfileUpdated(updatedUser);
       onNotice({ tone: "success", text: profileCopy.saved });
     } catch (error) {
@@ -2655,7 +2687,7 @@ function AccountProfileEditor({
         text: profileCopy.saveFailed(readAuthErrorReason(error, profileCopy.saveFailureFallback)),
       });
     } finally {
-      setIsSaving(false);
+      setSavingPanel(null);
     }
   }
 
@@ -2970,419 +3002,510 @@ function AccountProfileEditor({
           </aside>
 
           <div className="profile-center__main">
-            <section
-              className="profile-section profile-section--public"
-              id="profile-section-profile"
-            >
-              <div className="profile-section__heading">
-                <UserRound size={17} />
-                <div>
-                  <strong>{profileCopy.displayInfo}</strong>
-                </div>
-              </div>
-              <div className="profile-section__grid">
-                <TextInput
-                  autoComplete="username"
-                  label={copy.auth.fields.username}
-                  onChange={(value) => {
-                    setProfileForm((current) => ({ ...current, username: value }));
-                  }}
-                  placeholder={copy.auth.placeholders.username}
-                  size="lg"
-                  value={profileForm.username}
-                />
-                <TextInput
-                  autoComplete="name"
-                  label={copy.auth.fields.name}
-                  onChange={(value) => {
-                    setProfileForm((current) => ({ ...current, name: value }));
-                  }}
-                  placeholder={copy.auth.placeholders.name}
-                  size="lg"
-                  value={profileForm.name}
-                />
-              </div>
-              <div className="profile-section__grid profile-section__grid--media">
-                <div className="profile-avatar-upload">
-                  <span className="profile-avatar-upload__preview">
-                    {previewAvatarUrl.length > 0 ? (
-                      <img alt={previewName} src={previewAvatarUrl} />
-                    ) : (
-                      previewName.trim().slice(0, 1).toUpperCase() || "U"
-                    )}
-                  </span>
-                  <div className="profile-avatar-upload__body">
-                    <TextInput
-                      label={profileCopy.avatarUrl}
-                      onChange={(value) => {
-                        setAvatarFile(undefined);
-                        setAvatarPreviewUrl(undefined);
-                        if (avatarInputRef.current !== null) {
-                          avatarInputRef.current.value = "";
-                        }
-                        setProfileForm((current) => ({ ...current, avatarUrl: value }));
-                      }}
-                      placeholder="/uploads/media/..."
-                      size="lg"
-                      value={profileForm.avatarUrl}
-                    />
-                    <div className="profile-avatar-upload__actions">
-                      <Button
-                        icon={<Upload size={16} />}
-                        isDisabled={isSaving}
-                        label={profileCopy.avatarChoose}
-                        onClick={() => {
-                          avatarInputRef.current?.click();
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="secondary"
-                      />
-                      <Button
-                        icon={<X size={16} />}
-                        isDisabled={isSaving}
-                        label={profileCopy.avatarClear}
-                        onClick={clearAvatar}
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                      />
-                      <input
-                        ref={avatarInputRef}
-                        accept="image/*"
-                        aria-label={profileCopy.avatarChoose}
-                        className="profile-avatar-upload__input"
-                        onChange={handleAvatarFileChange}
-                        type="file"
-                      />
-                    </div>
-                    {avatarFile === undefined ? null : (
-                      <p className="profile-avatar-upload__pending">
-                        {profileCopy.avatarPending(avatarFile.name)}
-                      </p>
-                    )}
-                    <UploadProgressList language={language} uploads={uploads} />
-                  </div>
-                </div>
-                <TextInput
-                  label={profileCopy.blogUrl}
-                  onChange={(value) => {
-                    setProfileForm((current) => ({ ...current, blogUrl: value }));
-                  }}
-                  placeholder="https://example.com"
-                  size="lg"
-                  value={profileForm.blogUrl}
-                />
-              </div>
-              <TextInput
-                label={profileCopy.tags}
-                onChange={(value) => {
-                  setProfileForm((current) => ({ ...current, tags: value }));
-                }}
-                placeholder={profileCopy.tagPlaceholder}
-                size="lg"
-                value={profileForm.tags}
-              />
-              <TextArea
-                label={profileCopy.publicBio}
-                onChange={(value) => {
-                  setProfileForm((current) => ({ ...current, bio: value }));
-                }}
-                placeholder={profileCopy.description}
-                rows={4}
-                value={profileForm.bio}
-              />
-            </section>
-
-            <section className="profile-section" id="profile-section-preferences">
-              <div className="profile-section__heading">
-                <ShieldCheck size={17} />
-                <div>
-                  <strong>{profileCopy.notificationsTitle}</strong>
-                  <span>{profileCopy.notificationsDescription}</span>
-                </div>
-              </div>
-              <div className="profile-switch-list">
-                <Switch
-                  label={profileCopy.commentNotifications}
-                  labelPosition="start"
-                  labelSpacing="spread"
-                  onChange={(value) => {
-                    setProfileForm((current) => ({
-                      ...current,
-                      commentEmailNotifications: value,
-                    }));
-                  }}
-                  value={profileForm.commentEmailNotifications}
-                />
-                <Switch
-                  label={profileCopy.newPostNotifications}
-                  labelPosition="start"
-                  labelSpacing="spread"
-                  onChange={(value) => {
-                    setProfileForm((current) => ({
-                      ...current,
-                      newPostEmailNotifications: value,
-                    }));
-                  }}
-                  value={profileForm.newPostEmailNotifications}
-                />
-              </div>
-            </section>
-
-            <section className="profile-section">
-              <div className="profile-section__heading">
-                <KeyRound size={17} />
-                <div>
-                  <strong>{profileCopy.securityTitle}</strong>
-                  <span>{profileCopy.securityDescription}</span>
-                </div>
-              </div>
-              <div className="profile-security-grid">
-                <form
-                  className="profile-security-card profile-security-card--form"
-                  id="profile-section-email"
-                  onSubmit={handleEmailChangeSubmit}
+            <div className="profile-panel-group">
+              <CollapsibleGroup
+                type="single"
+                hasDividers
+                value={openPanel}
+                onChange={(value) =>
+                  setOpenPanel(typeof value === "string" ? value : (value[0] ?? ""))
+                }
+              >
+                <Collapsible
+                  value="profile"
+                  trigger={
+                    <span className="profile-panel-trigger">
+                      <UserRound size={17} />
+                      <strong>{profileCopy.displayInfo}</strong>
+                    </span>
+                  }
                 >
-                  <div className="profile-security-card__title">
-                    <Mail size={17} />
-                    <div>
-                      <strong>{profileCopy.emailTitle}</strong>
-                      <span>{profileCopy.emailDescription}</span>
-                    </div>
-                  </div>
-                  <TextInput
-                    isDisabled
-                    label={profileCopy.currentEmail}
-                    onChange={() => undefined}
-                    size="lg"
-                    value={user.email}
-                  />
-                  <div className="profile-security-code-row">
-                    <TextInput
-                      autoComplete="one-time-code"
-                      label={profileCopy.currentEmailCode}
-                      onChange={(value) => {
-                        setEmailForm((current) => ({ ...current, currentEmailCode: value }));
-                      }}
-                      placeholder={copy.auth.placeholders.code}
-                      size="lg"
-                      value={emailForm.currentEmailCode}
-                    />
-                    <Button
-                      isDisabled={
-                        securityCodePurposeLoading !== null ||
-                        readSecurityCodeCooldownSeconds("email_change_current") > 0
-                      }
-                      isLoading={securityCodePurposeLoading === "email_change_current"}
-                      label={readSecurityCodeButtonLabel(
-                        "email_change_current",
-                        profileCopy.sendCurrentEmailCode,
-                      )}
-                      onClick={() => {
-                        void requestAccountSecurityCode("email_change_current");
-                      }}
-                      size="lg"
-                      type="button"
-                      variant="secondary"
-                    />
-                  </div>
-                  <div className="profile-security-code-row">
-                    <TextInput
-                      autoComplete="email"
-                      label={profileCopy.newEmail}
-                      onChange={(value) => {
-                        setEmailForm((current) => ({ ...current, newEmail: value }));
-                      }}
-                      placeholder={copy.auth.placeholders.email}
-                      size="lg"
-                      type="email"
-                      value={emailForm.newEmail}
-                    />
-                    <Button
-                      isDisabled={
-                        securityCodePurposeLoading !== null ||
-                        readSecurityCodeCooldownSeconds("email_change_new") > 0 ||
-                        emailForm.newEmail.trim().length === 0
-                      }
-                      isLoading={securityCodePurposeLoading === "email_change_new"}
-                      label={readSecurityCodeButtonLabel(
-                        "email_change_new",
-                        profileCopy.sendNewEmailCode,
-                      )}
-                      onClick={() => {
-                        void requestAccountSecurityCode("email_change_new");
-                      }}
-                      size="lg"
-                      type="button"
-                      variant="secondary"
-                    />
-                  </div>
-                  <TextInput
-                    autoComplete="one-time-code"
-                    label={profileCopy.newEmailCode}
-                    onChange={(value) => {
-                      setEmailForm((current) => ({ ...current, newEmailCode: value }));
-                    }}
-                    placeholder={copy.auth.placeholders.code}
-                    size="lg"
-                    value={emailForm.newEmailCode}
-                  />
-                  <p className="profile-security-card__hint">
-                    {profileCopy.emailSecurityHint}{" "}
-                    {copy.auth.dialog.codeValidFor(
-                      Math.max(
-                        securityCodeValidMinutes.email_change_current,
-                        securityCodeValidMinutes.email_change_new,
-                      ),
-                    )}
-                  </p>
-                  <Button
-                    icon={<Mail size={15} />}
-                    isLoading={isChangingEmail}
-                    label={isChangingEmail ? profileCopy.changingEmail : profileCopy.changeEmail}
-                    size="lg"
-                    type="submit"
-                    variant="primary"
-                    width="100%"
-                  />
-                </form>
-                <form
-                  className="profile-security-card profile-security-card--form"
-                  id="profile-section-password"
-                  onSubmit={handlePasswordChangeSubmit}
-                >
-                  <div className="profile-security-card__title">
-                    <KeyRound size={17} />
-                    <div>
-                      <strong>{profileCopy.passwordTitle}</strong>
-                      <span>{profileCopy.passwordDescription}</span>
-                    </div>
-                  </div>
-                  <div className="profile-security-mode-toggle" role="group">
-                    <button
-                      aria-pressed={passwordMode === "password"}
-                      className={passwordMode === "password" ? "is-selected" : undefined}
-                      onClick={() => {
-                        setPasswordMode("password");
-                      }}
-                      type="button"
-                    >
-                      {profileCopy.passwordMethodPassword}
-                    </button>
-                    <button
-                      aria-pressed={passwordMode === "email_code"}
-                      className={passwordMode === "email_code" ? "is-selected" : undefined}
-                      onClick={() => {
-                        setPasswordMode("email_code");
-                      }}
-                      type="button"
-                    >
-                      {profileCopy.passwordMethodCode}
-                    </button>
-                  </div>
-                  {passwordMode === "password" ? (
-                    <TextInput
-                      autoComplete="current-password"
-                      label={profileCopy.currentPassword}
-                      onChange={(value) => {
-                        setPasswordForm((current) => ({ ...current, currentPassword: value }));
-                      }}
-                      placeholder={copy.auth.placeholders.password}
-                      size="lg"
-                      type="password"
-                      value={passwordForm.currentPassword}
-                    />
-                  ) : (
-                    <div className="profile-security-code-row">
+                  <section
+                    className="profile-section profile-section--public"
+                    id="profile-section-profile"
+                  >
+                    <div className="profile-section__grid">
                       <TextInput
-                        autoComplete="one-time-code"
-                        label={profileCopy.passwordCode}
+                        autoComplete="username"
+                        label={copy.auth.fields.username}
                         onChange={(value) => {
-                          setPasswordForm((current) => ({ ...current, emailCode: value }));
+                          setProfileForm((current) => ({ ...current, username: value }));
                         }}
-                        placeholder={copy.auth.placeholders.code}
+                        placeholder={copy.auth.placeholders.username}
                         size="lg"
-                        value={passwordForm.emailCode}
+                        value={profileForm.username}
                       />
-                      <Button
-                        isDisabled={
-                          securityCodePurposeLoading !== null ||
-                          readSecurityCodeCooldownSeconds("password_change") > 0
-                        }
-                        isLoading={securityCodePurposeLoading === "password_change"}
-                        label={readSecurityCodeButtonLabel(
-                          "password_change",
-                          profileCopy.sendPasswordCode,
-                        )}
-                        onClick={() => {
-                          void requestAccountSecurityCode("password_change");
+                      <TextInput
+                        autoComplete="name"
+                        label={copy.auth.fields.name}
+                        onChange={(value) => {
+                          setProfileForm((current) => ({ ...current, name: value }));
                         }}
+                        placeholder={copy.auth.placeholders.name}
                         size="lg"
+                        value={profileForm.name}
+                      />
+                    </div>
+                    <div className="profile-section__grid profile-section__grid--media">
+                      <div className="profile-avatar-upload">
+                        <span className="profile-avatar-upload__preview">
+                          {previewAvatarUrl.length > 0 ? (
+                            <img alt={previewName} src={previewAvatarUrl} />
+                          ) : (
+                            previewName.trim().slice(0, 1).toUpperCase() || "U"
+                          )}
+                        </span>
+                        <div className="profile-avatar-upload__body">
+                          <TextInput
+                            label={profileCopy.avatarUrl}
+                            onChange={(value) => {
+                              setAvatarFile(undefined);
+                              setAvatarPreviewUrl(undefined);
+                              if (avatarInputRef.current !== null) {
+                                avatarInputRef.current.value = "";
+                              }
+                              setProfileForm((current) => ({ ...current, avatarUrl: value }));
+                            }}
+                            placeholder="/uploads/media/..."
+                            size="lg"
+                            value={profileForm.avatarUrl}
+                          />
+                          <div className="profile-avatar-upload__actions">
+                            <Button
+                              icon={<Upload size={16} />}
+                              isDisabled={isSaving}
+                              label={profileCopy.avatarChoose}
+                              onClick={() => {
+                                avatarInputRef.current?.click();
+                              }}
+                              size="sm"
+                              type="button"
+                              variant="secondary"
+                            />
+                            <Button
+                              icon={<X size={16} />}
+                              isDisabled={isSaving}
+                              label={profileCopy.avatarClear}
+                              onClick={clearAvatar}
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                            />
+                            <input
+                              ref={avatarInputRef}
+                              accept="image/*"
+                              aria-label={profileCopy.avatarChoose}
+                              className="profile-avatar-upload__input"
+                              onChange={handleAvatarFileChange}
+                              type="file"
+                            />
+                          </div>
+                          {avatarFile === undefined ? null : (
+                            <p className="profile-avatar-upload__pending">
+                              {profileCopy.avatarPending(avatarFile.name)}
+                            </p>
+                          )}
+                          <UploadProgressList language={language} uploads={uploads} />
+                        </div>
+                      </div>
+                      <TextInput
+                        label={profileCopy.blogUrl}
+                        onChange={(value) => {
+                          setProfileForm((current) => ({ ...current, blogUrl: value }));
+                        }}
+                        placeholder="https://example.com"
+                        size="lg"
+                        value={profileForm.blogUrl}
+                      />
+                    </div>
+                    <TextInput
+                      label={profileCopy.tags}
+                      onChange={(value) => {
+                        setProfileForm((current) => ({ ...current, tags: value }));
+                      }}
+                      placeholder={profileCopy.tagPlaceholder}
+                      size="lg"
+                      value={profileForm.tags}
+                    />
+                    <TextArea
+                      label={profileCopy.publicBio}
+                      onChange={(value) => {
+                        setProfileForm((current) => ({ ...current, bio: value }));
+                      }}
+                      placeholder={profileCopy.description}
+                      rows={4}
+                      value={profileForm.bio}
+                    />
+                    <div className="profile-panel-actions">
+                      <Button
+                        label={profileCopy.cancel}
+                        isDisabled={isSaving}
+                        onClick={() => {
+                          const saved = createAccountProfileFormState(user);
+                          setProfileForm((current) => ({
+                            ...saved,
+                            commentEmailNotifications: current.commentEmailNotifications,
+                            newPostEmailNotifications: current.newPostEmailNotifications,
+                          }));
+                          setAvatarFile(undefined);
+                          setAvatarEditorFile(undefined);
+                          setAvatarPreviewUrl(undefined);
+                          if (avatarInputRef.current) avatarInputRef.current.value = "";
+                        }}
                         type="button"
                         variant="secondary"
                       />
+                      <Button
+                        icon={<UserRound size={15} />}
+                        isDisabled={isSaving}
+                        isLoading={savingPanel === "profile"}
+                        label={savingPanel === "profile" ? profileCopy.saving : profileCopy.save}
+                        onClick={() => {
+                          void handleSubmit("profile");
+                        }}
+                        type="button"
+                        variant="primary"
+                      />
                     </div>
-                  )}
-                  <TextInput
-                    autoComplete="new-password"
-                    label={profileCopy.newPassword}
-                    onChange={(value) => {
-                      setPasswordForm((current) => ({ ...current, newPassword: value }));
-                    }}
-                    placeholder={copy.auth.placeholders.password}
-                    size="lg"
-                    type="password"
-                    value={passwordForm.newPassword}
-                  />
-                  <TextInput
-                    autoComplete="new-password"
-                    label={copy.auth.fields.confirmPassword}
-                    onChange={(value) => {
-                      setPasswordForm((current) => ({ ...current, confirmPassword: value }));
-                    }}
-                    placeholder={copy.auth.placeholders.confirmPassword}
-                    size="lg"
-                    type="password"
-                    value={passwordForm.confirmPassword}
-                  />
-                  <p className="profile-security-card__hint">{profileCopy.passwordSecurityHint}</p>
-                  <Button
-                    icon={<KeyRound size={15} />}
-                    isLoading={isChangingPassword}
-                    label={
-                      isChangingPassword ? profileCopy.changingPassword : profileCopy.changePassword
-                    }
-                    size="lg"
-                    type="submit"
-                    variant="primary"
-                    width="100%"
-                  />
-                </form>
-              </div>
-            </section>
+                  </section>
+                </Collapsible>
 
-            <div className="profile-center__actions">
-              <Button
-                label={profileCopy.cancel}
-                onClick={() => {
-                  setProfileForm(createAccountProfileFormState(user));
-                }}
-                size="md"
-                type="button"
-                variant="secondary"
-              />
-              <Button
-                icon={<UserRound size={15} />}
-                isLoading={isSaving}
-                label={isSaving ? profileCopy.saving : profileCopy.save}
-                onClick={() => {
-                  void handleSubmit();
-                }}
-                size="md"
-                type="button"
-                variant="primary"
-              />
+                <Collapsible
+                  value="preferences"
+                  trigger={
+                    <span className="profile-panel-trigger">
+                      <ShieldCheck size={17} />
+                      <strong>{profileCopy.notificationsTitle}</strong>
+                    </span>
+                  }
+                >
+                  <section className="profile-section" id="profile-section-preferences">
+                    <Text as="p" color="secondary">
+                      {profileCopy.notificationsDescription}
+                    </Text>
+                    <div className="profile-switch-list">
+                      <Switch
+                        label={profileCopy.commentNotifications}
+                        labelPosition="start"
+                        labelSpacing="spread"
+                        onChange={(value) => {
+                          setProfileForm((current) => ({
+                            ...current,
+                            commentEmailNotifications: value,
+                          }));
+                        }}
+                        value={profileForm.commentEmailNotifications}
+                      />
+                      <Switch
+                        label={profileCopy.newPostNotifications}
+                        labelPosition="start"
+                        labelSpacing="spread"
+                        onChange={(value) => {
+                          setProfileForm((current) => ({
+                            ...current,
+                            newPostEmailNotifications: value,
+                          }));
+                        }}
+                        value={profileForm.newPostEmailNotifications}
+                      />
+                    </div>
+                    <div className="profile-panel-actions">
+                      <Button
+                        label={profileCopy.cancel}
+                        isDisabled={isSaving}
+                        onClick={() => {
+                          setProfileForm((current) => ({
+                            ...current,
+                            commentEmailNotifications: user.commentEmailNotifications ?? false,
+                            newPostEmailNotifications: user.newPostEmailNotifications ?? false,
+                          }));
+                        }}
+                        type="button"
+                        variant="secondary"
+                      />
+                      <Button
+                        icon={<Mail size={15} />}
+                        isDisabled={isSaving}
+                        isLoading={savingPanel === "preferences"}
+                        label={
+                          savingPanel === "preferences" ? profileCopy.saving : profileCopy.save
+                        }
+                        onClick={() => {
+                          void handleSubmit("preferences");
+                        }}
+                        type="button"
+                        variant="primary"
+                      />
+                    </div>
+                  </section>
+                </Collapsible>
+
+                <Collapsible
+                  value="security"
+                  trigger={
+                    <span className="profile-panel-trigger">
+                      <KeyRound size={17} />
+                      <strong>{profileCopy.securityTitle}</strong>
+                    </span>
+                  }
+                >
+                  <section className="profile-section">
+                    <Text as="p" color="secondary">
+                      {profileCopy.securityDescription}
+                    </Text>
+                    <div className="profile-security-grid">
+                      <form
+                        className="profile-security-card profile-security-card--form"
+                        id="profile-section-email"
+                        onSubmit={handleEmailChangeSubmit}
+                      >
+                        <div className="profile-security-card__title">
+                          <Mail size={17} />
+                          <div>
+                            <strong>{profileCopy.emailTitle}</strong>
+                            <span>{profileCopy.emailDescription}</span>
+                          </div>
+                        </div>
+                        <TextInput
+                          isDisabled
+                          label={profileCopy.currentEmail}
+                          onChange={() => undefined}
+                          size="lg"
+                          value={user.email}
+                        />
+                        <div className="profile-security-code-row">
+                          <TextInput
+                            autoComplete="one-time-code"
+                            label={profileCopy.currentEmailCode}
+                            onChange={(value) => {
+                              setEmailForm((current) => ({ ...current, currentEmailCode: value }));
+                            }}
+                            placeholder={copy.auth.placeholders.code}
+                            size="lg"
+                            value={emailForm.currentEmailCode}
+                          />
+                          <Button
+                            isDisabled={
+                              securityCodePurposeLoading !== null ||
+                              readSecurityCodeCooldownSeconds("email_change_current") > 0
+                            }
+                            isLoading={securityCodePurposeLoading === "email_change_current"}
+                            label={readSecurityCodeButtonLabel(
+                              "email_change_current",
+                              profileCopy.sendCurrentEmailCode,
+                            )}
+                            onClick={() => {
+                              void requestAccountSecurityCode("email_change_current");
+                            }}
+                            size="lg"
+                            type="button"
+                            variant="secondary"
+                          />
+                        </div>
+                        <div className="profile-security-code-row">
+                          <TextInput
+                            autoComplete="email"
+                            label={profileCopy.newEmail}
+                            onChange={(value) => {
+                              setEmailForm((current) => ({ ...current, newEmail: value }));
+                            }}
+                            placeholder={copy.auth.placeholders.email}
+                            size="lg"
+                            type="email"
+                            value={emailForm.newEmail}
+                          />
+                          <Button
+                            isDisabled={
+                              securityCodePurposeLoading !== null ||
+                              readSecurityCodeCooldownSeconds("email_change_new") > 0 ||
+                              emailForm.newEmail.trim().length === 0
+                            }
+                            isLoading={securityCodePurposeLoading === "email_change_new"}
+                            label={readSecurityCodeButtonLabel(
+                              "email_change_new",
+                              profileCopy.sendNewEmailCode,
+                            )}
+                            onClick={() => {
+                              void requestAccountSecurityCode("email_change_new");
+                            }}
+                            size="lg"
+                            type="button"
+                            variant="secondary"
+                          />
+                        </div>
+                        <TextInput
+                          autoComplete="one-time-code"
+                          label={profileCopy.newEmailCode}
+                          onChange={(value) => {
+                            setEmailForm((current) => ({ ...current, newEmailCode: value }));
+                          }}
+                          placeholder={copy.auth.placeholders.code}
+                          size="lg"
+                          value={emailForm.newEmailCode}
+                        />
+                        <p className="profile-security-card__hint">
+                          {profileCopy.emailSecurityHint}{" "}
+                          {copy.auth.dialog.codeValidFor(
+                            Math.max(
+                              securityCodeValidMinutes.email_change_current,
+                              securityCodeValidMinutes.email_change_new,
+                            ),
+                          )}
+                        </p>
+                        <div className="profile-panel-actions">
+                          <Button
+                            label={profileCopy.cancel}
+                            isDisabled={isChangingEmail || securityCodePurposeLoading !== null}
+                            onClick={() => setEmailForm(createAccountEmailChangeFormState())}
+                            type="button"
+                            variant="secondary"
+                          />
+                          <Button
+                            icon={<Mail size={15} />}
+                            isLoading={isChangingEmail}
+                            label={
+                              isChangingEmail ? profileCopy.changingEmail : profileCopy.changeEmail
+                            }
+                            size="lg"
+                            type="submit"
+                            variant="primary"
+                          />
+                        </div>
+                      </form>
+                      <form
+                        className="profile-security-card profile-security-card--form"
+                        id="profile-section-password"
+                        onSubmit={handlePasswordChangeSubmit}
+                      >
+                        <div className="profile-security-card__title">
+                          <KeyRound size={17} />
+                          <div>
+                            <strong>{profileCopy.passwordTitle}</strong>
+                            <span>{profileCopy.passwordDescription}</span>
+                          </div>
+                        </div>
+                        <div className="profile-security-mode-toggle" role="group">
+                          <button
+                            aria-pressed={passwordMode === "password"}
+                            className={passwordMode === "password" ? "is-selected" : undefined}
+                            onClick={() => {
+                              setPasswordMode("password");
+                            }}
+                            type="button"
+                          >
+                            {profileCopy.passwordMethodPassword}
+                          </button>
+                          <button
+                            aria-pressed={passwordMode === "email_code"}
+                            className={passwordMode === "email_code" ? "is-selected" : undefined}
+                            onClick={() => {
+                              setPasswordMode("email_code");
+                            }}
+                            type="button"
+                          >
+                            {profileCopy.passwordMethodCode}
+                          </button>
+                        </div>
+                        {passwordMode === "password" ? (
+                          <TextInput
+                            autoComplete="current-password"
+                            label={profileCopy.currentPassword}
+                            onChange={(value) => {
+                              setPasswordForm((current) => ({
+                                ...current,
+                                currentPassword: value,
+                              }));
+                            }}
+                            placeholder={copy.auth.placeholders.password}
+                            size="lg"
+                            type="password"
+                            value={passwordForm.currentPassword}
+                          />
+                        ) : (
+                          <div className="profile-security-code-row">
+                            <TextInput
+                              autoComplete="one-time-code"
+                              label={profileCopy.passwordCode}
+                              onChange={(value) => {
+                                setPasswordForm((current) => ({ ...current, emailCode: value }));
+                              }}
+                              placeholder={copy.auth.placeholders.code}
+                              size="lg"
+                              value={passwordForm.emailCode}
+                            />
+                            <Button
+                              isDisabled={
+                                securityCodePurposeLoading !== null ||
+                                readSecurityCodeCooldownSeconds("password_change") > 0
+                              }
+                              isLoading={securityCodePurposeLoading === "password_change"}
+                              label={readSecurityCodeButtonLabel(
+                                "password_change",
+                                profileCopy.sendPasswordCode,
+                              )}
+                              onClick={() => {
+                                void requestAccountSecurityCode("password_change");
+                              }}
+                              size="lg"
+                              type="button"
+                              variant="secondary"
+                            />
+                          </div>
+                        )}
+                        <TextInput
+                          autoComplete="new-password"
+                          label={profileCopy.newPassword}
+                          onChange={(value) => {
+                            setPasswordForm((current) => ({ ...current, newPassword: value }));
+                          }}
+                          placeholder={copy.auth.placeholders.password}
+                          size="lg"
+                          type="password"
+                          value={passwordForm.newPassword}
+                        />
+                        <TextInput
+                          autoComplete="new-password"
+                          label={copy.auth.fields.confirmPassword}
+                          onChange={(value) => {
+                            setPasswordForm((current) => ({ ...current, confirmPassword: value }));
+                          }}
+                          placeholder={copy.auth.placeholders.confirmPassword}
+                          size="lg"
+                          type="password"
+                          value={passwordForm.confirmPassword}
+                        />
+                        <p className="profile-security-card__hint">
+                          {profileCopy.passwordSecurityHint}
+                        </p>
+                        <div className="profile-panel-actions">
+                          <Button
+                            label={profileCopy.cancel}
+                            isDisabled={isChangingPassword || securityCodePurposeLoading !== null}
+                            onClick={() => {
+                              setPasswordForm(createAccountPasswordChangeFormState());
+                              setPasswordMode("password");
+                            }}
+                            type="button"
+                            variant="secondary"
+                          />
+                          <Button
+                            icon={<KeyRound size={15} />}
+                            isLoading={isChangingPassword}
+                            label={
+                              isChangingPassword
+                                ? profileCopy.changingPassword
+                                : profileCopy.changePassword
+                            }
+                            size="lg"
+                            type="submit"
+                            variant="primary"
+                          />
+                        </div>
+                      </form>
+                    </div>
+                  </section>
+                </Collapsible>
+              </CollapsibleGroup>
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import type { Sql, TransactionSql } from "postgres";
 
 import { getSql } from "../../shared/db/postgres";
 import { env } from "../../shared/env";
+import { escapeEmailHtml, renderEmailLogo, resolveEmailAssetUrl } from "../../shared/email-content";
 import type { AuthProvider } from "../../shared/auth-providers";
 import {
   getAuthProviderDefaults,
@@ -549,29 +550,14 @@ const toAuthProviderSettingsItem = (
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+const escapeHtml = escapeEmailHtml;
 
 const getServerOrigin = () => {
   return env.publicSiteUrl;
 };
 
 const toAbsoluteAssetUrl = (value: string) => {
-  const trimmedValue = value.trim();
-  if (trimmedValue.length === 0) {
-    return undefined;
-  }
-
-  try {
-    return new URL(trimmedValue).toString();
-  } catch {
-    return new URL(trimmedValue, `${getServerOrigin()}/`).toString();
-  }
+  return resolveEmailAssetUrl(value, env.publicSiteUrl) ?? undefined;
 };
 
 const normalizeEmailTemplateLocale = (locale?: string | null): EmailTemplateLocale => {
@@ -1087,10 +1073,7 @@ const renderLeiBlogEmailHtml = ({
   title: string;
 }) => {
   const copy = EMAIL_FRAME_COPY[branding.locale];
-  const brandMark =
-    branding.logoUrl !== undefined
-      ? `<img alt="${escapeHtml(branding.siteName)} logo" src="${escapeHtml(branding.logoUrl)}" style="display:block;width:100%;height:100%;object-fit:contain;" />`
-      : escapeHtml(branding.siteInitial);
+  const brandMark = renderEmailLogo(branding, env.publicSiteUrl);
 
   return `<!doctype html>
 <html lang="${copy.htmlLang}">

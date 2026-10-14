@@ -5,6 +5,7 @@ import type { Sql, TransactionSql } from "postgres";
 import { readEncryptedSetting, getSiteSettings } from "../../admin/settings/service";
 import { getSql } from "../../shared/db/postgres";
 import { env } from "../../shared/env";
+import { escapeEmailHtml, renderEmailLogo, resolveEmailAssetUrl } from "../../shared/email-content";
 import { reserveEmailVerificationAttempt } from "../../shared/email-verification";
 import { deleteAdminSessionsForUser } from "../../admin/auth/service";
 import {
@@ -123,7 +124,7 @@ export type UpdateBlogUserProfileInput = {
   name?: string;
   newPostEmailNotifications?: boolean;
   tags?: string[];
-  username: string;
+  username?: string;
 };
 
 export type BlogAuthFailureReason =
@@ -289,29 +290,10 @@ const addMinutes = (date: Date, minutes: number) => new Date(date.getTime() + mi
 
 const addSeconds = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
-export const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
-const getServerOrigin = () => {
-  return env.publicSiteUrl;
-};
+export const escapeHtml = escapeEmailHtml;
 
 const toAbsoluteAssetUrl = (value: string | null | undefined) => {
-  const trimmedValue = value?.trim();
-  if (!trimmedValue) {
-    return null;
-  }
-
-  try {
-    return new URL(trimmedValue).toString();
-  } catch {
-    return new URL(trimmedValue, `${getServerOrigin()}/`).toString();
-  }
+  return resolveEmailAssetUrl(value, env.publicSiteUrl);
 };
 
 const getEmailBrandInitial = (siteName: string) => siteName.trim().slice(0, 1).toUpperCase() || "L";
@@ -363,10 +345,7 @@ export const renderLeiBlogEmailHtml = ({
   title: string;
 }) => {
   const copy = EMAIL_FRAME_COPY[branding.locale];
-  const brandMark =
-    branding.logoUrl !== null
-      ? `<img alt="${escapeHtml(branding.siteName)} logo" src="${escapeHtml(branding.logoUrl)}" style="display:block;width:100%;height:100%;object-fit:contain;" />`
-      : escapeHtml(branding.siteInitial);
+  const brandMark = renderEmailLogo(branding, env.publicSiteUrl);
 
   return `<!doctype html>
 <html lang="${copy.htmlLang}">
@@ -1118,10 +1097,10 @@ export const updateBlogUserProfile = async ({
   username: rawUsername,
 }: UpdateBlogUserProfileInput & { userId: string }) => {
   const sql = getSql();
-  const username = trimText(rawUsername);
+  const username = rawUsername?.trim();
   const normalizedTags = cleanTags(tags);
 
-  if (username.length < 2) {
+  if (username !== undefined && username.length < 2) {
     throw createAuthError(400, "invalid-identity", "请输入至少 2 位用户名。");
   }
 
@@ -1131,23 +1110,23 @@ export const updateBlogUserProfile = async ({
       transaction<CountRow[]>`
         SELECT count(*)::text AS count
         FROM users
-        WHERE lower(username) = lower(${username})
+        WHERE lower(username) = lower(${username ?? null})
           AND id <> ${userId}
       `,
     );
-    if (usernameCount > 0) {
+    if (username !== undefined && usernameCount > 0) {
       throw createAuthError(409, "username-exists", "用户名已被使用。");
     }
 
     const rows = await transaction<BlogUserRow[]>`
 	      UPDATE users
 	      SET
-	        username = ${username},
-	        name = ${cleanOptionalText(name)},
-	        avatar_url = ${cleanOptionalText(avatarUrl)},
-	        bio = ${cleanOptionalText(bio)},
-	        blog_url = ${cleanOptionalText(blogUrl)},
-	        tags = ${normalizedTags},
+	        username = COALESCE(${username ?? null}, username),
+	        name = CASE WHEN ${name === undefined} THEN name ELSE ${cleanOptionalText(name)} END,
+	        avatar_url = CASE WHEN ${avatarUrl === undefined} THEN avatar_url ELSE ${cleanOptionalText(avatarUrl)} END,
+	        bio = CASE WHEN ${bio === undefined} THEN bio ELSE ${cleanOptionalText(bio)} END,
+	        blog_url = CASE WHEN ${blogUrl === undefined} THEN blog_url ELSE ${cleanOptionalText(blogUrl)} END,
+	        tags = CASE WHEN ${tags === undefined} THEN tags ELSE ${normalizedTags} END,
 	        comment_email_notifications = COALESCE(${commentEmailNotifications ?? null}, comment_email_notifications),
 	        new_post_email_notifications = COALESCE(${newPostEmailNotifications ?? null}, new_post_email_notifications),
           notification_email_locale = COALESCE(${notificationEmailLocale ?? null}, notification_email_locale),

@@ -95,4 +95,21 @@ describe("bilingual notification email templates", () => {
     expect(email.text.length).toBeLessThan(3000);
     expect(email.subject).not.toMatch(/[\r\n]/);
   });
+
+  test.each(["en", "zh-CN"] as const)("renders inline and reference images in %s emails", (locale) => {
+    const email = renderCommentNotificationEmail({
+      branding: { ...branding, locale, logoUrl: "/uploads/site/logo.png" },
+      kind: "comment_reply", target: "guestbook", authorName: "Alice", articleTitle: null,
+      content: 'Before ![photo](/uploads/comments/photo.jpg?x=1 "Caption") after\n\n![second][image]\n\n[image]: https://images.example.test/photo.png',
+      commentUrl: articleUrl, preferencesUrl,
+    });
+    expect(email.html).toContain('<img src="https://blog.example.test/uploads/comments/photo.jpg?x=1&amp;media-v=2"');
+    expect(email.html).toContain('alt="photo"');
+    expect(email.html).toContain('title="Caption"');
+    expect(email.html).toContain('src="https://images.example.test/photo.png"');
+    expect(email.html).toContain("Before");
+    expect(email.html).toContain("after");
+    expect(email.html).not.toContain("![photo]");
+    expect(email.text).toContain("https://blog.example.test/uploads/comments/photo.jpg?x=1&media-v=2");
+  });
 });

@@ -573,7 +573,10 @@ const MdxEditorImageDialog = () => {
 
               {allowSetImageDimensions && (
                 <>
-                  <label className="mdx-image-dialog__field" htmlFor={widthInputId}>
+                  <label
+                    className="mdx-image-dialog__field mdx-image-dialog__field--dimension"
+                    htmlFor={widthInputId}
+                  >
                     <span>{copy.width}</span>
                     <input
                       className="mdx-image-dialog__input"
@@ -587,7 +590,10 @@ const MdxEditorImageDialog = () => {
                     />
                   </label>
 
-                  <label className="mdx-image-dialog__field" htmlFor={heightInputId}>
+                  <label
+                    className="mdx-image-dialog__field mdx-image-dialog__field--dimension"
+                    htmlFor={heightInputId}
+                  >
                     <span>{copy.height}</span>
                     <input
                       className="mdx-image-dialog__input"

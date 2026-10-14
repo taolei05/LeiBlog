@@ -74,7 +74,7 @@ suite("email notifications with isolated PostgreSQL and captured mail delivery",
     const parameters = {
       user,
       meta,
-      input: { content: "Reply <script>unsafe</script>", parentId },
+      input: { content: "Reply <script>unsafe</script> ![Photo](/uploads/comments/photo.jpg)", parentId },
     };
     return articleSlug === undefined
       ? comments.createPublicGuestbookComment(parameters)
@@ -224,6 +224,12 @@ suite("email notifications with isolated PostgreSQL and captured mail delivery",
       );
       expect(delivered.every((mail) => !mail.body.to.includes(replier.email))).toBe(true);
       expect(delivered.every((mail) => !mail.body.html.includes("<script>"))).toBe(true);
+      expect(delivered.every((mail) => mail.body.html.includes(
+        '<img src="https://blog.example.test/uploads/comments/photo.jpg?media-v=2"',
+      ))).toBe(true);
+      expect(delivered.every((mail) => mail.body.text.includes(
+        "https://blog.example.test/uploads/comments/photo.jpg?media-v=2",
+      ))).toBe(true);
     },
   );
 

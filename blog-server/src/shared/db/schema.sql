@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS users (
   bio text,
   tags text[] NOT NULL DEFAULT ARRAY[]::text[],
   blog_url text,
-  comment_email_notifications boolean NOT NULL DEFAULT false,
-  new_post_email_notifications boolean NOT NULL DEFAULT false,
+  comment_email_notifications boolean NOT NULL DEFAULT true,
+  new_post_email_notifications boolean NOT NULL DEFAULT true,
   last_login_at timestamptz,
   last_login_time_zone text,
   last_login_time_zone_offset_minutes integer,
@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role text;
+ALTER TABLE users ALTER COLUMN comment_email_notifications SET DEFAULT true;
+ALTER TABLE users ALTER COLUMN new_post_email_notifications SET DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_time_zone text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_time_zone_offset_minutes integer;

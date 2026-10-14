@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
 import type { PropsWithChildren } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { MDXEditorProps, imagePlugin } from "@mdxeditor/editor";
@@ -87,5 +88,20 @@ describe("MD image editing", () => {
   it("does not offer a picker without authenticated transport", () => {
     expect(render().markup).not.toContain("从媒体库选择");
     expect(recordPicker).not.toHaveBeenCalled();
+  });
+
+  it("keeps mobile dialog actions outside the scrolling body and groups dimension inputs", () => {
+    const { markup } = render("");
+    expect(markup.match(/mdx-image-dialog__field--dimension/g)).toHaveLength(2);
+    expect(markup.indexOf("mdx-image-dialog__footer")).toBeGreaterThan(
+      markup.indexOf("mdx-image-dialog__preview"),
+    );
+    const styles = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
+    expect(styles).toMatch(/\.mdx-image-dialog\s*\{[^}]*min-height: 0;[^}]*max-height: inherit;/);
+    expect(styles).toMatch(
+      /\.mdx-image-dialog \.mdx-image-dialog__body\s*\{[^}]*min-height: 0;[^}]*overflow-y: auto;/,
+    );
+    expect(styles).toContain("env(safe-area-inset-bottom, 0px)");
+    expect(styles).toMatch(/\.mdx-image-dialog__footer > button\s*\{[^}]*min-height: 44px;/);
   });
 });

@@ -19,6 +19,8 @@
     "archiver": "^8.0.0",
     "date-fns": "^4.4.0",
     "elysia": "latest",
+    "hast-util-from-html": "2.0.3",
+    "mdast-util-from-markdown": "2.1.0",
     "pinyin-pro": "^3.29.4",
     "postgres": "^3.4.9",
     "redis": "^6.2.1"
@@ -26,6 +28,7 @@
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
     "@types/archiver": "^8.0.0",
+    "@types/mdast": "4.0.4",
     "bun-types": "latest",
     "typescript": "^7.0.2"
   }

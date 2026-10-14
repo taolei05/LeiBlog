@@ -231,8 +231,8 @@ export function InitialSetupPage({
   const [bio, setBio] = useState("");
   const [tagValues, setTags] = useState(() => splitValues(defaultTags));
   const [hasCustomizedTags, setHasCustomizedTags] = useState(false);
-  const [commentEmailNotifications, setCommentEmailNotifications] = useState(false);
-  const [newPostEmailNotifications, setNewPostEmailNotifications] = useState(false);
+  const [commentEmailNotifications, setCommentEmailNotifications] = useState(true);
+  const [newPostEmailNotifications, setNewPostEmailNotifications] = useState(true);
   const [socialLinks, setSocialLinks] = useState<LinkItem[]>(INITIAL_SOCIAL_LINKS);
   const [blogUrl, setBlogUrl] = useState("");
 

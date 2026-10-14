@@ -921,7 +921,7 @@ type UpdateBlogUserProfileParams = {
   name?: string;
   newPostEmailNotifications?: boolean;
   tags?: string[];
-  username: string;
+  username?: string;
 };
 
 type GetManagedUsersParameters = {
@@ -2982,15 +2982,15 @@ export const updateBlogUserProfile = async (payload: UpdateBlogUserProfileParams
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      avatarUrl: payload.avatarUrl?.trim() || undefined,
-      bio: payload.bio?.trim() || undefined,
-      blogUrl: payload.blogUrl?.trim() || undefined,
+      avatarUrl: payload.avatarUrl?.trim(),
+      bio: payload.bio?.trim(),
+      blogUrl: payload.blogUrl?.trim(),
       commentEmailNotifications: payload.commentEmailNotifications,
-      name: payload.name?.trim() || undefined,
+      name: payload.name?.trim(),
       newPostEmailNotifications: payload.newPostEmailNotifications,
       notificationEmailLocale: payload.notificationEmailLocale,
       tags: payload.tags?.map((tag) => tag.trim()).filter((tag) => tag.length > 0),
-      username: payload.username.trim(),
+      username: payload.username?.trim(),
     }),
   });
   const body = await parseJson(response);
