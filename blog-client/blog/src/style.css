@@ -4334,12 +4334,13 @@ input {
 
 .article-comment-image {
   display: block;
+  justify-self: start;
   width: fit-content;
-  max-width: 100%;
+  max-width: min(100%, 280px);
   overflow: hidden;
-  border: 1px solid var(--blog-border);
+  border: 0;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--blog-text-strong) 4%, var(--blog-surface));
+  background: transparent;
   color: inherit;
   cursor: zoom-in;
   padding: 0;
@@ -4347,9 +4348,14 @@ input {
 
 .article-comment-image img {
   display: block;
-  max-width: min(100%, 280px);
+  box-sizing: border-box;
+  width: auto;
+  height: auto;
+  max-width: 100%;
   max-height: 220px;
-  object-fit: cover;
+  border: 1px solid var(--blog-border);
+  border-radius: inherit;
+  object-fit: contain;
 }
 
 .article-comment-footer {
