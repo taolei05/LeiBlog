@@ -771,6 +771,9 @@ const resources = {
             writeMdx: "写下正文...",
             writeZhMdx: "写下中文正文...",
           },
+          sources: {
+            guestbook: "留言板",
+          },
           statusFilters: {
             all: "全部状态",
           },
@@ -2165,6 +2168,9 @@ const resources = {
             unset: "Not set",
             writeMdx: "Write the content...",
             writeZhMdx: "Write the Chinese content...",
+          },
+          sources: {
+            guestbook: "Guestbook",
           },
           statusFilters: {
             all: "All statuses",

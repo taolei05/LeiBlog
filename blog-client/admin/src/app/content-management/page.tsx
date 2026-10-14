@@ -111,6 +111,7 @@ import { AdminFormDialog } from "../components/admin-form-dialog";
 import { MdxEditorField } from "../components/mdx-editor-field";
 import { allowedMdxJsxComponentNames } from "../components/mdx-whitelist";
 import { MediaAssetField } from "../components/media-asset-field";
+import { getCommentSourceLabel } from "./comment-source";
 
 type ContentView = "articles" | "categories" | "comments" | "contributors" | "tags";
 type ArticleTableRow = ArticleContent &
@@ -942,12 +943,14 @@ const createContributorRow = ({
 const createCommentRow = ({
   comment,
   fallback,
+  guestbookLabel,
 }: {
   comment: CommentItem;
   fallback: string;
+  guestbookLabel: string;
 }): CommentTableRow => ({
   ...comment,
-  articleText: comment.articleTitle ?? fallback,
+  articleText: getCommentSourceLabel({ comment, fallback, guestbookLabel }),
   authorText: getCommentAuthorName(comment),
 });
 
@@ -1166,6 +1169,7 @@ export function ContentManagementPage({
         createCommentRow({
           comment,
           fallback: t("admin.contentManagement.placeholders.unlinkedArticle"),
+          guestbookLabel: t("admin.contentManagement.sources.guestbook"),
         }),
       ),
     [commentList.items, t],
@@ -2376,7 +2380,16 @@ export function ContentManagementPage({
         sortable: true,
         width: pixel(190),
         renderCell: (comment) => (
-          <Badge icon={<FileText size={14} />} label={comment.articleText} />
+          <Badge
+            icon={
+              comment.targetType === "guestbook" ? (
+                <MessageCircle size={14} />
+              ) : (
+                <FileText size={14} />
+              )
+            }
+            label={comment.articleText}
+          />
         ),
       },
       {
