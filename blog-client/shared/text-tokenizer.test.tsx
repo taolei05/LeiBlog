@@ -21,6 +21,7 @@ const renderField = (value: string[]) => {
       onChange,
       createLabel: (label) => `Create ${label}`,
       isDisabled: true,
+      maxEntries: 12,
     }),
   );
   const props = renderTokenizer.mock.calls.at(-1)?.[0];
@@ -42,6 +43,7 @@ describe("text token fields", () => {
       hasClear: true,
       debounceMs: 0,
       isDisabled: true,
+      maxEntries: 12,
     });
     expect(
       props.renderItem?.({ id: "create", label: "", auxiliaryData: { __createdValue: "React" } }),

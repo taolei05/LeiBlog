@@ -6,6 +6,8 @@ import { createDeepLPreferredSlug, createPinyinSlug, normalizeSlug } from "../..
 import { CONTENT_FAILURE, ContentError, ContentInputError } from "./errors";
 import { normalizeContentUrl, parsePublicationDate } from "./input-policy";
 import { upsertArticleEn, upsertCategoryEn, upsertTagEn } from "./localizations";
+import { prepareTaxonomyInput } from "./taxonomy-translation";
+import { readEncryptedSetting } from "../settings/service";
 
 export { CONTENT_FAILURE, ContentError } from "./errors";
 export type { ContentFailure } from "./errors";
@@ -435,8 +437,8 @@ const toTaxonomyLocalizations = ({
   nameEn: string | null;
 }): TaxonomyLocalizations => ({
   en: {
-    description: descriptionEn ?? description ?? "",
-    name: nameEn ?? name,
+    description: descriptionEn ?? "",
+    name: nameEn ?? "",
   },
   zhCN: {
     description: description ?? "",
@@ -1296,6 +1298,7 @@ export const listPublicCategories = async (): Promise<CategoryList> => {
 
 export const createCategory = async ({ input }: { input: CategoryInput }) => {
   const sql = getSql();
+  input = await prepareTaxonomyInput({ input, apiKey: await readEncryptedSetting("deepl_api_key") });
   const name = cleanText(input.name);
   if (name.length === 0) {
     throw new ContentError(CONTENT_FAILURE.InvalidTitle, "Category name is required.");
@@ -1335,7 +1338,8 @@ export const updateCategory = async ({
   input: CategoryInput;
 }) => {
   const sql = getSql();
-  await readCategoryRow({ categoryId, sql });
+  const existing = await readCategoryRow({ categoryId, sql });
+  input = await prepareTaxonomyInput({ input, existing, apiKey: await readEncryptedSetting("deepl_api_key") });
   const name = cleanText(input.name);
   if (name.length === 0) {
     throw new ContentError(CONTENT_FAILURE.InvalidTitle, "Category name is required.");
@@ -1470,6 +1474,7 @@ export const listPublicTags = async (): Promise<TagList> => {
 
 export const createTag = async ({ input }: { input: TagInput }) => {
   const sql = getSql();
+  input = await prepareTaxonomyInput({ input, apiKey: await readEncryptedSetting("deepl_api_key") });
   const name = cleanText(input.name);
   if (name.length === 0) {
     throw new ContentError(CONTENT_FAILURE.InvalidTitle, "Tag name is required.");
@@ -1503,7 +1508,8 @@ export const createTag = async ({ input }: { input: TagInput }) => {
 
 export const updateTag = async ({ input, tagId }: { input: TagInput; tagId: string }) => {
   const sql = getSql();
-  await readTagRow({ sql, tagId });
+  const existing = await readTagRow({ sql, tagId });
+  input = await prepareTaxonomyInput({ input, existing, apiKey: await readEncryptedSetting("deepl_api_key") });
   const name = cleanText(input.name);
   if (name.length === 0) {
     throw new ContentError(CONTENT_FAILURE.InvalidTitle, "Tag name is required.");

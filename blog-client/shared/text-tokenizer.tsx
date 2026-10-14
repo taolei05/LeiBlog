@@ -8,7 +8,7 @@ type TextToken = SearchableItem<{ __createdValue?: string }>;
 
 type TextTokenizerProps = Pick<
   TokenizerProps<TextToken>,
-  "label" | "description" | "placeholder" | "status" | "isDisabled"
+  "label" | "description" | "placeholder" | "status" | "isDisabled" | "maxEntries" | "size"
 > & {
   value: string[];
   onChange: (values: string[]) => void;

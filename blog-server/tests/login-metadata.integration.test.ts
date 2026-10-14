@@ -15,6 +15,7 @@ suite("login metadata round-trip with isolated PostgreSQL", () => {
     onnotice: () => {},
   });
   const countryName = new Intl.DisplayNames(["zh-CN"], { type: "region" }).of("CN");
+  const englishCountryName = new Intl.DisplayNames(["en"], { type: "region" }).of("CN");
   const meta = {
     ip: "203.0.113.9",
     countryCode: "CN",
@@ -69,11 +70,14 @@ suite("login metadata round-trip with isolated PostgreSQL", () => {
     expect(audit).toEqual({ locationType: "object", deviceType: "object" });
     const info = await readUserLoginInfo({ sql, userId });
     expect(info.lastLoginLocation).toBe(countryName ?? null);
+    expect(info.lastLoginLocationEn).toBe(englishCountryName ?? null);
     expect(info.lastLoginDevice).toBe("macOS / Chrome 154");
     expect(info.recentLogins[0]?.location).toBe(info.lastLoginLocation);
+    expect(info.recentLogins[0]?.locationEn).toBe(englishCountryName ?? null);
     expect(info.recentLogins[0]?.device).toBe(info.lastLoginDevice);
     const profile = await readBlogUserProfileById({ sql, userId });
     expect(profile.lastLoginLocation).toBe(info.lastLoginLocation);
+    expect(profile.lastLoginLocationEn).toBe(englishCountryName ?? null);
     expect(profile.lastLoginDevice).toBe(info.lastLoginDevice);
   });
 
@@ -101,6 +105,20 @@ suite("login metadata round-trip with isolated PostgreSQL", () => {
     const [stored] =
       await sql`SELECT jsonb_typeof(last_login_location) AS location_type FROM users WHERE id = ${userId}`;
     expect(stored.locationType).toBe("string");
+  });
+
+  test("reads bilingual historical JSON metadata without changing stored records", async () => {
+    const location = { location: "日本东京", location_en: "Tokyo, Japan" };
+    await sql`UPDATE users SET last_login_location = ${sql.json(location)} WHERE id = ${userId}`;
+    await sql`INSERT INTO login_audit_logs (user_id, location, success) VALUES (${userId}, ${sql.json(location)}, true)`;
+    const info = await readUserLoginInfo({ sql, userId });
+    expect(info.lastLoginLocation).toBe("日本东京");
+    expect(info.lastLoginLocationEn).toBe("Tokyo, Japan");
+    expect(info.recentLogins[0]?.locationEn).toBe("Tokyo, Japan");
+    const profile = await readBlogUserProfileById({ sql, userId });
+    expect(profile.lastLoginLocationEn).toBe("Tokyo, Japan");
+    const [row] = await sql`SELECT last_login_location::text AS payload FROM users WHERE id = ${userId}`;
+    expect(JSON.parse(row.payload)).toEqual(location);
   });
 
   test("missing locations stay SQL NULL and failed attempts do not change the latest login", async () => {

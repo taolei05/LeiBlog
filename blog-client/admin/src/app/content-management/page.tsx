@@ -109,6 +109,7 @@ import {
 import type { AdminFeedbackBannerState } from "../components/admin-feedback-banner";
 import { AdminFormDialog } from "../components/admin-form-dialog";
 import { MdxEditorField } from "../components/mdx-editor-field";
+import { useArticleTranslation } from "./article-translation";
 import { allowedMdxJsxComponentNames } from "../components/mdx-whitelist";
 import { MediaAssetField } from "../components/media-asset-field";
 import { getCommentSourceLabel } from "./comment-source";
@@ -727,8 +728,8 @@ const readCategoryPayload = (form: TaxonomyFormState): ArticleCategoryPayload =>
   description: cleanOptionalText(form.description),
   localizations: {
     en: {
-      description: cleanOptionalText(form.descriptionEn) ?? undefined,
-      name: cleanOptionalText(form.nameEn) ?? undefined,
+      description: form.descriptionEn.trim(),
+      name: form.nameEn.trim(),
     },
   },
   name: form.name.trim(),
@@ -1374,6 +1375,25 @@ export function ContentManagementPage({
   const showFeedbackBanner = (title: string, status: "error" | "success" = "success") => {
     setFeedbackBanner(createAdminFeedbackBanner({ status, title }));
   };
+  const articleTranslation = useArticleTranslation({
+    authToken,
+    language,
+    isSaving,
+    scopeKey:
+      articleEditorState === undefined
+        ? null
+        : articleEditorState.mode === "create"
+          ? "create"
+          : articleEditorState.article.id,
+    contentZh: articleForm.contentMdx,
+    contentEn: articleForm.contentMdxEn,
+    onTranslated: (locale, content) =>
+      setArticleForm((current) => ({
+        ...current,
+        [locale === "en" ? "contentMdxEn" : "contentMdx"]: content,
+      })),
+    onFeedback: showFeedbackBanner,
+  });
 
   const readContentManagementErrorMessage = useCallback(
     (error: unknown, fallback: string) => {
@@ -1564,7 +1584,7 @@ export function ContentManagementPage({
   );
 
   const saveArticle = async () => {
-    if (articleEditorState === undefined) {
+    if (articleEditorState === undefined || articleTranslation.isTranslating) {
       return;
     }
 
@@ -1638,11 +1658,16 @@ export function ContentManagementPage({
         appendArticleRelationId("categoryIds", savedCategory.id);
       }
       showFeedbackBanner(
-        t(
-          isUpdatingCategory
-            ? "admin.contentManagement.notices.categoryUpdated"
-            : "admin.contentManagement.notices.categoryCreated",
-        ),
+        (savedCategory.name && !savedCategory.localizations.en.name) ||
+          (savedCategory.description && !savedCategory.localizations.en.description)
+          ? language === "en"
+            ? "Category saved. Translation is incomplete; check the DeepL configuration and retry."
+            : "分类已保存，部分翻译未完成，请检查 DeepL 配置后重试。"
+          : t(
+              isUpdatingCategory
+                ? "admin.contentManagement.notices.categoryUpdated"
+                : "admin.contentManagement.notices.categoryCreated",
+            ),
       );
       closeDialog();
       await loadContent({ preserveFeedbackBanner: true });
@@ -1684,11 +1709,16 @@ export function ContentManagementPage({
         appendArticleRelationId("tagIds", savedTag.id);
       }
       showFeedbackBanner(
-        t(
-          isUpdatingTag
-            ? "admin.contentManagement.notices.tagUpdated"
-            : "admin.contentManagement.notices.tagCreated",
-        ),
+        (savedTag.name && !savedTag.localizations.en.name) ||
+          (savedTag.description && !savedTag.localizations.en.description)
+          ? language === "en"
+            ? "Tag saved. Translation is incomplete; check the DeepL configuration and retry."
+            : "标签已保存，部分翻译未完成，请检查 DeepL 配置后重试。"
+          : t(
+              isUpdatingTag
+                ? "admin.contentManagement.notices.tagUpdated"
+                : "admin.contentManagement.notices.tagCreated",
+            ),
       );
       closeDialog();
       await loadContent({ preserveFeedbackBanner: true });
@@ -2949,7 +2979,7 @@ export function ContentManagementPage({
             />
             <Button
               icon={<Save size={16} />}
-              isDisabled={isSaving}
+              isDisabled={isSaving || articleTranslation.isTranslating}
               isLoading={isSaving}
               label={primaryLabel}
               onClick={() => {
@@ -3118,9 +3148,12 @@ export function ContentManagementPage({
             <Card padding={4} style={articleEditorMdxCardStyle}>
               <VStack gap={2}>
                 <VStack gap={1}>
-                  <HStack gap={2} vAlign="center">
-                    <FileText size={18} />
-                    <Heading level={3}>{t("admin.contentManagement.editor.mdxZh")}</Heading>
+                  <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
+                    <HStack gap={2} vAlign="center">
+                      <FileText size={18} />
+                      <Heading level={3}>{t("admin.contentManagement.editor.mdxZh")}</Heading>
+                    </HStack>
+                    {articleTranslation.renderAction("en")}
                   </HStack>
                   <Text color="secondary" type="supporting">
                     {t("admin.contentManagement.editor.mdxZhDescription")}
@@ -3133,6 +3166,7 @@ export function ContentManagementPage({
                 </HStack>
                 <MdxEditorField
                   aria-label={t("admin.contentManagement.editor.mdxZhAria")}
+                  readOnly={articleTranslation.isTranslating || isSaving}
                   imageUploadHandler={uploadArticleMdxImage}
                   uploads={uploads}
                   mediaLibraryFolderSlug="article-covers"
@@ -3149,9 +3183,12 @@ export function ContentManagementPage({
             <Card padding={4} style={articleEditorMdxCardStyle}>
               <VStack gap={2}>
                 <VStack gap={1}>
-                  <HStack gap={2} vAlign="center">
-                    <FileText size={18} />
-                    <Heading level={3}>{t("admin.contentManagement.editor.mdxEn")}</Heading>
+                  <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
+                    <HStack gap={2} vAlign="center">
+                      <FileText size={18} />
+                      <Heading level={3}>{t("admin.contentManagement.editor.mdxEn")}</Heading>
+                    </HStack>
+                    {articleTranslation.renderAction("zh-CN")}
                   </HStack>
                   <Text color="secondary" type="supporting">
                     {t("admin.contentManagement.editor.mdxEnDescription")}
@@ -3159,6 +3196,7 @@ export function ContentManagementPage({
                 </VStack>
                 <MdxEditorField
                   aria-label={t("admin.contentManagement.editor.mdxEnAria")}
+                  readOnly={articleTranslation.isTranslating || isSaving}
                   imageUploadHandler={uploadArticleMdxImage}
                   uploads={uploads}
                   mediaLibraryFolderSlug="article-covers"
@@ -3173,6 +3211,7 @@ export function ContentManagementPage({
             </Card>
           </VStack>
         </div>
+        {articleTranslation.confirmation}
         {contentFormDialogs}
       </VStack>
     );

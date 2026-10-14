@@ -899,7 +899,10 @@ export function AdminSettingsPage({
   const getRecentLoginDetails = (event: AdminLoginInfo["recentLogins"][number]) =>
     [
       event.ip,
-      getLoginLocationLabel({ ip: event.ip, location: event.location }),
+      getLoginLocationLabel({
+        ip: event.ip,
+        location: language === "en" ? (event.locationEn ?? event.location) : event.location,
+      }),
       getLoginDeviceLabel(event.device),
     ]
       .filter((value) => value !== null)
@@ -907,7 +910,10 @@ export function AdminSettingsPage({
   const latestLoginIp = loginInfo.lastLoginIp ?? emptyLoginValue;
   const latestLoginLocation = getLoginLocationLabel({
     ip: loginInfo.lastLoginIp,
-    location: loginInfo.lastLoginLocation,
+    location:
+      language === "en"
+        ? (loginInfo.lastLoginLocationEn ?? loginInfo.lastLoginLocation)
+        : loginInfo.lastLoginLocation,
   });
   const latestLoginDevice = getLoginDeviceLabel(loginInfo.lastLoginDevice);
   const latestLoginMethod =

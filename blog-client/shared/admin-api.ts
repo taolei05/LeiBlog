@@ -40,6 +40,7 @@ export type AdminLoginEvent = {
   timeZoneOffsetMinutes: number | null;
   ip: string | null;
   location: string | null;
+  locationEn?: string | null;
   device: string | null;
   method: AdminLoginMethod | null;
   success: boolean;
@@ -52,6 +53,7 @@ export type AdminLoginInfo = {
   lastLoginTimeZoneOffsetMinutes: number | null;
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
+  lastLoginLocationEn?: string | null;
   lastLoginDevice: string | null;
   lastLoginMethod: AdminLoginMethod | null;
   recentLogins: AdminLoginEvent[];
@@ -65,6 +67,8 @@ export type AdminAuthState = {
 export type BlogUserRole = "admin" | "user";
 
 export type BlogUser = {
+  profileLocalizations?: AdminProfileLocalizations;
+  profileTranslation?: AdminProfileTranslation;
   avatarUrl?: string;
   bio?: string;
   blogUrl?: string;
@@ -75,6 +79,7 @@ export type BlogUser = {
   lastLoginDevice?: string | null;
   lastLoginIp?: string | null;
   lastLoginLocation?: string | null;
+  lastLoginLocationEn?: string | null;
   lastLoginMethod?: AdminLoginMethod | null;
   lastLoginTimeZone?: string | null;
   lastLoginTimeZoneOffsetMinutes?: number | null;
@@ -913,6 +918,7 @@ type ChangeBlogUserPasswordParams =
     };
 
 type UpdateBlogUserProfileParams = {
+  profileLocalizations?: AdminProfileLocalizations;
   notificationEmailLocale?: "en" | "zh-CN";
   avatarUrl?: string;
   bio?: string;
@@ -1490,6 +1496,7 @@ const isAdminLoginEvent = (value: unknown): value is AdminLoginEvent => {
     (record.timeZoneOffsetMinutes === null || typeof record.timeZoneOffsetMinutes === "number") &&
     isNullableString(record.ip) &&
     isNullableString(record.location) &&
+    isOptionalNullableString(record.locationEn) &&
     isNullableString(record.device) &&
     (record.method === null || isAdminLoginMethod(record.method)) &&
     typeof record.success === "boolean" &&
@@ -1511,6 +1518,7 @@ const isAdminLoginInfo = (value: unknown): value is AdminLoginInfo => {
       typeof record.lastLoginTimeZoneOffsetMinutes === "number") &&
     isNullableString(record.lastLoginIp) &&
     isNullableString(record.lastLoginLocation) &&
+    isOptionalNullableString(record.lastLoginLocationEn) &&
     isNullableString(record.lastLoginDevice) &&
     (record.lastLoginMethod === null || isAdminLoginMethod(record.lastLoginMethod)) &&
     Array.isArray(record.recentLogins) &&
@@ -1645,6 +1653,10 @@ export const isBlogUser = (value: unknown): value is BlogUser => {
     isBlogUserRole(record.role) &&
     typeof record.username === "string" &&
     typeof record.email === "string" &&
+    (record.profileLocalizations === undefined ||
+      isAdminProfileLocalizations(record.profileLocalizations)) &&
+    (record.profileTranslation === undefined ||
+      isAdminProfileTranslation(record.profileTranslation)) &&
     isOptionalString(record.name) &&
     isOptionalString(record.avatarUrl) &&
     isOptionalString(record.bio) &&
@@ -1659,6 +1671,7 @@ export const isBlogUser = (value: unknown): value is BlogUser => {
     isOptionalNullableString(record.lastLoginAt) &&
     isOptionalNullableString(record.lastLoginIp) &&
     isOptionalNullableString(record.lastLoginLocation) &&
+    isOptionalNullableString(record.lastLoginLocationEn) &&
     isOptionalNullableString(record.lastLoginDevice) &&
     isOptionalNullableString(record.lastLoginTimeZone) &&
     (record.lastLoginTimeZoneOffsetMinutes === undefined ||
@@ -2982,6 +2995,7 @@ export const updateBlogUserProfile = async (payload: UpdateBlogUserProfileParams
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      profileLocalizations: payload.profileLocalizations,
       avatarUrl: payload.avatarUrl?.trim(),
       bio: payload.bio?.trim(),
       blogUrl: payload.blogUrl?.trim(),
@@ -3216,6 +3230,45 @@ export const uploadInitialSetupMediaAsset = async ({
   });
 
   return body.item;
+};
+
+export const translateArticleBody = async ({
+  content,
+  sourceLocale,
+  token,
+  signal,
+}: {
+  content: string;
+  sourceLocale: AppLanguage;
+  token: string;
+  signal?: AbortSignal;
+}) => {
+  const response = await fetch(`${API_BASE_URL}/api/admin/content/articles/translate`, {
+    method: "POST",
+    credentials: "include",
+    signal,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ content, sourceLocale }),
+  });
+  const body: unknown = await parseJson(response);
+  if (!response.ok) {
+    throw new Error(
+      typeof body === "object" &&
+        body !== null &&
+        "reason" in body &&
+        typeof body.reason === "string"
+        ? body.reason
+        : "translation-failed",
+    );
+  }
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("content" in body) ||
+    typeof body.content !== "string"
+  )
+    throw new Error("translation-failed");
+  return body.content;
 };
 
 export const getAdminMe = async (token: string, locale: AppLanguage) => {

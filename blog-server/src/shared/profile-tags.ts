@@ -172,6 +172,7 @@ type TranslateTextsParameters = {
   sourceLocale: UserProfileLocale;
   targetLocale: UserProfileLocale;
   texts: string[];
+  timeoutMs?: number;
 };
 
 export const translateTexts = async ({
@@ -179,6 +180,7 @@ export const translateTexts = async ({
   sourceLocale,
   targetLocale,
   texts,
+  timeoutMs = 10_000,
 }: TranslateTextsParameters) => {
   if (texts.length === 0) {
     return [];
@@ -190,7 +192,7 @@ export const translateTexts = async ({
 
   try {
     const response = await fetch(endpoint, {
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: {
         Authorization: `DeepL-Auth-Key ${apiKey}`,

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { Sql } from "postgres";
 
 import { env } from "./env";
-import { describeDevice, describeLocation, resolveLoginLocation } from "./login-metadata";
+import { describeDevice, describeLocation, resolveLoginLocation, readLocationLabels } from "./login-metadata";
 import { encryptSecret } from "./security/encryption";
 
 const noSettingsSql = (async () => []) as unknown as Sql;
@@ -15,6 +15,26 @@ afterEach(() => {
 });
 
 describe("login location", () => {
+  test("reads bilingual saved metadata and country-only fallbacks", () => {
+    expect(describeLocation({ location: "日本东京", location_en: "Tokyo, Japan" }, "en")).toBe("Tokyo, Japan");
+    expect(describeLocation({ countryCode2: "JP" }, "en")).toBe("Japan");
+    expect(describeLocation({ location: "日本东京", location_en: "Tokyo, Japan" })).toBe("日本东京");
+  });
+
+  test("translates historical labels once, without sending IP or device metadata", async () => {
+    const encryptedValue = encryptSecret({ value: "test-api-key", secret: env.configEncryptionSecret });
+    const sql = (async () => [{ encryptedValue }]) as unknown as Sql;
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ translations: [{ text: "Tokyo, Japan" }] }));
+    const metadata = { location: "日本东京历史测试", ip: "203.0.113.9", userAgent: "private-device" };
+    const first = await readLocationLabels({ values: [metadata, JSON.stringify(metadata)], sql });
+    expect(first).toEqual([{ zhCN: metadata.location, en: "Tokyo, Japan" }, { zhCN: metadata.location, en: "Tokyo, Japan" }]);
+    await readLocationLabels({ values: [metadata], sql });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = String(fetchSpy.mock.calls[0]?.[1]?.body);
+    expect(body).not.toContain(metadata.ip);
+    expect(body).not.toContain(metadata.userAgent);
+    expect(JSON.parse(body)).toMatchObject({ source_lang: "ZH", target_lang: "EN-US", text: [metadata.location] });
+  });
   test("reads existing JSON-encoded metadata as well as structured objects", () => {
     const location = { country_name: "中国", state_prov: "山东省", city: "济南市" };
     expect(describeLocation(JSON.stringify(location))).toBe("中国 山东省 济南市");
@@ -116,17 +136,19 @@ describe("login location", () => {
     );
   });
 
-  test("uses complete Chinese provider data without an unnecessary translation request", async () => {
+  test("keeps Chinese provider data and saves its English translation", async () => {
     const encryptedValue = encryptSecret({
       value: "test-api-key",
       secret: env.configEncryptionSecret,
     });
     const sql = (async () => [{ encryptedValue }]) as unknown as Sql;
-    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({ country_name: "中国", state_prov: "山东省", city: "济南市" }),
-    );
-    expect(describeLocation(await resolveLoginLocation({ meta, sql }))).toBe("中国 山东省 济南市");
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const fetchSpy = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ country_name: "中国", state_prov: "山东省", city: "济南市" }))
+      .mockResolvedValueOnce(Response.json({ translations: [{ text: "Jinan, Shandong, China" }] }));
+    const location = await resolveLoginLocation({ meta, sql });
+    expect(describeLocation(location)).toBe("中国 山东省 济南市");
+    expect(describeLocation(location, "en")).toBe("Jinan, Shandong, China");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(new URL(String(fetchSpy.mock.calls[0]?.[0])).searchParams.get("ip")).toBe(meta.ip);
   });
 });

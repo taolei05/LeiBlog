@@ -31,6 +31,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     timeZoneOffsetMinutes: null,
   };
   let networkCalls = 0;
+  let deeplApiKey: string | undefined;
   let redisUnavailable = false;
   let auth: typeof import("../src/blog/auth/service");
   let oauth: typeof import("../src/blog/auth/oauth");
@@ -172,7 +173,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
       },
     }));
     mock.module("../src/admin/settings/service", () => ({
-      readEncryptedSetting: async () => undefined,
+      readEncryptedSetting: async (key: string) => key === "deepl_api_key" ? deeplApiKey : undefined,
       getSiteSettings: async () => ({
         basics: { resendDomain: "" },
         site: { siteName: "Test Blog", lightLogoUrl: "", darkLogoUrl: "" },
@@ -182,6 +183,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     mock.module("../src/shared/login-metadata", () => ({
       describeDevice: () => null,
       describeLocation: () => null,
+      readLocationLabels: async ({ values }: { values: unknown[] }) => values.map(() => ({ zhCN: null, en: null })),
       recordLoginAttempt: async () => {},
       readUserLoginInfo: async () => ({}),
     }));
@@ -209,6 +211,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     const { blogAuthRoutes, blogOAuthCallbackRoutes } = await import("../src/blog/auth/routes");
     routes = new Elysia().use(blogAuthRoutes);
     const { adminAuthRoutes } = await import("../src/admin/auth/routes");
+    const { adminContentRoutes } = await import("../src/admin/content/routes");
     const { applyAdminCookieAuthentication } = await import("../src/admin/auth/cookie");
     const { createRequestSecurity } = await import("../src/shared/request-security");
     appRoutes = new Elysia()
@@ -218,7 +221,8 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     adminRoutes = new Elysia()
       .use(createRequestSecurity({ consumeRateLimit: async () => 0 }))
       .onTransform({ as: "global" }, applyAdminCookieAuthentication)
-      .use(adminAuthRoutes);
+      .use(adminAuthRoutes)
+      .use(adminContentRoutes);
   });
 
   beforeEach(async () => {
@@ -226,6 +230,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     await redis.flushDb();
     redisUnavailable = false;
     networkCalls = 0;
+    deeplApiKey = undefined;
   });
 
   afterAll(async () => {
@@ -580,6 +585,123 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     expect(cleared.tags).toEqual([]);
     expect(cleared.commentEmailNotifications).toBe(false);
     expect(cleared.newPostEmailNotifications).toBe(false);
+  });
+
+  test("self-service bilingual profiles persist both languages and preserve explicit preferences", async () => {
+    const user = await createUser("user");
+    const profileLocalizations = {
+      zhCN: { name: "中文姓名", bio: "中文描述", tags: ["摄影", "写作"] },
+      en: { name: "English name", bio: "English bio", tags: ["Photography", "Writing"] },
+    };
+    const saved = await auth.updateBlogUserProfile({ userId: user.id, profileLocalizations });
+    expect(saved.profileLocalizations).toEqual(profileLocalizations);
+    expect(saved.name).toBe("中文姓名");
+    expect(saved.profileTranslation?.missingFields).toEqual([]);
+    const preferences = await auth.updateBlogUserProfile({ userId: user.id, commentEmailNotifications: false });
+    expect(preferences.profileLocalizations).toEqual(profileLocalizations);
+    expect(preferences.commentEmailNotifications).toBe(false);
+    const reread = await auth.readBlogUserProfileById({ sql, userId: user.id });
+    expect(reread.profileLocalizations).toEqual(profileLocalizations);
+    expect(networkCalls).toBe(0);
+  });
+
+  test("missing translation configuration saves entered profile values without inventing English text", async () => {
+    const user = await createUser("user");
+    const saved = await auth.updateBlogUserProfile({ userId: user.id, profileLocalizations: {
+      zhCN: { name: "中文", bio: "简介", tags: ["摄影"] },
+      en: { name: "", bio: "", tags: [] },
+    } });
+    expect(saved.profileLocalizations?.zhCN.name).toBe("中文");
+    expect(saved.profileLocalizations?.en).toEqual({ name: "", bio: "", tags: [] });
+    expect(saved.profileTranslation?.status).toBe("missing-api-key");
+    expect(networkCalls).toBe(0);
+  });
+
+  test("profile API translates missing fields and cannot modify another user's profile", async () => {
+    const user = await createUser("user");
+    const other = await createUser("user");
+    const sessionId = crypto.randomUUID();
+    const sessionSecret = "synthetic-profile-session";
+    await auth.createBlogSession({ user, requestMeta: meta, sessionId, sessionSecret });
+    const blockedFetch = globalThis.fetch;
+    deeplApiKey = "synthetic";
+    const words: Record<string, string> = { 中文姓名: "English name", 中文简介: "English bio", 摄影: "Photography" };
+    globalThis.fetch = Object.assign(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body)) as { text: string[] };
+      return Response.json({ translations: payload.text.map(text => ({ text: words[text] ?? text })) });
+    }, { preconnect: originalFetch.preconnect });
+    try {
+      const response = await appRoutes.handle(new Request("http://localhost/api/blog/auth/me", {
+        method: "PATCH", headers: { "Content-Type": "application/json", origin: frontendOrigin, cookie: `leiblog_blog_session=${sessionId}.${sessionSecret}` },
+        body: JSON.stringify({ userId: other.id, profileLocalizations: {
+          zhCN: { name: "中文姓名", bio: "中文简介", tags: ["摄影"] }, en: { name: "", bio: "", tags: [] },
+        } }),
+      }));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.user.id).toBe(user.id);
+      expect(body.user.profileLocalizations.en).toEqual({ name: "English name", bio: "English bio", tags: ["Photography"] });
+      expect((await auth.readBlogUserProfileById({ sql, userId: other.id })).name).toBeUndefined();
+      expect((await auth.readBlogUserProfileById({ sql, userId: user.id })).profileLocalizations?.en).toEqual(body.user.profileLocalizations.en);
+    } finally { globalThis.fetch = blockedFetch; }
+  });
+
+  test("categories and tags persist automatic translations and expose true untranslated fields", async () => {
+    const content = await import("../src/admin/content/service");
+    const suffix = crypto.randomUUID();
+    const empty = await content.createCategory({ input: { name: "未翻译分类", slug: `empty-${suffix}` } });
+    expect(empty.item.localizations.en).toEqual({ name: "", description: "" });
+    const blockedFetch = globalThis.fetch;
+    deeplApiKey = "synthetic";
+    const words: Record<string, string> = { 测试分类: "Test category", 测试标签: "Test tag", 中文描述: "English description" };
+    globalThis.fetch = Object.assign(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse(String(init?.body)) as { text: string[] };
+      return Response.json({ translations: payload.text.map(text => ({ text: words[text] ?? text })) });
+    }, { preconnect: originalFetch.preconnect });
+    try {
+      const category = await content.updateCategory({ categoryId: empty.item.id, input: { name: "测试分类", description: "中文描述", slug: `empty-${suffix}` } });
+      expect(category.item.localizations.en).toEqual({ name: "Test category", description: "English description" });
+      expect(category.item.slug).toBe(`empty-${suffix}`);
+      const tag = await content.createTag({ input: { name: "测试标签", description: "中文描述", color: "#123456", slug: `tag-${suffix}` } });
+      expect(tag.item.localizations.en).toEqual({ name: "Test tag", description: "English description" });
+      const updated = await content.updateTag({ tagId: tag.item.id, input: { name: "测试标签", description: "中文描述", slug: tag.item.slug, color: tag.item.color, localizations: { en: { name: "Manual name" } } } });
+      expect(updated.item.localizations.en.name).toBe("Manual name");
+      expect(updated.item.localizations.en.description).toBe("English description");
+      const reread = await content.listTags({ query: updated.item.slug });
+      expect(reread.items[0]?.localizations.en.name).toBe("Manual name");
+    } finally { globalThis.fetch = blockedFetch; }
+  });
+
+  test("article translation rejects anonymous access and reports missing keys only to authenticated admins", async () => {
+    const request = (cookie?: string) => new Request("http://localhost/api/admin/content/articles/translate", {
+      method: "POST", headers: { "Content-Type": "application/json", origin: frontendOrigin, ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify({ content: "# Text", sourceLocale: "en" }),
+    });
+    expect((await adminRoutes.handle(request())).status).toBe(401);
+    const user = await createUser("admin");
+    const login = await adminRoutes.handle(new Request("http://localhost/api/admin/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: user.username, password: "test-original-password", altcha: await createProof() }),
+    }));
+    expect(login.status).toBe(200);
+    const cookie = login.headers.getSetCookie().find(value => value.startsWith("leiblog_admin_session="))?.split(";")[0];
+    expect(cookie).toBeDefined();
+    const response = await adminRoutes.handle(request(cookie));
+    expect(response.status).toBe(409);
+    expect((await response.json()).reason).toBe("missing-deepl-api-key");
+    expect(networkCalls).toBe(0);
+    const blockedFetch = globalThis.fetch;
+    deeplApiKey = "synthetic";
+    globalThis.fetch = Object.assign(async () => Response.json({ translations: [{ text: "文本" }] }), { preconnect: originalFetch.preconnect });
+    try {
+      const translated = await adminRoutes.handle(request(cookie));
+      expect(translated.status).toBe(200);
+      expect(await translated.json()).toEqual({ content: "# 文本" });
+      const [articles] = await sql`SELECT count(*)::int AS total FROM articles WHERE title = '文本'`;
+      expect(articles.total).toBe(0);
+    } finally { globalThis.fetch = blockedFetch; }
+    await sql`UPDATE users SET role = 'user' WHERE id = ${user.id}`;
+    expect((await adminRoutes.handle(request(cookie))).status).toBe(401);
   });
 
   test("OAuth callback rejects missing or mismatched browser state before token exchange", async () => {

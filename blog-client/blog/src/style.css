@@ -661,6 +661,10 @@ input {
   grid-template-columns: minmax(0, 1.25fr) minmax(220px, 0.75fr);
 }
 
+.profile-section__grid--identity {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .profile-avatar-upload {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);

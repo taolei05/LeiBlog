@@ -3,7 +3,7 @@ import type { JSONValue, Sql, TransactionSql } from "postgres";
 import type { BlogUserProfile } from "../auth/service";
 import { getSql } from "../../shared/db/postgres";
 import { queueCommentNotifications } from "../../shared/email-notifications";
-import { resolveLoginLocation } from "../../shared/login-metadata";
+import { readLocationLabels, resolveLoginLocation } from "../../shared/login-metadata";
 import type { RequestMeta } from "../../shared/request-meta";
 import type { CommentItem, CommentRow, CommentTargetType } from "../../shared/comment";
 import { toCommentItem } from "../../shared/comment";
@@ -146,18 +146,19 @@ const toLocalizedCommentItems = async ({
   sql,
 }: ToLocalizedCommentItemsParameters) => {
   const profiles = await readLocalizedCommentProfiles({ locale, rows, sql });
+  const labels = normalizeProfileTagLocale(locale) === "en"
+    ? await readLocationLabels({ values: rows.map((row) => row.commentLocation), sql })
+    : [];
 
-  return rows.map((row) => {
+  return rows.map((row, index) => {
     const profile = profiles.get(row.userId);
-    if (profile === undefined) {
-      return toCommentItem(row);
-    }
-
-    return toCommentItem({
+    const item = toCommentItem(profile === undefined ? row : {
       ...row,
       name: profile.name.length > 0 ? profile.name : row.name,
       tags: profile.tags,
     });
+    const location = labels[index];
+    return location === undefined ? item : { ...item, location: location.en };
   });
 };
 

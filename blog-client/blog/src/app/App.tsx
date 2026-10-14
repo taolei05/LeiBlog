@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Collapsible, CollapsibleGroup } from "@astryxdesign/core/Collapsible";
 import { readArticleExcerptText } from "../../../shared/article-excerpt";
+import { TextTokenizer } from "../../../shared/text-tokenizer";
 import type {
   ChangeEvent,
   ComponentPropsWithRef,
@@ -458,6 +459,11 @@ type AuthCopy = {
     passwordSecurityHint: string;
     passwordTitle: string;
     publicBio: string;
+    nameZh: string;
+    nameEn: string;
+    bioEn: string;
+    tagsEn: string;
+    translationPending: string;
     save: string;
     saveFailed: (reason: string) => string;
     saveFailureFallback: string;
@@ -469,6 +475,7 @@ type AuthCopy = {
     sendNewEmailCode: string;
     sendPasswordCode: string;
     statusPending: string;
+    createTag: (value: string) => string;
     tagPlaceholder: string;
     tags: string;
     title: string;
@@ -951,7 +958,12 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         passwordMethodPassword: "旧密码",
         passwordSecurityHint: "密码修改成功后会退出当前会话，需要重新登录。",
         passwordTitle: "修改密码",
-        publicBio: "个人描述",
+        publicBio: "中文个人描述/签名",
+        nameZh: "中文名字",
+        nameEn: "英文名字",
+        bioEn: "英文个人描述/签名",
+        tagsEn: "英文标签",
+        translationPending: "资料已保存，部分翻译未完成，请检查 DeepL 配置后重试。",
         save: "保存资料",
         saveFailed: (reason) => `个人资料保存失败：${reason}`,
         saveFailureFallback: "请检查资料后再试。",
@@ -963,8 +975,9 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         sendNewEmailCode: "发送新邮箱验证码",
         sendPasswordCode: "发送邮箱验证码",
         statusPending: "该功能即将接入。",
+        createTag: (value) => `创建“${value}”`,
         tagPlaceholder: "React, 摄影, 写作",
-        tags: "个人标签",
+        tags: "中文标签",
         title: "个人中心",
         usernameRequired: "请输入至少 2 位用户名。",
       },
@@ -1252,7 +1265,13 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         passwordMethodPassword: "Current password",
         passwordSecurityHint: "A successful password change signs out the current session.",
         passwordTitle: "Change password",
-        publicBio: "Bio",
+        publicBio: "Chinese bio / signature",
+        nameZh: "Chinese name",
+        nameEn: "English name",
+        bioEn: "English bio / signature",
+        tagsEn: "English tags",
+        translationPending:
+          "Profile saved. Some translations are unavailable; check the DeepL configuration and retry.",
         save: "Save profile",
         saveFailed: (reason) => `Profile save failed: ${reason}`,
         saveFailureFallback: "Check the profile fields and try again.",
@@ -1264,8 +1283,9 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         sendNewEmailCode: "Send new email code",
         sendPasswordCode: "Send email code",
         statusPending: "This feature will be connected soon.",
+        createTag: (value) => `Create “${value}”`,
         tagPlaceholder: "React, photography, writing",
-        tags: "Tags",
+        tags: "Chinese tags",
         title: "Profile",
         usernameRequired: "Enter a username with at least 2 characters.",
       },
@@ -2193,15 +2213,12 @@ const getBlogUserDisplayName = (user: BlogUser) => user.name?.trim() || user.use
 const getBlogUserInitial = (user: BlogUser) =>
   getBlogUserDisplayName(user).trim().slice(0, 1).toUpperCase() || "U";
 
-const parseProfileTags = (value: string) =>
-  Array.from(
-    new Set(
-      value
-        .split(/[，,]/u)
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0),
-    ),
-  ).slice(0, 12);
+const readProfileTagSnapshot = (snapshot: string): string[] => {
+  const values: unknown = JSON.parse(snapshot);
+  return Array.isArray(values)
+    ? values.filter((value): value is string => typeof value === "string")
+    : [];
+};
 
 const formatProfileDateTime = ({
   language,
@@ -2345,22 +2362,28 @@ function AuthNoticeBanner({ closeLabel, notice, onDismiss }: AuthNoticeBannerPro
 type AccountProfileFormState = {
   avatarUrl: string;
   bio: string;
+  bioEn: string;
   blogUrl: string;
   commentEmailNotifications: boolean;
   name: string;
+  nameEn: string;
   newPostEmailNotifications: boolean;
-  tags: string;
+  tags: string[];
+  tagsEn: string[];
   username: string;
 };
 
 const createAccountProfileFormState = (user: BlogUser): AccountProfileFormState => ({
   avatarUrl: user.avatarUrl ?? "",
-  bio: user.bio ?? "",
+  bio: user.profileLocalizations?.zhCN.bio ?? user.bio ?? "",
+  bioEn: user.profileLocalizations?.en.bio ?? "",
   blogUrl: user.blogUrl ?? "",
   commentEmailNotifications: user.commentEmailNotifications ?? false,
-  name: user.name ?? "",
+  name: user.profileLocalizations?.zhCN.name ?? user.name ?? "",
+  nameEn: user.profileLocalizations?.en.name ?? "",
   newPostEmailNotifications: user.newPostEmailNotifications ?? false,
-  tags: (user.tags ?? []).join(", "),
+  tags: [...(user.profileLocalizations?.zhCN.tags ?? user.tags ?? [])],
+  tagsEn: [...(user.profileLocalizations?.en.tags ?? [])],
   username: user.username,
 });
 
@@ -2526,13 +2549,19 @@ export function AccountProfileEditor({
     (cooldownEndsAt) => cooldownEndsAt > securityCodeClock,
   );
   const previewName =
-    profileForm.name.trim() || profileForm.username.trim() || getBlogUserDisplayName(user);
+    (language === "en" ? profileForm.nameEn.trim() : profileForm.name.trim()) ||
+    profileForm.name.trim() ||
+    profileForm.nameEn.trim() ||
+    profileForm.username.trim() ||
+    getBlogUserDisplayName(user);
   const joinedAt = formatProfileDate({
     language,
     timeZone,
     value: user.createdAt,
   });
-  const tagValues = parseProfileTags(profileForm.tags);
+  const tagValues = profileForm.tags;
+  const tagValuesEn = profileForm.tagsEn;
+  const previewTags = language === "en" && tagValuesEn.length > 0 ? tagValuesEn : tagValues;
   const latestLoginAt =
     formatProfileDateTime({
       language,
@@ -2542,7 +2571,10 @@ export function AccountProfileEditor({
   const latestLoginIp = user.lastLoginIp ?? profileCopy.loginInfoEmpty;
   const latestLoginLocation = getProfileLoginLocationLabel({
     ip: user.lastLoginIp,
-    location: user.lastLoginLocation,
+    location:
+      language === "en"
+        ? (user.lastLoginLocationEn ?? user.lastLoginLocation)
+        : user.lastLoginLocation,
     profileCopy,
   });
   const latestLoginDevice = getProfileLoginDeviceLabel({
@@ -2556,16 +2588,24 @@ export function AccountProfileEditor({
   const previewAvatarUrl =
     avatarPreviewUrl ?? (savedAvatarUrl.length > 0 ? resolveApiAssetUrl(savedAvatarUrl) : "");
 
-  const savedTags = (user.tags ?? []).join(", ");
+  const savedName = user.profileLocalizations?.zhCN.name ?? user.name ?? "";
+  const savedNameEn = user.profileLocalizations?.en.name ?? "";
+  const savedBio = user.profileLocalizations?.zhCN.bio ?? user.bio ?? "";
+  const savedBioEn = user.profileLocalizations?.en.bio ?? "";
+  const savedTags = JSON.stringify(user.profileLocalizations?.zhCN.tags ?? user.tags ?? []);
+  const savedTagsEn = JSON.stringify(user.profileLocalizations?.en.tags ?? []);
   useEffect(() => {
     setProfileForm((current) => ({
       ...current,
       avatarUrl: user.avatarUrl ?? "",
-      bio: user.bio ?? "",
+      bio: savedBio,
+      bioEn: savedBioEn,
       blogUrl: user.blogUrl ?? "",
-      name: user.name ?? "",
+      name: savedName,
+      nameEn: savedNameEn,
       username: user.username,
-      tags: savedTags,
+      tags: readProfileTagSnapshot(savedTags),
+      tagsEn: readProfileTagSnapshot(savedTagsEn),
     }));
     setAvatarFile(undefined);
     setAvatarEditorFile(undefined);
@@ -2573,7 +2613,18 @@ export function AccountProfileEditor({
     if (avatarInputRef.current !== null) {
       avatarInputRef.current.value = "";
     }
-  }, [user.id, user.avatarUrl, user.bio, user.blogUrl, user.name, savedTags, user.username]);
+  }, [
+    user.id,
+    user.avatarUrl,
+    user.blogUrl,
+    user.username,
+    savedName,
+    savedNameEn,
+    savedBio,
+    savedBioEn,
+    savedTags,
+    savedTagsEn,
+  ]);
 
   useEffect(() => {
     setProfileForm((current) => ({
@@ -2668,11 +2719,20 @@ export function AccountProfileEditor({
             }
           : {
               username: targetProfileForm.username,
-              name: targetProfileForm.name,
               avatarUrl: targetProfileForm.avatarUrl,
-              bio: targetProfileForm.bio,
               blogUrl: targetProfileForm.blogUrl,
-              tags: parseProfileTags(targetProfileForm.tags),
+              profileLocalizations: {
+                zhCN: {
+                  name: targetProfileForm.name,
+                  bio: targetProfileForm.bio,
+                  tags: targetProfileForm.tags,
+                },
+                en: {
+                  name: targetProfileForm.nameEn,
+                  bio: targetProfileForm.bioEn,
+                  tags: targetProfileForm.tagsEn,
+                },
+              },
             },
       );
       if (panel === "profile") {
@@ -2680,7 +2740,13 @@ export function AccountProfileEditor({
         setAvatarPreviewUrl(undefined);
       }
       onProfileUpdated(updatedUser);
-      onNotice({ tone: "success", text: profileCopy.saved });
+      onNotice({
+        tone: "success",
+        text:
+          panel === "profile" && updatedUser.profileTranslation?.missingFields.length
+            ? profileCopy.translationPending
+            : profileCopy.saved,
+      });
     } catch (error) {
       onNotice({
         tone: "error",
@@ -2952,9 +3018,9 @@ export function AccountProfileEditor({
                 </div>
               )}
             </dl>
-            {tagValues.length === 0 ? null : (
+            {previewTags.length === 0 ? null : (
               <div className="profile-center__tags">
-                {tagValues.map((tag) => (
+                {previewTags.map((tag) => (
                   <Badge key={tag} label={tag} variant="neutral" />
                 ))}
               </div>
@@ -3024,7 +3090,7 @@ export function AccountProfileEditor({
                     className="profile-section profile-section--public"
                     id="profile-section-profile"
                   >
-                    <div className="profile-section__grid">
+                    <div className="profile-section__grid profile-section__grid--identity">
                       <TextInput
                         autoComplete="username"
                         label={copy.auth.fields.username}
@@ -3037,13 +3103,22 @@ export function AccountProfileEditor({
                       />
                       <TextInput
                         autoComplete="name"
-                        label={copy.auth.fields.name}
+                        label={profileCopy.nameZh}
                         onChange={(value) => {
                           setProfileForm((current) => ({ ...current, name: value }));
                         }}
                         placeholder={copy.auth.placeholders.name}
                         size="lg"
                         value={profileForm.name}
+                      />
+                      <TextInput
+                        autoComplete="off"
+                        label={profileCopy.nameEn}
+                        onChange={(value) =>
+                          setProfileForm((current) => ({ ...current, nameEn: value }))
+                        }
+                        size="lg"
+                        value={profileForm.nameEn}
                       />
                     </div>
                     <div className="profile-section__grid profile-section__grid--media">
@@ -3118,24 +3193,53 @@ export function AccountProfileEditor({
                         value={profileForm.blogUrl}
                       />
                     </div>
-                    <TextInput
-                      label={profileCopy.tags}
-                      onChange={(value) => {
-                        setProfileForm((current) => ({ ...current, tags: value }));
-                      }}
-                      placeholder={profileCopy.tagPlaceholder}
-                      size="lg"
-                      value={profileForm.tags}
-                    />
-                    <TextArea
-                      label={profileCopy.publicBio}
-                      onChange={(value) => {
-                        setProfileForm((current) => ({ ...current, bio: value }));
-                      }}
-                      placeholder={profileCopy.description}
-                      rows={4}
-                      value={profileForm.bio}
-                    />
+                    <div className="profile-section__grid">
+                      <TextTokenizer
+                        label={profileCopy.tags}
+                        onChange={(values) => {
+                          setProfileForm((current) => ({ ...current, tags: values }));
+                        }}
+                        createLabel={profileCopy.createTag}
+                        isDisabled={isSaving}
+                        maxEntries={12}
+                        placeholder={profileCopy.tagPlaceholder}
+                        size="lg"
+                        value={tagValues}
+                      />
+                      <TextTokenizer
+                        label={profileCopy.tagsEn}
+                        onChange={(values) =>
+                          setProfileForm((current) => ({ ...current, tagsEn: values }))
+                        }
+                        createLabel={profileCopy.createTag}
+                        isDisabled={isSaving}
+                        maxEntries={12}
+                        placeholder="React, photography, writing"
+                        size="lg"
+                        value={tagValuesEn}
+                      />
+                    </div>
+                    <div className="profile-section__grid">
+                      <TextArea
+                        label={profileCopy.publicBio}
+                        maxLength={500}
+                        onChange={(value) => {
+                          setProfileForm((current) => ({ ...current, bio: value }));
+                        }}
+                        placeholder={profileCopy.description}
+                        rows={4}
+                        value={profileForm.bio}
+                      />
+                      <TextArea
+                        label={profileCopy.bioEn}
+                        maxLength={500}
+                        onChange={(value) =>
+                          setProfileForm((current) => ({ ...current, bioEn: value }))
+                        }
+                        rows={4}
+                        value={profileForm.bioEn}
+                      />
+                    </div>
                     <div className="profile-panel-actions">
                       <Button
                         label={profileCopy.cancel}

@@ -181,4 +181,20 @@ suite("comment entry settings with isolated PostgreSQL", () => {
       expect(stored).toEqual({ locationType: "object", deviceType: "object" });
     }
   });
+
+  test("English comment and guestbook lists select saved English locations without changing history", async () => {
+    for (const target of ["article", "guestbook"] as const) {
+      const created = await createComment(target);
+      const location = { location: "日本东京", location_en: "Tokyo, Japan" };
+      await sql`UPDATE comments SET comment_location = ${sql.json(location)} WHERE id = ${created.item.id}`;
+      for (const locale of ["en", "zh-CN"] as const) {
+        const result = target === "article"
+          ? await comments.listPublicComments({ articleSlug: slug, query: { locale } })
+          : await comments.listPublicGuestbookComments({ query: { locale } });
+        expect(result.items[0]?.location).toBe(locale === "en" ? "Tokyo, Japan" : "日本东京");
+      }
+      const [row] = await sql`SELECT comment_location::text AS payload FROM comments WHERE id = ${created.item.id}`;
+      expect(JSON.parse(row.payload)).toEqual(location);
+    }
+  });
 });

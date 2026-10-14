@@ -13,9 +13,12 @@ import {
   describeLocation,
   recordLoginAttempt,
   readUserLoginInfo,
+  readLocationLabels,
 } from "../../shared/login-metadata";
 import type { LoginMethod, UserLoginInfo } from "../../shared/login-metadata";
 import type { RequestMeta } from "../../shared/request-meta";
+import { prepareUserProfileLocalizations, readUserProfileLocalizations, upsertUsersEnProfile } from "../../shared/profile-tags";
+import type { UserProfileLocalizations, UserProfileTranslationSummary } from "../../shared/profile-tags";
 
 export type EmailTemplateLocale = "en" | "zh-CN";
 
@@ -28,6 +31,8 @@ export type AccountEmailCodePurpose =
 export type EmailCodePurpose = AccountEmailCodePurpose | PublicEmailCodePurpose;
 
 export type BlogUserProfile = {
+  profileLocalizations?: UserProfileLocalizations;
+  profileTranslation?: UserProfileTranslationSummary;
   avatarUrl?: string;
   bio?: string;
   blogUrl?: string;
@@ -40,6 +45,7 @@ export type BlogUserProfile = {
   lastLoginDevice: string | null;
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
+  lastLoginLocationEn?: string | null;
   lastLoginMethod: LoginMethod | null;
   name?: string;
   newPostEmailNotifications: boolean;
@@ -116,6 +122,7 @@ export type ChangeBlogUserPasswordInput =
     };
 
 export type UpdateBlogUserProfileInput = {
+  profileLocalizations?: UserProfileLocalizations;
   notificationEmailLocale?: EmailTemplateLocale;
   avatarUrl?: string;
   bio?: string;
@@ -515,31 +522,44 @@ const mergeBlogUserLoginInfo = ({
   lastLoginDevice: loginInfo.lastLoginDevice,
   lastLoginIp: loginInfo.lastLoginIp,
   lastLoginLocation: loginInfo.lastLoginLocation,
+  lastLoginLocationEn: loginInfo.lastLoginLocationEn ?? null,
   lastLoginMethod: loginInfo.lastLoginMethod,
 });
 
-const toBlogUserProfile = (row: BlogUserRow): BlogUserProfile => ({
-  ...(row.avatarUrl === null ? {} : { avatarUrl: row.avatarUrl }),
-  ...(row.bio === null ? {} : { bio: row.bio }),
-  ...(row.blogUrl === null ? {} : { blogUrl: row.blogUrl }),
-  commentEmailNotifications: row.commentEmailNotifications,
-  createdAt: new Date(row.createdAt).toISOString(),
-  id: row.id,
-  lastLoginAt: toNullableIsoString(row.lastLoginAt),
-  lastLoginTimeZone: row.lastLoginTimeZone ?? null,
-  lastLoginTimeZoneOffsetMinutes: row.lastLoginTimeZoneOffsetMinutes ?? null,
-  lastLoginDevice: describeDevice(row.lastLoginDevice),
-  lastLoginIp: row.lastLoginIp ?? null,
-  lastLoginLocation: describeLocation(row.lastLoginLocation),
-  lastLoginMethod: row.lastLoginMethod ?? null,
-  ...(row.name === null ? {} : { name: row.name }),
-  newPostEmailNotifications: row.newPostEmailNotifications,
-  role: row.role,
-  tags: row.tags,
-  updatedAt: new Date(row.updatedAt).toISOString(),
-  username: row.username,
-  email: row.email,
-});
+const toBlogUserProfile = async (
+  row: BlogUserRow,
+  sql: BlogAuthSql = getSql(),
+): Promise<BlogUserProfile> => {
+  const [labels] = await readLocationLabels({ values: [row.lastLoginLocation], sql });
+  return {
+    profileLocalizations: await readUserProfileLocalizations({
+      base: { name: row.name, bio: row.bio, tags: row.tags },
+      sql,
+      userId: row.id,
+    }),
+    ...(row.avatarUrl === null ? {} : { avatarUrl: row.avatarUrl }),
+    ...(row.bio === null ? {} : { bio: row.bio }),
+    ...(row.blogUrl === null ? {} : { blogUrl: row.blogUrl }),
+    commentEmailNotifications: row.commentEmailNotifications,
+    createdAt: new Date(row.createdAt).toISOString(),
+    id: row.id,
+    lastLoginAt: toNullableIsoString(row.lastLoginAt),
+    lastLoginTimeZone: row.lastLoginTimeZone ?? null,
+    lastLoginTimeZoneOffsetMinutes: row.lastLoginTimeZoneOffsetMinutes ?? null,
+    lastLoginDevice: describeDevice(row.lastLoginDevice),
+    lastLoginIp: row.lastLoginIp ?? null,
+    lastLoginLocation: describeLocation(row.lastLoginLocation),
+    lastLoginLocationEn: labels?.en ?? null,
+    lastLoginMethod: row.lastLoginMethod ?? null,
+    ...(row.name === null ? {} : { name: row.name }),
+    newPostEmailNotifications: row.newPostEmailNotifications,
+    role: row.role,
+    tags: row.tags,
+    updatedAt: new Date(row.updatedAt).toISOString(),
+    username: row.username,
+    email: row.email,
+  };
+};
 
 const countRows = async (sql: BlogAuthSql, query: Promise<CountRow[]>) => {
   const rows = await query;
@@ -864,7 +884,7 @@ export const registerBlogUser = async ({
 		        last_login_method
 		    `;
 
-    return toBlogUserProfile(rows[0]);
+    return toBlogUserProfile(rows[0], transaction);
   });
 };
 
@@ -965,7 +985,7 @@ export const loginBlogUser = async ({
 
   return mergeBlogUserLoginInfo({
     loginInfo: await readUserLoginInfo({ sql, userId: user.id }),
-    user: toBlogUserProfile(user),
+    user: await toBlogUserProfile(user, sql),
   });
 };
 
@@ -1034,7 +1054,7 @@ export const getBlogUserBySession = async ({
     LIMIT 1
   `;
 
-  return rows[0] === undefined ? undefined : toBlogUserProfile(rows[0]);
+  return rows[0] === undefined ? undefined : toBlogUserProfile(rows[0], sql);
 };
 
 const findLoginUserById = async (sql: BlogAuthSql, userId: string) => {
@@ -1081,10 +1101,11 @@ export const readBlogUserProfileById = async ({
     throw createAuthError(404, "invalid-identity", "用户不存在。");
   }
 
-  return toBlogUserProfile(user);
+  return toBlogUserProfile(user, sql);
 };
 
 export const updateBlogUserProfile = async ({
+  profileLocalizations,
   avatarUrl,
   bio,
   blogUrl,
@@ -1098,7 +1119,13 @@ export const updateBlogUserProfile = async ({
 }: UpdateBlogUserProfileInput & { userId: string }) => {
   const sql = getSql();
   const username = rawUsername?.trim();
-  const normalizedTags = cleanTags(tags);
+  const preparedProfile = profileLocalizations === undefined
+    ? undefined
+    : await prepareUserProfileLocalizations({
+        profile: profileLocalizations,
+        deeplApiKey: await readEncryptedSetting("deepl_api_key"),
+      });
+  const normalizedTags = preparedProfile?.base.tags ?? cleanTags(tags);
 
   if (username !== undefined && username.length < 2) {
     throw createAuthError(400, "invalid-identity", "请输入至少 2 位用户名。");
@@ -1122,11 +1149,11 @@ export const updateBlogUserProfile = async ({
 	      UPDATE users
 	      SET
 	        username = COALESCE(${username ?? null}, username),
-	        name = CASE WHEN ${name === undefined} THEN name ELSE ${cleanOptionalText(name)} END,
+	        name = CASE WHEN ${name === undefined && preparedProfile === undefined} THEN name ELSE ${preparedProfile === undefined ? cleanOptionalText(name) : preparedProfile.base.name} END,
 	        avatar_url = CASE WHEN ${avatarUrl === undefined} THEN avatar_url ELSE ${cleanOptionalText(avatarUrl)} END,
-	        bio = CASE WHEN ${bio === undefined} THEN bio ELSE ${cleanOptionalText(bio)} END,
+	        bio = CASE WHEN ${bio === undefined && preparedProfile === undefined} THEN bio ELSE ${preparedProfile === undefined ? cleanOptionalText(bio) : preparedProfile.base.bio} END,
 	        blog_url = CASE WHEN ${blogUrl === undefined} THEN blog_url ELSE ${cleanOptionalText(blogUrl)} END,
-	        tags = CASE WHEN ${tags === undefined} THEN tags ELSE ${normalizedTags} END,
+	        tags = CASE WHEN ${tags === undefined && preparedProfile === undefined} THEN tags ELSE ${normalizedTags} END,
 	        comment_email_notifications = COALESCE(${commentEmailNotifications ?? null}, comment_email_notifications),
 	        new_post_email_notifications = COALESCE(${newPostEmailNotifications ?? null}, new_post_email_notifications),
           notification_email_locale = COALESCE(${notificationEmailLocale ?? null}, notification_email_locale),
@@ -1160,7 +1187,13 @@ export const updateBlogUserProfile = async ({
       throw createAuthError(404, "invalid-identity", "用户不存在。");
     }
 
-    return toBlogUserProfile(row);
+    if (preparedProfile !== undefined) {
+      await upsertUsersEnProfile({ sql: transaction, userId, profile: preparedProfile.english });
+    }
+    return {
+      ...await toBlogUserProfile(row, transaction),
+      ...(preparedProfile === undefined ? {} : { profileTranslation: preparedProfile.translation }),
+    };
   });
 };
 
@@ -1250,7 +1283,7 @@ export const changeBlogUserEmail = async ({
       throw createAuthError(404, "invalid-identity", "用户不存在。");
     }
 
-    return toBlogUserProfile(row);
+    return toBlogUserProfile(row, transaction);
   });
 };
 

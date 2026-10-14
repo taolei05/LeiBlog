@@ -28,7 +28,7 @@ import type { AdminAuthState, InitialSetupPayload } from "../../../../shared/adm
 import { completeInitialSetup, uploadInitialSetupMediaAsset } from "../../../../shared/admin-api";
 import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
 import { MediaAssetField, MultiMediaAssetField } from "../components/media-asset-field";
-import { TextTokenizer } from "../components/text-tokenizer";
+import { TextTokenizer } from "../../../../shared/text-tokenizer";
 import {
   createTimeZoneOptions,
   formatCurrentMinuteInTimeZone,

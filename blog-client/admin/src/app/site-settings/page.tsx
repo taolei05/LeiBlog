@@ -70,7 +70,7 @@ import {
 } from "../../../../shared/altcha-challenge";
 import { getAltchaSuccessMessage } from "../../../../shared/altcha-feedback";
 import { MediaAssetField, MultiMediaAssetField } from "../components/media-asset-field";
-import { TextTokenizer } from "../components/text-tokenizer";
+import { TextTokenizer } from "../../../../shared/text-tokenizer";
 import {
   createTimeZoneOptions,
   formatCurrentMinuteInTimeZone,

@@ -17,6 +17,7 @@ export type UserLoginEvent = {
   timeZoneOffsetMinutes: number | null;
   ip: string | null;
   location: string | null;
+  locationEn?: string | null;
   device: string | null;
   method: LoginMethod | null;
   success: boolean;
@@ -29,6 +30,7 @@ export type UserLoginInfo = {
   lastLoginTimeZoneOffsetMinutes: number | null;
   lastLoginIp: string | null;
   lastLoginLocation: string | null;
+  lastLoginLocationEn?: string | null;
   lastLoginDevice: string | null;
   lastLoginMethod: LoginMethod | null;
   recentLogins: UserLoginEvent[];
@@ -208,9 +210,14 @@ export const describeDevice = (value: unknown) => {
 };
 
 const countryNames = new Intl.DisplayNames(["zh-CN"], { type: "region", fallback: "none" });
+const englishCountryNames = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" });
 
-export const describeLocation = (input: unknown) => {
+export const describeLocation = (input: unknown, locale: "en" | "zh-CN" = "zh-CN") => {
   const value = readMetadataRecord(input);
+  if (locale === "en") {
+    const english = readJsonText(value, "location_en") ?? readJsonText(value, "locationEn");
+    if (english !== null) return english;
+  }
   const location = readJsonText(value, "location");
   if (location !== null) {
     return location;
@@ -228,7 +235,7 @@ export const describeLocation = (input: unknown) => {
     readJsonText(value, "country_name") ??
     readJsonText(value, "countryName") ??
     readJsonText(value, "country") ??
-    (countryCode === undefined ? null : (countryNames.of(countryCode) ?? null));
+    (countryCode === undefined ? null : ((locale === "en" ? englishCountryNames : countryNames).of(countryCode) ?? null));
   const parts = [country, province, city].filter(
     (part, index, all): part is string =>
       part !== null &&
@@ -267,6 +274,46 @@ const readEncryptedSetting = async ({
   });
 };
 
+type LocationLabels = { zhCN: string | null; en: string | null };
+const locationTranslations = new Map<string, { expiresAt: number; value: Promise<string | null> }>();
+
+export const readLocationLabels = async ({ values, sql }: {
+  values: unknown[];
+  sql: LoginMetadataSql;
+}): Promise<LocationLabels[]> => {
+  const labels = values.map((value) => ({ zhCN: describeLocation(value), en: describeLocation(value, "en") }));
+  const missing = [...new Set(labels.filter((label) => label.en !== null && /\p{Script=Han}/u.test(label.en)).map((label) => label.en as string))];
+  const pending = missing.filter((text) => text.length <= 300 && (locationTranslations.get(text)?.expiresAt ?? 0) <= Date.now());
+  if (pending.length > 0) {
+    try {
+      const apiKey = await readEncryptedSetting({ key: "deepl_api_key", sql });
+      if (apiKey !== undefined) {
+        const uncached = pending.filter((text) => (locationTranslations.get(text)?.expiresAt ?? 0) <= Date.now());
+        for (let offset = 0; offset < uncached.length; offset += 50) {
+          const texts = uncached.slice(offset, offset + 50);
+          const translation = translateTexts({ apiKey, sourceLocale: "zh-CN", targetLocale: "en", texts, timeoutMs: 3000 });
+          texts.forEach((text, index) => {
+            const entry = { expiresAt: Date.now() + 86_400_000, value: translation.then((translated) => {
+              const result = translated[index]?.trim();
+              if (!result || /\p{Script=Han}/u.test(result)) { entry.expiresAt = Date.now() + 60_000; return null; }
+              return result;
+            }) };
+            locationTranslations.set(text, entry);
+            if (locationTranslations.size > 1000) {
+              const oldest = locationTranslations.keys().next().value;
+              if (oldest !== undefined) locationTranslations.delete(oldest);
+            }
+          });
+        }
+      }
+    } catch { /* Location lookup must not prevent authentication or reading comments. */ }
+  }
+  return Promise.all(labels.map(async (label) => ({
+    ...label,
+    en: label.en === null ? null : (await locationTranslations.get(label.en)?.value) ?? label.en,
+  })));
+};
+
 const localizeLocation = async ({
   location,
   sql,
@@ -280,13 +327,14 @@ const localizeLocation = async ({
   }
 
   if (/\p{Script=Han}/u.test(sourceText)) {
-    return withLocationText(location, sourceText);
+    const [labels] = await readLocationLabels({ values: [location], sql });
+    return { ...withLocationText(location, sourceText), ...(labels?.en && !/\p{Script=Han}/u.test(labels.en) ? { location_en: labels.en } : {}) };
   }
 
   try {
     const deeplApiKey = await readEncryptedSetting({ key: "deepl_api_key", sql });
     if (deeplApiKey === undefined) {
-      return withLocationText(location, sourceText);
+      return { ...withLocationText(location, sourceText), location_en: sourceText };
     }
 
     const translatedTexts = await translateTexts({
@@ -297,9 +345,9 @@ const localizeLocation = async ({
     });
     const translatedText = translatedTexts[0]?.trim();
 
-    return withLocationText(location, translatedText?.length ? translatedText : sourceText);
+    return { ...withLocationText(location, translatedText?.length ? translatedText : sourceText), location_en: sourceText };
   } catch {
-    return withLocationText(location, sourceText);
+    return { ...withLocationText(location, sourceText), location_en: sourceText };
   }
 };
 
@@ -465,14 +513,16 @@ export const readUserLoginInfo = async ({
           LIMIT ${limit}
         `;
 
+  const labels = await readLocationLabels({ values: [row.lastLoginLocation, ...auditRows.map((event) => event.location)], sql });
   return {
     lastLoginAt: toIsoString(row.lastLoginAt),
     lastLoginTimeZone: row.lastLoginTimeZone,
     lastLoginTimeZoneOffsetMinutes: row.lastLoginTimeZoneOffsetMinutes,
     lastLoginIp: row.lastLoginIp,
     lastLoginLocation: describeLocation(row.lastLoginLocation),
+    lastLoginLocationEn: labels[0]?.en ?? null,
     lastLoginDevice: describeDevice(row.lastLoginDevice),
     lastLoginMethod: row.lastLoginMethod,
-    recentLogins: auditRows.map(toLoginEvent),
+    recentLogins: auditRows.map((event, index) => ({ ...toLoginEvent(event), locationEn: labels[index + 1]?.en ?? null })),
   };
 };

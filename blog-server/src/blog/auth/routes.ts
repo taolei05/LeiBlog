@@ -486,6 +486,10 @@ export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
     {
       body: t.Object({
         avatarUrl: t.Optional(t.String({ maxLength: 512 })),
+        profileLocalizations: t.Optional(t.Object({
+          zhCN: t.Object({ name: t.String({ maxLength: 80 }), bio: t.String({ maxLength: 500 }), tags: t.Array(t.String({ maxLength: 40 }), { maxItems: 12 }) }),
+          en: t.Object({ name: t.String({ maxLength: 80 }), bio: t.String({ maxLength: 500 }), tags: t.Array(t.String({ maxLength: 40 }), { maxItems: 12 }) }),
+        })),
         bio: t.Optional(t.String({ maxLength: 500 })),
         blogUrl: t.Optional(t.String({ maxLength: 512 })),
         commentEmailNotifications: t.Optional(t.Boolean()),

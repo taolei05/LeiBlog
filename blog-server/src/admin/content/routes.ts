@@ -5,6 +5,8 @@ import { env } from "../../shared/env";
 import { adminJwtSchema, extractBearerToken, isAuthJwtPayload } from "../auth/session";
 import { readAdminSession } from "../auth/service";
 import { ContentInputError } from "./errors";
+import { readEncryptedSetting } from "../settings/service";
+import { ArticleTranslationError, translateArticleBody } from "./article-translation";
 import {
   ARTICLE_STATUS,
   CONTENT_FAILURE,
@@ -250,6 +252,22 @@ export const adminContentRoutes = new Elysia({ prefix: "/api/admin/content" })
       schema: adminJwtSchema,
     }),
   )
+  .post("/articles/translate", async ({ body, headers, jwt }) => {
+    const auth = await resolveAuthenticatedAdmin({ authorization: headers.authorization, jwt });
+    if (!auth.ok) return auth.response;
+    const apiKey = await readEncryptedSetting("deepl_api_key");
+    if (!apiKey) return status(409, { reason: "missing-deepl-api-key", message: "DeepL API key is not configured." });
+    try {
+      const content = await translateArticleBody({ ...body, apiKey });
+      return { content };
+    } catch (error) {
+      const reason = error instanceof ArticleTranslationError ? error.reason : "translation-failed";
+      return status(reason === "translation-failed" ? 502 : 422, { reason, message: "Article translation failed." });
+    }
+  }, {
+    headers: authHeadersSchema,
+    body: t.Object({ content: t.String({ minLength: 1, maxLength: 100_000 }), sourceLocale: t.Union([t.Literal("en"), t.Literal("zh-CN")]) }),
+  })
   .get(
     "/articles",
     async ({ headers, jwt, query }) => {

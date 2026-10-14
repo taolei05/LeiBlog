@@ -74,6 +74,74 @@ describe("public SPA route boundary", () => {
 });
 
 describe("profile settings panels", () => {
+  it.each(["en", "zh-CN"] as const)(
+    "edits both profile languages and localizes the sidebar in %s",
+    (language) => {
+      const markup = renderToStaticMarkup(
+        createElement(AccountProfileEditor, {
+          copy: frontCopyByLanguage[language],
+          language,
+          user: {
+            ...user,
+            profileLocalizations: {
+              zhCN: { name: "中文姓名", bio: "中文简介", tags: ["摄影", "写作"] },
+              en: { name: "English name", bio: "English bio", tags: ["Photography", "Writing"] },
+            },
+          },
+          timeZone: "Asia/Shanghai",
+          panelMode: null,
+          onNotice: vi.fn(),
+          onPasswordChanged: vi.fn(),
+          onProfileUpdated: vi.fn(),
+        }),
+      );
+      const sidebar = markup.split('class="profile-center__main"')[0] ?? "";
+      expect(sidebar).toContain(language === "en" ? "English name" : "中文姓名");
+      expect(sidebar).toContain(language === "en" ? "Photography" : "摄影");
+      expect(sidebar).not.toContain(language === "en" ? "摄影" : "Photography");
+      expect(markup).toContain('value="中文姓名"');
+      expect(markup).toContain('value="English name"');
+      expect(markup).toContain("中文简介");
+      expect(markup).toContain("English bio");
+      expect(markup.match(/class="astryx-tokenizer /g)).toHaveLength(2);
+    },
+  );
+  it.each(["en", "zh-CN"] as const)("shows the corresponding login location in %s", (language) => {
+    const markup = renderToStaticMarkup(
+      createElement(AccountProfileEditor, {
+        copy: frontCopyByLanguage[language],
+        language,
+        user: { ...user, lastLoginLocation: "日本东京", lastLoginLocationEn: "Tokyo, Japan" },
+        timeZone: "Asia/Shanghai",
+        panelMode: null,
+        onNotice: vi.fn(),
+        onPasswordChanged: vi.fn(),
+        onProfileUpdated: vi.fn(),
+      }),
+    );
+    expect(markup).toContain(language === "en" ? "Tokyo, Japan" : "日本东京");
+    expect(markup).not.toContain(language === "en" ? "日本东京" : "Tokyo, Japan");
+  });
+  it("renders saved personal tags as individual editable tokens", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AccountProfileEditor, {
+        copy: frontCopyByLanguage["zh-CN"],
+        language: "zh-CN",
+        user: { ...user, tags: ["React", "摄影", "写作", "JavaScript, TypeScript"] },
+        timeZone: "Asia/Shanghai",
+        panelMode: null,
+        onNotice: vi.fn(),
+        onPasswordChanged: vi.fn(),
+        onProfileUpdated: vi.fn(),
+      }),
+    );
+    expect(markup).toContain("astryx-tokenizer");
+    expect(markup).not.toContain('value="React, 摄影, 写作"');
+    expect(markup).toContain("React");
+    expect(markup).toContain("摄影");
+    expect(markup).toContain("写作");
+    expect(markup).toContain("JavaScript, TypeScript");
+  });
   it.each(["zh-CN", "en"] as const)(
     "uses accessible collapsible sections with local actions in %s",
     (language) => {
@@ -93,7 +161,7 @@ describe("profile settings panels", () => {
       expect(markup).toContain(copy.auth.profile.displayInfo);
       expect(markup).toContain(copy.auth.profile.notificationsTitle);
       expect(markup).toContain(copy.auth.profile.securityTitle);
-      expect(markup.match(/aria-expanded=/g)).toHaveLength(3);
+      expect(markup.match(/<button\b[^>]*aria-expanded=/g)).toHaveLength(3);
       expect(markup).toContain('class="profile-panel-actions"');
       expect(markup).not.toContain('class="profile-center__actions"');
       expect(markup).toContain(copy.auth.profile.cancel);

@@ -16,6 +16,7 @@ import {
   uploadMediaAsset,
   uploadPublicCommentImage,
   updateBlogUserProfile,
+  translateArticleBody,
 } from "./admin-api";
 import type { UploadProgress, UploadProgressHandler } from "./upload-request";
 
@@ -195,6 +196,71 @@ describe("admin media display URLs", () => {
 });
 
 describe("shared API response validation", () => {
+  it("sends and reads both profile languages without mixing notification preferences", async () => {
+    const profileLocalizations = {
+      zhCN: { name: "中文", bio: "描述", tags: ["摄影"] },
+      en: { name: "Name", bio: "Bio", tags: ["Photography"] },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input, init) => {
+        expect(JSON.parse(String(init?.body))).toEqual({ profileLocalizations });
+        return Response.json({ user: { ...adminUser, profileLocalizations } });
+      }),
+    );
+    expect((await updateBlogUserProfile({ profileLocalizations })).profileLocalizations).toEqual(
+      profileLocalizations,
+    );
+  });
+  it("rejects malformed bilingual profile responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ user: { ...adminUser, profileLocalizations: { en: { tags: "bad" } } } }),
+      ),
+    );
+    await expect(updateBlogUserProfile({})).rejects.toThrow("个人资料响应格式异常");
+  });
+  it("translates an article through the authenticated API without saving it", async () => {
+    const signal = new AbortController().signal;
+    const content = '<img width="233" height="134" src="/image.png" />\n\nText';
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input, init) => {
+        expect(String(input)).toMatch(/\/api\/admin\/content\/articles\/translate$/);
+        expect(init?.method).toBe("POST");
+        expect(init?.credentials).toBe("include");
+        expect(init?.signal).toBe(signal);
+        expect(new Headers(init?.headers).get("authorization")).toBe("Bearer synthetic-token");
+        expect(JSON.parse(String(init?.body))).toEqual({ content, sourceLocale: "en" });
+        return Response.json({ content });
+      }),
+    );
+    expect(
+      await translateArticleBody({ content, sourceLocale: "en", token: "synthetic-token", signal }),
+    ).toBe(content);
+  });
+  it.each([409, 502])(
+    "reports article translation failure %s without accepting an invalid result",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ reason: "translation-failed" }, { status })),
+      );
+      await expect(
+        translateArticleBody({ content: "Text", sourceLocale: "en", token: "token" }),
+      ).rejects.toThrow("translation-failed");
+    },
+  );
+  it("rejects malformed article translation success responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ content: { invalid: true } })),
+    );
+    await expect(
+      translateArticleBody({ content: "Text", sourceLocale: "en", token: "token" }),
+    ).rejects.toThrow("translation-failed");
+  });
   it("reads the initialization token requirement without exposing a secret", async () => {
     vi.stubGlobal(
       "fetch",
