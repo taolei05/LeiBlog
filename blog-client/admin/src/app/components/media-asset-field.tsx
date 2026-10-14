@@ -388,8 +388,7 @@ export const MediaAssetField = ({
   const trimmedValue = value.trim();
   const previewUrl =
     localPreviewUrl ?? (trimmedValue.length > 0 ? resolveAdminAssetUrl(trimmedValue) : undefined);
-  const canUseMediaLibrary =
-    allowMediaLibrary && token !== undefined && token.trim().length > 0 && !isDisabled;
+  const canUseMediaLibrary = allowMediaLibrary && token !== undefined && !isDisabled;
 
   const handleLocalFiles = (files: FileList | null) => {
     const file = files?.[0];
@@ -566,8 +565,7 @@ export const MultiMediaAssetField = ({
   const [localPreviewUrls, setLocalPreviewUrls] = useState<string[]>([]);
   const cleanValues = useMemo(() => normalizeAssetValues(values), [values]);
   const itemCount = cleanValues.length + localFiles.length;
-  const canUseMediaLibrary =
-    allowMediaLibrary && token !== undefined && token.trim().length > 0 && !isDisabled;
+  const canUseMediaLibrary = allowMediaLibrary && token !== undefined && !isDisabled;
 
   useEffect(() => {
     const nextPreviewUrls = localFiles.map((file) => URL.createObjectURL(file));

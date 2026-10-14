@@ -14,6 +14,40 @@ const render = (content: string) =>
   renderToStaticMarkup(createElement(ArticleMdxContent, { content }));
 
 describe("article images", () => {
+  it("renders editor-resized images with persisted dimensions", () => {
+    const markup = render(
+      '<img width="400" height="225" alt="Resized" src="/uploads/resized.jpg" />',
+    );
+    expect(markup).toContain('src="/uploads/resized.jpg?media-v=2"');
+    expect(markup).toContain('width="400"');
+    expect(markup).toContain('height="225"');
+    expect(markup).toContain("aspect-ratio:400 / 225");
+    expect(markup).not.toContain("&lt;img");
+  });
+
+  it("keeps surrounding text and multiple resized images", () => {
+    const markup = render(
+      '<img width="320" height="180" src="/uploads/first.jpg" />\nAfter\n<img width="240" height="160" src="/uploads/second.jpg" />',
+    );
+    expect(markup.match(/<img /gu)).toHaveLength(2);
+    expect(markup).toContain("After");
+  });
+
+  it("does not allow scripts, event handlers or unsafe sources through resized image HTML", () => {
+    const markup = render(
+      '<img width="300" src="javascript:alert(1)" />\n\n<img width="300" src="/uploads/test.jpg" onerror="alert(1)" />\n\n<svg onload="alert(1)"></svg>',
+    );
+    expect(markup).not.toContain("<img");
+    expect(markup).not.toContain("<svg");
+    expect(markup).not.toContain('src="javascript:');
+  });
+
+  it("does not render image HTML inside code", () => {
+    const markup = render('`<img width="400" src="/uploads/test.jpg" />`');
+    expect(markup).not.toContain("<img");
+    expect(markup).toContain("&lt;img");
+  });
+
   it("renders an image next to text without requiring a blank line", () => {
     const markup = render("Before![](/uploads/article-covers/image.jpg?media-v=2)After");
     expect(markup).toContain("Before");

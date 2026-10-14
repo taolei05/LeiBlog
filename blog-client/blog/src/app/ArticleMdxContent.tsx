@@ -10,6 +10,8 @@ import type { OutlineItem } from "@astryxdesign/core/Outline";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { getSafeLinkUrl, resolveContentAssetUrl } from "../../../shared/content-url";
 import type { AppLanguage } from "../../../shared/i18n";
+import { readArticleImageHtml } from "../../../shared/article-image";
+import type { ArticleImageSource } from "../../../shared/article-image";
 
 type ArticleMdxContentProps = { content: string; language?: AppLanguage };
 
@@ -107,9 +109,11 @@ type ArticleImageProps = {
   linked: boolean;
   src: string;
   title?: string | null;
+  width?: number;
+  height?: number;
 };
 
-const ArticleImage = ({ alt, language, linked, src, title }: ArticleImageProps) => {
+const ArticleImage = ({ alt, language, linked, src, title, width, height }: ArticleImageProps) => {
   const [state, setState] = useState<"error" | "loading" | "ready">("loading");
   const loadingLabel = language === "en" ? "Loading image..." : "图片加载中...";
   const failureLabel = language === "en" ? "Image could not be loaded." : "图片加载失败。";
@@ -125,6 +129,15 @@ const ArticleImage = ({ alt, language, linked, src, title }: ArticleImageProps) 
       }}
       src={src}
       title={title ?? undefined}
+      width={width}
+      height={height}
+      style={
+        width !== undefined && height !== undefined
+          ? { aspectRatio: `${width} / ${height}` }
+          : height !== undefined
+            ? { height }
+            : undefined
+      }
     />
   );
   return (
@@ -166,10 +179,7 @@ export function ArticleMdxContent({ content, language = "zh-CN" }: ArticleMdxCon
   );
   const renderChildren = (nodes: readonly Nodes[], linked = false): ReactNode =>
     nodes.map((node, index) => <Fragment key={index}>{renderNode(node, linked)}</Fragment>);
-  const renderImage = (
-    image: { alt?: string | null; url: string; title?: string | null },
-    linked: boolean,
-  ) => {
+  const renderImage = (image: ArticleImageSource, linked: boolean) => {
     const src = resolveContentAssetUrl(image.url);
     return src ? (
       <ArticleImage
@@ -179,6 +189,8 @@ export function ArticleMdxContent({ content, language = "zh-CN" }: ArticleMdxCon
         linked={linked}
         src={src}
         title={image.title}
+        width={image.width}
+        height={image.height}
       />
     ) : null;
   };
@@ -187,8 +199,17 @@ export function ArticleMdxContent({ content, language = "zh-CN" }: ArticleMdxCon
       case "root":
         return renderChildren(node.children);
       case "text":
-      case "html":
         return node.value;
+      case "html": {
+        const parts = readArticleImageHtml(node.value);
+        return parts === undefined
+          ? node.value
+          : parts.map((part, index) => (
+              <Fragment key={index}>
+                {part.type === "text" ? part.value : renderImage(part.image, linked)}
+              </Fragment>
+            ));
+      }
       case "paragraph":
         return <p>{renderChildren(node.children, linked)}</p>;
       case "heading":

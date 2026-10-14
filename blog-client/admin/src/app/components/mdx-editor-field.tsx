@@ -78,6 +78,7 @@ import type { MediaAsset } from "../../../../shared/admin-api";
 import { resolveAdminAssetUrl } from "../../../../shared/admin-api";
 import { normalizeLanguage } from "../../../../shared/i18n";
 import { MediaPickerDialog } from "./media-asset-field";
+import { MAX_ARTICLE_IMAGE_DIMENSION, readImageDimension } from "../../../../shared/article-image";
 import { mdxJsxComponentDescriptors } from "./mdx-whitelist";
 
 const MDX_EDITOR_CHINESE_TRANSLATIONS: Record<string, string> = {
@@ -251,19 +252,7 @@ const getMdxImageDialogCopy = (language: string): MdxImageDialogCopy => {
 };
 
 const parseDimensionValue = (value: string): number | undefined => {
-  const trimmedValue = value.trim();
-
-  if (trimmedValue.length === 0) {
-    return undefined;
-  }
-
-  const parsedValue = Number(trimmedValue);
-
-  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
-    return undefined;
-  }
-
-  return parsedValue;
+  return readImageDimension(value);
 };
 
 type MdxEditorImageDialogProps = {
@@ -317,9 +306,7 @@ const MdxEditorImageDialog = () => {
     filePreviewUrl ?? (trimmedSrc.length > 0 ? resolveAdminAssetUrl(trimmedSrc) : "");
   const hasUpload = imageUploadHandler !== null;
   const canUseMediaLibrary =
-    mediaLibraryFolderSlug !== undefined &&
-    mediaLibraryToken !== undefined &&
-    mediaLibraryToken.trim().length > 0;
+    mediaLibraryFolderSlug !== undefined && mediaLibraryToken !== undefined;
   const hasImageSource =
     selectedFile !== null && selectedFile !== undefined ? true : trimmedSrc.length > 0;
   const dialogTitle = imageDialogState.type === "editing" ? copy.editTitle : copy.uploadTitle;
@@ -591,7 +578,9 @@ const MdxEditorImageDialog = () => {
                     <input
                       className="mdx-image-dialog__input"
                       id={widthInputId}
-                      min={0}
+                      min={1}
+                      max={MAX_ARTICLE_IMAGE_DIMENSION}
+                      step={1}
                       onChange={(event) => setWidth(event.currentTarget.value)}
                       type="number"
                       value={width}
@@ -603,7 +592,9 @@ const MdxEditorImageDialog = () => {
                     <input
                       className="mdx-image-dialog__input"
                       id={heightInputId}
-                      min={0}
+                      min={1}
+                      max={MAX_ARTICLE_IMAGE_DIMENSION}
+                      step={1}
                       onChange={(event) => setHeight(event.currentTarget.value)}
                       type="number"
                       value={height}
@@ -1048,7 +1039,8 @@ export function MdxEditorField({
               showLinkTitleField: true,
             }),
             imagePlugin({
-              disableImageResize: true,
+              disableImageResize: false,
+              allowSetImageDimensions: true,
               ImageDialog: MdxEditorImageDialog,
               imageUploadHandler,
             }),

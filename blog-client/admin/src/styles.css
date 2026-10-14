@@ -330,6 +330,17 @@
   height: auto;
 }
 
+.mdx-editor-field__content [data-editor-block-type="image"] {
+  max-width: 100%;
+}
+
+.mdx-editor-field__content [class*="_imageResizer_"] {
+  width: 10px;
+  height: 10px;
+  z-index: 2;
+  touch-action: none;
+}
+
 .mdx-editor-field .cm-editor {
   background: var(--color-background-card, Canvas);
   color: var(--color-text-primary, CanvasText);
