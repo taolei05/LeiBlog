@@ -7,6 +7,8 @@ import { Elysia } from "elysia";
 import postgres from "postgres";
 import { createClient } from "redis";
 
+import type { AuthProvider } from "../src/shared/auth-providers";
+
 const databaseUrl = Bun.env.AUTH_TEST_DATABASE_URL;
 const redisUrl = Bun.env.AUTH_TEST_REDIS_URL;
 const enabled = databaseUrl !== undefined && redisUrl !== undefined;
@@ -39,6 +41,7 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
   let attempts: typeof import("../src/shared/email-verification");
   let reveals: typeof import("../src/admin/settings/email-code");
   let routes: Pick<Elysia, "handle">;
+  let appRoutes: Pick<Elysia, "handle">;
   let adminRoutes: Pick<Elysia, "handle">;
   let encrypt: typeof import("../src/shared/security/encryption").encryptSecret;
   let decrypt: typeof import("../src/shared/security/encryption").decryptSecret;
@@ -85,13 +88,25 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     return { adminSession, sessionId };
   };
 
-  const configureGithub = async () => {
+  const configureProvider = async ({
+    provider,
+    redirectUri,
+  }: {
+    provider: AuthProvider;
+    redirectUri: string;
+  }) => {
     await sql`
       INSERT INTO auth_provider_settings (provider, display_name, enabled, client_id, client_secret_encrypted, redirect_uri, scopes)
-      VALUES ('github', 'GitHub', true, 'test-client', ${encrypt({ value: "synthetic-oauth-key", secret: encryptionSecret })},
-        'https://api.example.test/api/blog/auth/oauth/github/callback', ARRAY['read:user', 'user:email'])
+      VALUES (${provider}, ${provider}, true, 'test-client', ${encrypt({ value: "synthetic-oauth-key", secret: encryptionSecret })},
+        ${redirectUri}, ${provider === "github" ? ["read:user", "user:email"] : ["openid", "email", "profile"]})
     `;
   };
+
+  const configureGithub = () =>
+    configureProvider({
+      provider: "github",
+      redirectUri: "https://api.example.test/api/blog/auth/oauth/github/callback",
+    });
 
   const identityFetcher = (emailPayload: unknown) => async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -177,11 +192,15 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     reveals = await import("../src/admin/settings/email-code");
     encrypt = (await import("../src/shared/security/encryption")).encryptSecret;
     decrypt = (await import("../src/shared/security/encryption")).decryptSecret;
-    const { blogAuthRoutes } = await import("../src/blog/auth/routes");
+    const { blogAuthRoutes, blogOAuthCallbackRoutes } = await import("../src/blog/auth/routes");
     routes = new Elysia().use(blogAuthRoutes);
     const { adminAuthRoutes } = await import("../src/admin/auth/routes");
     const { applyAdminCookieAuthentication } = await import("../src/admin/auth/cookie");
     const { createRequestSecurity } = await import("../src/shared/request-security");
+    appRoutes = new Elysia()
+      .use(createRequestSecurity({ consumeRateLimit: async () => 0 }))
+      .group("/api/auth", (app) => app.use(blogOAuthCallbackRoutes))
+      .group("/api/blog", (app) => app.use(blogAuthRoutes));
     adminRoutes = new Elysia()
       .use(createRequestSecurity({ consumeRateLimit: async () => 0 }))
       .onTransform({ as: "global" }, applyAdminCookieAuthentication)
@@ -506,6 +525,125 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     const states = await sql`SELECT consumed_at FROM oauth_login_states`;
     expect(states[0]?.consumedAt).toBeNull();
   });
+
+  for (const prefix of ["/api/auth", "/api/blog/auth"]) {
+    for (const provider of ["github", "google"] as const) {
+      test(`${provider} callback at ${prefix} establishes a session and rejects replay`, async () => {
+        const redirectUri = `https://api.example.test${prefix}/oauth/${provider}/callback`;
+        await configureProvider({ provider, redirectUri });
+        const returnTo = "/articles/oauth?lang=en#comments";
+        const start = await appRoutes.handle(
+          new Request(
+            `http://localhost/api/blog/auth/oauth/${provider}/start?${new URLSearchParams({ returnTo })}`,
+          ),
+        );
+        expect(start.status).toBe(302);
+        const authorization = new URL(start.headers.get("location") ?? "");
+        expect(authorization.searchParams.get("redirect_uri")).toBe(redirectUri);
+        const state = authorization.searchParams.get("state") ?? "";
+        const stateCookie = start.headers.getSetCookie()
+          .find((value) => value.startsWith(`leiblog_oauth_state_${provider}=`))
+          ?.split(";")[0];
+        expect(stateCookie).toBeDefined();
+        const blockedFetch = globalThis.fetch;
+        globalThis.fetch = Object.assign(
+          async (input: RequestInfo | URL, init?: RequestInit) => {
+            networkCalls += 1;
+            const endpoint = String(input);
+            if (
+              endpoint === "https://github.com/login/oauth/access_token" ||
+              endpoint === "https://oauth2.googleapis.com/token"
+            ) {
+              if (!(init?.body instanceof URLSearchParams)) {
+                throw new Error("Expected an OAuth token form");
+              }
+              expect(init.body.get("redirect_uri")).toBe(redirectUri);
+              expect(init.body.get("code")).toBe("synthetic-oauth-code");
+              const challenge = createHash("sha256")
+                .update(init.body.get("code_verifier") ?? "")
+                .digest("base64url");
+              expect(challenge).toBe(authorization.searchParams.get("code_challenge") ?? "");
+              return Response.json({ access_token: "synthetic-provider-token" });
+            }
+            if (provider === "github") {
+              return identityFetcher([
+                { email: "victim@example.test", primary: true, verified: true },
+              ])(input);
+            }
+            if (endpoint === "https://openidconnect.googleapis.com/v1/userinfo") {
+              return Response.json({
+                sub: "test-google-id",
+                email: "victim@example.test",
+                email_verified: true,
+              });
+            }
+            throw new Error("Unexpected external request");
+          },
+          { preconnect: blockedFetch.preconnect },
+        );
+        try {
+          const query = new URLSearchParams({ code: "synthetic-oauth-code", state });
+          if (provider === "google") {
+            query.set("iss", "https://accounts.google.com");
+          }
+          const callbackRequest = () =>
+            new Request(`${redirectUri}?${query}`, {
+              headers: { cookie: stateCookie ?? "" },
+            });
+          const callback = await appRoutes.handle(callbackRequest());
+          expect(callback.status).toBe(302);
+          const destination = new URL(callback.headers.get("location") ?? "");
+          expect(destination.origin).toBe(frontendOrigin);
+          expect(destination.pathname).toBe("/articles/oauth");
+          expect(destination.searchParams.get("lang")).toBe("en");
+          expect(destination.hash).toBe("#comments");
+          expect(destination.searchParams.get("oauth_status")).toBe("success");
+          const sessionCookie = callback.headers.getSetCookie()
+            .find((value) => value.startsWith("leiblog_blog_session="))
+            ?.split(";")[0];
+          expect(sessionCookie).toBeDefined();
+          const me = await appRoutes.handle(
+            new Request("http://localhost/api/blog/auth/me", {
+              headers: { cookie: sessionCookie ?? "" },
+            }),
+          );
+          expect(me.status).toBe(200);
+          expect(await me.json()).toMatchObject({ user: { email: "victim@example.test" } });
+          const exchangeCalls = networkCalls;
+          expect(exchangeCalls).toBe(provider === "github" ? 3 : 2);
+          const replay = await appRoutes.handle(callbackRequest());
+          expect(replay.status).toBe(302);
+          expect(new URL(replay.headers.get("location") ?? "").searchParams.get("oauth_status"))
+            .toBe("error");
+          expect(replay.headers.get("set-cookie") ?? "").not.toContain("leiblog_blog_session=");
+          expect(networkCalls).toBe(exchangeCalls);
+        } finally {
+          globalThis.fetch = blockedFetch;
+        }
+      });
+
+      test(`${provider} callback at ${prefix} rejects invalid browser state without token exchange`, async () => {
+        const redirectUri = `https://api.example.test${prefix}/oauth/${provider}/callback`;
+        await configureProvider({ provider, redirectUri });
+        const authorization = await oauth.createOAuthAuthorization({ providerValue: provider, sql });
+        const query = new URLSearchParams({ code: "synthetic-oauth-code", state: authorization.state });
+        for (const cookie of ["", `leiblog_oauth_state_${provider}=wrong-state`]) {
+          const response = await appRoutes.handle(
+            new Request(`${redirectUri}?${query}`, {
+              headers: { cookie },
+            }),
+          );
+          expect(response.status).toBe(302);
+          expect(new URL(response.headers.get("location") ?? "").searchParams.get("oauth_status"))
+            .toBe("error");
+          expect(response.headers.get("set-cookie") ?? "").not.toContain("leiblog_blog_session=");
+        }
+        expect(networkCalls).toBe(0);
+        const states = await sql`SELECT consumed_at FROM oauth_login_states`;
+        expect(states[0]?.consumedAt).toBeNull();
+      });
+    }
+  }
 
   test("a corrupt Redis entry cannot prevent revoking the user's other admin sessions", async () => {
     const user = await createUser();

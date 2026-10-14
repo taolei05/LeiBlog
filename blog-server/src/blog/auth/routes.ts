@@ -194,49 +194,7 @@ const createMediaLibraryFailureResponse = (error: MediaLibraryError) => {
   }
 };
 
-export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
-  .get("/providers", () => listPublicOAuthProviders())
-  .get(
-    "/oauth/:provider/start",
-    async ({ cookie, params, query }) => {
-      const provider = readAuthProvider(params.provider);
-      try {
-        const authorization = await createOAuthAuthorization({
-          providerValue: params.provider,
-          returnTo: query.returnTo,
-        });
-
-        cookie[oauthStateCookieName(authorization.provider)].set({
-          httpOnly: true,
-          maxAge: 10 * 60,
-          path: "/",
-          sameSite: "lax",
-          secure: Bun.env.NODE_ENV === "production",
-          value: authorization.state,
-        });
-
-        return Response.redirect(authorization.authorizationUrl, 302);
-      } catch (error) {
-        return Response.redirect(
-          createOAuthResultRedirectUrl({
-            provider,
-            reason: readOAuthErrorReason(error),
-            returnTo: query.returnTo,
-            status: "error",
-          }),
-          302,
-        );
-      }
-    },
-    {
-      params: t.Object({
-        provider: t.String({ maxLength: 20 }),
-      }),
-      query: t.Object({
-        returnTo: t.Optional(t.String({ maxLength: 2048 })),
-      }),
-    },
-  )
+export const blogOAuthCallbackRoutes = new Elysia()
   .get(
     "/oauth/:provider/callback",
     async ({ cookie, headers, params, query, request, server }) => {
@@ -319,7 +277,52 @@ export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
         "x-real-ip": t.Optional(t.String()),
       }),
     },
+  );
+
+export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
+  .get("/providers", () => listPublicOAuthProviders())
+  .get(
+    "/oauth/:provider/start",
+    async ({ cookie, params, query }) => {
+      const provider = readAuthProvider(params.provider);
+      try {
+        const authorization = await createOAuthAuthorization({
+          providerValue: params.provider,
+          returnTo: query.returnTo,
+        });
+
+        cookie[oauthStateCookieName(authorization.provider)].set({
+          httpOnly: true,
+          maxAge: 10 * 60,
+          path: "/",
+          sameSite: "lax",
+          secure: Bun.env.NODE_ENV === "production",
+          value: authorization.state,
+        });
+
+        return Response.redirect(authorization.authorizationUrl, 302);
+      } catch (error) {
+        return Response.redirect(
+          createOAuthResultRedirectUrl({
+            provider,
+            reason: readOAuthErrorReason(error),
+            returnTo: query.returnTo,
+            status: "error",
+          }),
+          302,
+        );
+      }
+    },
+    {
+      params: t.Object({
+        provider: t.String({ maxLength: 20 }),
+      }),
+      query: t.Object({
+        returnTo: t.Optional(t.String({ maxLength: 2048 })),
+      }),
+    },
   )
+  .use(blogOAuthCallbackRoutes)
   .post(
     "/email-code",
     async ({ body }) => {

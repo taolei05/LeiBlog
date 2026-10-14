@@ -7,6 +7,7 @@ import { adminRoutes } from "./admin/routes";
 import { createMediaFileRoutes } from "./admin/media/public-routes";
 import { applyAdminCookieAuthentication } from "./admin/auth/cookie";
 import { blogRoutes } from "./blog/routes";
+import { blogOAuthCallbackRoutes } from "./blog/auth/routes";
 import { altchaRoutes } from "./shared/altcha-routes";
 import { closeSql } from "./shared/db/postgres";
 import { closeRedis } from "./shared/db/redis";
@@ -47,6 +48,7 @@ export const createApp = () => {
     .use(healthRoutes)
     .use(altchaRoutes)
     .use(adminRoutes)
+    .group("/api/auth", (app) => app.use(blogOAuthCallbackRoutes))
     .use(blogRoutes);
 };
 

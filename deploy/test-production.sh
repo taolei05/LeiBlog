@@ -68,6 +68,12 @@ request --head "$url/" | grep -qi 'Content-Security-Policy:'
 request --head "$url/admin/site-settings" | grep -qi 'Cache-Control: no-store'
 request "$url/api/admin/setup/status" | grep -q '"requiresSetup":true'
 request "$url/api/blog/settings" >/dev/null
+for prefix in /api/auth /api/blog/auth; do
+  for provider in github google; do
+    callback_headers="$(request --dump-header - --output /dev/null "$url$prefix/oauth/$provider/callback")"
+    [[ "$callback_headers" == *'302'* && "$callback_headers" == *'oauth_status=error'* ]]
+  done
+done
 empty_count() {
   compose exec -T postgres psql -U leiblog_test -d leiblog_test_production -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM site_settings) + (SELECT count(*) FROM auth_provider_settings) + (SELECT count(*) FROM media_folders) + (SELECT count(*) FROM articles) + (SELECT count(*) FROM article_categories) + (SELECT count(*) FROM article_tags) + (SELECT count(*) FROM article_contributors) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM navigation_groups) + (SELECT count(*) FROM navigation_items) + (SELECT count(*) FROM media_assets)'
 }
