@@ -2883,7 +2883,7 @@ export function ArticleDetailPage({
                         ))}
                       </div>
                     </header>
-                    <ArticleMdxContent content={content.contentMdx} />
+                    <ArticleMdxContent content={content.contentMdx} language={language} />
                     <Button
                       label={language === "en" ? "Back to articles" : "返回全部文章"}
                       onClick={() => onNavigate("/articles")}

@@ -1,44 +1,17 @@
+import { createElement, Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { PhotoView } from "react-photo-view";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { toString } from "mdast-util-to-string";
+import type { Definition, Heading, Nodes } from "mdast";
 
 import { CodeBlock } from "@astryxdesign/core/CodeBlock";
 import type { OutlineItem } from "@astryxdesign/core/Outline";
+import { Spinner } from "@astryxdesign/core/Spinner";
 import { getSafeLinkUrl, resolveContentAssetUrl } from "../../../shared/content-url";
+import type { AppLanguage } from "../../../shared/i18n";
 
-type ArticleMdxContentProps = {
-  content: string;
-};
-
-type MarkdownBlock =
-  | {
-      code: string;
-      title?: string;
-      language: string;
-      type: "code";
-    }
-  | {
-      id: string;
-      level: 1 | 2 | 3 | 4;
-      text: string;
-      type: "heading";
-    }
-  | {
-      alt: string;
-      src: string;
-      type: "image";
-    }
-  | {
-      items: string[];
-      type: "list";
-    }
-  | {
-      text: string;
-      type: "paragraph";
-    }
-  | {
-      text: string;
-      type: "quote";
-    };
+type ArticleMdxContentProps = { content: string; language?: AppLanguage };
 
 const normalizeHeadingId = (text: string) => {
   const normalizedText = text
@@ -47,24 +20,11 @@ const normalizeHeadingId = (text: string) => {
     .toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/gu, "-")
     .replace(/^-+|-+$/g, "");
-
   return normalizedText.length > 0 ? normalizedText : "section";
 };
 
 export const createArticleHeadingId = (text: string, index: number) =>
   `${normalizeHeadingId(text)}-${index + 1}`;
-
-const readImageLine = (line: string) => {
-  const match = line.match(/^!\[(?<alt>[^\]]*)\]\((?<src>[^)]+)\)$/u);
-  if (match?.groups === undefined) {
-    return undefined;
-  }
-
-  return {
-    alt: match.groups.alt,
-    src: match.groups.src,
-  };
-};
 
 const CODE_FENCE_FILE_ATTRIBUTE_KEYS = new Set(["file", "filename", "title"]);
 const CODE_FENCE_LANGUAGE_LABELS: Record<string, string> = {
@@ -80,10 +40,8 @@ const CODE_FENCE_LANGUAGE_LABELS: Record<string, string> = {
   txt: "plaintext",
   yml: "yaml",
 };
-
 const getCodeFenceLanguageLabel = (language: string) =>
   CODE_FENCE_LANGUAGE_LABELS[language] ?? language;
-
 const cleanCodeFenceToken = (value: string) => value.replace(/^["']|["']$/gu, "").trim();
 
 const readCodeFenceInfo = (value: string) => {
@@ -94,7 +52,6 @@ const readCodeFenceInfo = (value: string) => {
       .filter(Boolean) ?? [];
   const language = tokens[0]?.toLowerCase() || "plaintext";
   let fileName: string | undefined;
-
   for (const token of tokens.slice(1)) {
     const separatorIndex = token.indexOf("=");
     if (separatorIndex > 0) {
@@ -106,13 +63,10 @@ const readCodeFenceInfo = (value: string) => {
       }
       continue;
     }
-
     fileName = token;
     break;
   }
-
   const languageLabel = getCodeFenceLanguageLabel(language);
-
   return {
     language,
     title:
@@ -124,284 +78,182 @@ const readCodeFenceInfo = (value: string) => {
   };
 };
 
-const parseMarkdownBlocks = (content: string): MarkdownBlock[] => {
-  const blocks: MarkdownBlock[] = [];
-  const lines = content.replace(/\r\n/gu, "\n").split("\n");
-  let paragraphLines: string[] = [];
-  let listLines: string[] = [];
-  let codeLines: string[] = [];
-  let codeLanguage = "";
-  let isInCode = false;
-  let headingIndex = 0;
-
-  const flushParagraph = () => {
-    if (paragraphLines.length === 0) {
-      return;
-    }
-
-    const text = paragraphLines.join(" ").trim();
-    if (text.length > 0) {
-      const image = readImageLine(text);
-      blocks.push(
-        image === undefined
-          ? {
-              text,
-              type: "paragraph",
-            }
-          : {
-              ...image,
-              type: "image",
-            },
-      );
-    }
-    paragraphLines = [];
+const readArticleDocument = (content: string) => {
+  const tree = fromMarkdown(content);
+  const headings: Heading[] = [];
+  const definitions = new Map<string, Definition>();
+  const visit = (node: Nodes) => {
+    if (node.type === "heading") headings.push(node);
+    if (node.type === "definition" && !definitions.has(node.identifier))
+      definitions.set(node.identifier, node);
+    if ("children" in node) node.children.forEach(visit);
   };
-
-  const flushList = () => {
-    if (listLines.length === 0) {
-      return;
-    }
-
-    blocks.push({
-      items: listLines,
-      type: "list",
-    });
-    listLines = [];
-  };
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-
-    if (trimmedLine.startsWith("```")) {
-      if (isInCode) {
-        const codeFenceInfo = readCodeFenceInfo(codeLanguage);
-        blocks.push({
-          code: codeLines.join("\n"),
-          language: codeFenceInfo.language,
-          title: codeFenceInfo.title,
-          type: "code",
-        });
-        codeLines = [];
-        codeLanguage = "";
-        isInCode = false;
-      } else {
-        flushParagraph();
-        flushList();
-        codeLanguage = trimmedLine.replace(/^```/u, "").trim();
-        isInCode = true;
-      }
-      continue;
-    }
-
-    if (isInCode) {
-      codeLines.push(line);
-      continue;
-    }
-
-    const headingMatch = trimmedLine.match(/^(#{1,4})\s+(?<text>.+)$/u);
-    if (headingMatch?.groups !== undefined) {
-      flushParagraph();
-      flushList();
-      const text = headingMatch.groups.text.trim();
-      blocks.push({
-        id: createArticleHeadingId(text, headingIndex),
-        level: Math.min(4, headingMatch[1]?.length ?? 2) as 1 | 2 | 3 | 4,
-        text,
-        type: "heading",
-      });
-      headingIndex += 1;
-      continue;
-    }
-
-    if (trimmedLine.startsWith("- ") || trimmedLine.startsWith("* ")) {
-      flushParagraph();
-      listLines.push(trimmedLine.slice(2).trim());
-      continue;
-    }
-
-    if (trimmedLine.startsWith("> ")) {
-      flushParagraph();
-      flushList();
-      blocks.push({
-        text: trimmedLine.slice(2).trim(),
-        type: "quote",
-      });
-      continue;
-    }
-
-    if (trimmedLine.length === 0) {
-      flushParagraph();
-      flushList();
-      continue;
-    }
-
-    paragraphLines.push(trimmedLine);
-  }
-
-  flushParagraph();
-  flushList();
-
-  if (isInCode) {
-    const codeFenceInfo = readCodeFenceInfo(codeLanguage);
-    blocks.push({
-      code: codeLines.join("\n"),
-      language: codeFenceInfo.language,
-      title: codeFenceInfo.title,
-      type: "code",
-    });
-  }
-
-  return blocks;
+  visit(tree);
+  return { tree, headings, definitions };
 };
 
 export const parseArticleToc = (content: string): OutlineItem[] =>
-  parseMarkdownBlocks(content)
-    .filter(
-      (block): block is Extract<MarkdownBlock, { type: "heading" }> => block.type === "heading",
-    )
-    .filter((block) => block.level >= 2)
-    .map((block) => ({
-      id: block.id,
-      label: block.text,
-      level: block.level,
-    }));
+  readArticleDocument(content)
+    .headings.map((heading, index) => ({
+      id: createArticleHeadingId(toString(heading), index),
+      label: toString(heading),
+      level: heading.depth,
+    }))
+    .filter((heading) => heading.level >= 2);
 
-const renderInlineText = (text: string): ReactNode[] => {
-  const nodes: ReactNode[] = [];
-  const pattern = /(`[^`]+`|\[[^\]]+\]\([^)]+\))/gu;
-  let lastIndex = 0;
+type ArticleImageProps = {
+  alt: string;
+  language: AppLanguage;
+  linked: boolean;
+  src: string;
+  title?: string | null;
+};
 
-  text.replace(pattern, (match, _group: string, offset: number) => {
-    if (offset > lastIndex) {
-      nodes.push(text.slice(lastIndex, offset));
-    }
+const ArticleImage = ({ alt, language, linked, src, title }: ArticleImageProps) => {
+  const [state, setState] = useState<"error" | "loading" | "ready">("loading");
+  const loadingLabel = language === "en" ? "Loading image..." : "图片加载中...";
+  const failureLabel = language === "en" ? "Image could not be loaded." : "图片加载失败。";
+  const image = (
+    <img
+      alt={alt}
+      decoding="async"
+      loading="lazy"
+      onError={() => setState("error")}
+      onLoad={() => setState("ready")}
+      ref={(element) => {
+        if (element?.complete) setState(element.naturalWidth > 0 ? "ready" : "error");
+      }}
+      src={src}
+      title={title ?? undefined}
+    />
+  );
+  return (
+    <span className="mdx-image-link" data-image-state={state}>
+      {state !== "ready" ? (
+        <span className="mdx-image-link__status" role="status">
+          {state === "loading" ? (
+            <Spinner aria-hidden="true" label={loadingLabel} size="sm" />
+          ) : null}
+          {state === "loading" ? loadingLabel : failureLabel}
+        </span>
+      ) : null}
+      {linked ? (
+        image
+      ) : (
+        <PhotoView src={src}>
+          <button
+            aria-label={
+              language === "en"
+                ? `Preview image: ${alt || "Article image"}`
+                : `预览图片：${alt || "文章图片"}`
+            }
+            className="mdx-image-link__preview"
+            disabled={state !== "ready"}
+            type="button"
+          >
+            {image}
+          </button>
+        </PhotoView>
+      )}
+    </span>
+  );
+};
 
-    if (match.startsWith("`")) {
-      nodes.push(<code key={`${match}-${offset}`}>{match.slice(1, -1)}</code>);
-    } else {
-      const linkMatch = match.match(/^\[(?<label>[^\]]+)\]\((?<href>[^)]+)\)$/u);
-      if (linkMatch?.groups === undefined) {
-        nodes.push(match);
-      } else {
-        const href = getSafeLinkUrl(linkMatch.groups.href);
-        nodes.push(
-          href === undefined ? (
-            linkMatch.groups.label
-          ) : (
-            <a href={href} key={`${match}-${offset}`}>
-              {linkMatch.groups.label}
-            </a>
-          ),
+export function ArticleMdxContent({ content, language = "zh-CN" }: ArticleMdxContentProps) {
+  const { tree, headings, definitions } = readArticleDocument(content);
+  const headingIds = new Map(
+    headings.map((heading, index) => [heading, createArticleHeadingId(toString(heading), index)]),
+  );
+  const renderChildren = (nodes: readonly Nodes[], linked = false): ReactNode =>
+    nodes.map((node, index) => <Fragment key={index}>{renderNode(node, linked)}</Fragment>);
+  const renderImage = (
+    image: { alt?: string | null; url: string; title?: string | null },
+    linked: boolean,
+  ) => {
+    const src = resolveContentAssetUrl(image.url);
+    return src ? (
+      <ArticleImage
+        alt={image.alt ?? ""}
+        key={src}
+        language={language}
+        linked={linked}
+        src={src}
+        title={image.title}
+      />
+    ) : null;
+  };
+  const renderNode = (node: Nodes, linked: boolean): ReactNode => {
+    switch (node.type) {
+      case "root":
+        return renderChildren(node.children);
+      case "text":
+      case "html":
+        return node.value;
+      case "paragraph":
+        return <p>{renderChildren(node.children, linked)}</p>;
+      case "heading":
+        return createElement(
+          `h${node.depth}`,
+          { id: headingIds.get(node) },
+          renderChildren(node.children, linked),
+        );
+      case "code": {
+        const info = readCodeFenceInfo([node.lang, node.meta].filter(Boolean).join(" "));
+        return (
+          <CodeBlock
+            className="article-mdx-code-block"
+            code={node.value}
+            hasCopyButton
+            hasLanguageLabel={false}
+            hasLineNumbers
+            language={info.language}
+            title={info.title}
+            width="100%"
+          />
         );
       }
+      case "inlineCode":
+        return <code>{node.value}</code>;
+      case "strong":
+        return <strong>{renderChildren(node.children, linked)}</strong>;
+      case "emphasis":
+        return <em>{renderChildren(node.children, linked)}</em>;
+      case "break":
+        return <br />;
+      case "thematicBreak":
+        return <hr />;
+      case "blockquote":
+        return <blockquote>{renderChildren(node.children, linked)}</blockquote>;
+      case "list":
+        return node.ordered ? (
+          <ol start={node.start ?? undefined}>{renderChildren(node.children, linked)}</ol>
+        ) : (
+          <ul>{renderChildren(node.children, linked)}</ul>
+        );
+      case "listItem":
+        return <li>{renderChildren(node.children, linked)}</li>;
+      case "image":
+        return renderImage(node, linked);
+      case "imageReference": {
+        const definition = definitions.get(node.identifier);
+        return definition ? renderImage({ ...definition, alt: node.alt }, linked) : node.alt;
+      }
+      case "link":
+      case "linkReference": {
+        const target = node.type === "link" ? node : definitions.get(node.identifier);
+        const href = getSafeLinkUrl(target?.url);
+        const children = renderChildren(node.children, linked || href !== undefined);
+        return href === undefined ? (
+          children
+        ) : (
+          <a href={href} title={target?.title ?? undefined}>
+            {children}
+          </a>
+        );
+      }
+      default:
+        return null;
     }
-
-    lastIndex = offset + match.length;
-    return match;
-  });
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  return nodes;
-};
-
-const renderHeadingBlock = (block: Extract<MarkdownBlock, { type: "heading" }>, index: number) => {
-  if (block.level === 1) {
-    return (
-      <h1 id={block.id} key={`${block.id}-${index}`}>
-        {block.text}
-      </h1>
-    );
-  }
-
-  if (block.level === 3) {
-    return (
-      <h3 id={block.id} key={`${block.id}-${index}`}>
-        {block.text}
-      </h3>
-    );
-  }
-
-  if (block.level === 4) {
-    return (
-      <h4 id={block.id} key={`${block.id}-${index}`}>
-        {block.text}
-      </h4>
-    );
-  }
-
-  return (
-    <h2 id={block.id} key={`${block.id}-${index}`}>
-      {block.text}
-    </h2>
-  );
-};
-
-export function ArticleMdxContent({ content }: ArticleMdxContentProps) {
-  const blocks = parseMarkdownBlocks(content);
-
-  return (
-    <article className="article-mdx-content">
-      {blocks.map((block, index) => {
-        if (block.type === "heading") {
-          return renderHeadingBlock(block, index);
-        }
-
-        if (block.type === "code") {
-          return (
-            <CodeBlock
-              className="article-mdx-code-block"
-              code={block.code}
-              hasCopyButton
-              hasLanguageLabel={false}
-              hasLineNumbers
-              key={`code-${index}`}
-              language={block.language || undefined}
-              title={block.title}
-              width="100%"
-            />
-          );
-        }
-
-        if (block.type === "list") {
-          return (
-            <ul key={`list-${index}`}>
-              {block.items.map((item, itemIndex) => (
-                <li key={`${item}-${itemIndex}`}>{renderInlineText(item)}</li>
-              ))}
-            </ul>
-          );
-        }
-
-        if (block.type === "quote") {
-          return <blockquote key={`quote-${index}`}>{renderInlineText(block.text)}</blockquote>;
-        }
-
-        if (block.type === "image") {
-          const imageUrl = resolveContentAssetUrl(block.src);
-          if (imageUrl.length === 0) {
-            return null;
-          }
-
-          return (
-            <figure className="mdx-image-link" key={`${block.src}-${index}`}>
-              <PhotoView src={imageUrl}>
-                <button
-                  aria-label={`预览图片：${block.alt || "文章图片"}`}
-                  className="mdx-image-link__preview"
-                  type="button"
-                >
-                  <img alt={block.alt} loading="lazy" src={imageUrl} />
-                </button>
-              </PhotoView>
-            </figure>
-          );
-        }
-
-        return <p key={`paragraph-${index}`}>{renderInlineText(block.text)}</p>;
-      })}
-    </article>
-  );
+  };
+  return <article className="article-mdx-content">{renderChildren(tree.children)}</article>;
 }

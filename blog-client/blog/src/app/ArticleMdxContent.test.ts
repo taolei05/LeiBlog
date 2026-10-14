@@ -8,7 +8,62 @@ vi.mock("@astryxdesign/core/CodeBlock", () => ({
   CodeBlock: ({ code }: { code: string }) => createElement("pre", null, code),
 }));
 
-import { ArticleMdxContent } from "./ArticleMdxContent";
+import { ArticleMdxContent, parseArticleToc } from "./ArticleMdxContent";
+
+const render = (content: string) =>
+  renderToStaticMarkup(createElement(ArticleMdxContent, { content }));
+
+describe("article images", () => {
+  it("renders an image next to text without requiring a blank line", () => {
+    const markup = render("Before![](/uploads/article-covers/image.jpg?media-v=2)After");
+    expect(markup).toContain("Before");
+    expect(markup).toContain("After");
+    expect(markup).toContain('src="/uploads/article-covers/image.jpg?media-v=2"');
+    expect(markup).not.toContain("![](");
+    expect(markup).toContain("mdx-image-link__preview");
+  });
+
+  it("renders adjacent images and preserves their order", () => {
+    const markup = render("![First](/uploads/first.jpg)\n![Second](/uploads/second.jpg)");
+    expect(markup.match(/<img /gu)).toHaveLength(2);
+    expect(markup.indexOf('alt="First"')).toBeLessThan(markup.indexOf('alt="Second"'));
+  });
+
+  it("handles image titles, parentheses and reference-style images", () => {
+    const markup = render(
+      '![Caption](/uploads/image(1).jpg "Image title")\n\n![Reference][photo]\n\n[photo]: /uploads/reference.jpg',
+    );
+    expect(markup).toContain('src="/uploads/image(1).jpg?media-v=2"');
+    expect(markup).toContain('title="Image title"');
+    expect(markup).toContain('src="/uploads/reference.jpg?media-v=2"');
+    expect(markup).not.toContain("[photo]:");
+  });
+
+  it("preserves image links without nesting a preview button inside an anchor", () => {
+    const markup = render("[![Linked](/uploads/linked.jpg)](https://example.test/gallery)");
+    expect(markup).toContain('href="https://example.test/gallery"');
+    expect(markup).toContain('src="/uploads/linked.jpg?media-v=2"');
+    expect(markup).not.toContain("<button");
+  });
+
+  it("leaves image syntax in inline and fenced code as text", () => {
+    const markup = render("`![](/uploads/code.jpg)`\n\n```md\n![](/uploads/example.jpg)\n```");
+    expect(markup).not.toContain("<img");
+    expect(markup).toContain("![](/uploads/code.jpg)");
+    expect(markup).toContain("![](/uploads/example.jpg)");
+  });
+
+  it("keeps table-of-contents IDs aligned with rendered headings", () => {
+    const content = "# Title\n\n## Images\n\n![](/uploads/test.jpg)\n\n### Details";
+    const markup = render(content);
+    expect(parseArticleToc(content)).toEqual([
+      { id: "images-2", label: "Images", level: 2 },
+      { id: "details-3", label: "Details", level: 3 },
+    ]);
+    expect(markup).toContain('id="images-2"');
+    expect(markup).toContain('id="details-3"');
+  });
+});
 
 describe("untrusted article rendering", () => {
   it("renders HTML and MDX expressions as escaped text", () => {
