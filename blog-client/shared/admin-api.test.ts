@@ -8,9 +8,16 @@ import {
   getPublicSiteSettings,
   isAdminAuthState,
   loginAdmin,
+  importBackupArchive,
+  previewBackupArchive,
   resolveAdminAssetUrl,
+  uploadBlogUserAvatar,
+  uploadInitialSetupMediaAsset,
+  uploadMediaAsset,
+  uploadPublicCommentImage,
   updateBlogUserProfile,
 } from "./admin-api";
+import type { UploadProgress, UploadProgressHandler } from "./upload-request";
 
 const adminUser = {
   id: "admin",
@@ -28,6 +35,77 @@ afterEach(() => {
   vi.resetModules();
 });
 
+describe("all multipart upload endpoints", () => {
+  const file = new File(["image"], "test.png");
+  const cases: {
+    name: string;
+    run: (onUploadProgress: UploadProgressHandler) => Promise<unknown>;
+  }[] = [
+    {
+      name: "profile avatar",
+      run: (onUploadProgress) => uploadBlogUserAvatar({ file, onUploadProgress }),
+    },
+    {
+      name: "comment image",
+      run: (onUploadProgress) => uploadPublicCommentImage({ file, onUploadProgress }),
+    },
+    {
+      name: "setup image",
+      run: (onUploadProgress) =>
+        uploadInitialSetupMediaAsset({ file, onUploadProgress, setupToken: "test-token" }),
+    },
+    {
+      name: "admin media",
+      run: (onUploadProgress) => uploadMediaAsset({ file, onUploadProgress, token: "" }),
+    },
+    {
+      name: "backup preview",
+      run: (onUploadProgress) => previewBackupArchive({ file, onUploadProgress, token: "" }),
+    },
+    {
+      name: "backup import",
+      run: (onUploadProgress) =>
+        importBackupArchive({ file, onUploadProgress, token: "", mode: "replace" }),
+    },
+  ];
+  it.each(cases)("reports a rejected $name upload as failed, not complete", async ({ run }) => {
+    const progress: UploadProgress[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input, init) => {
+        expect(init?.body).toBeInstanceOf(FormData);
+        expect(init?.credentials).toBe("include");
+        expect(new Headers(init?.headers).get("authorization")).toBeNull();
+        return Response.json({ message: "Rejected upload" }, { status: 400 });
+      }),
+    );
+    await expect(run((item) => progress.push(item))).rejects.toThrow("Rejected upload");
+    expect(progress.map((item) => item.phase)).toEqual(["uploading", "processing", "error"]);
+  });
+  it("completes a comment image only after validating its response", async () => {
+    const progress: UploadProgress[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true, accessUrl: "/uploads/test.png" })),
+    );
+    expect(
+      await uploadPublicCommentImage({ file, onUploadProgress: (item) => progress.push(item) }),
+    ).toBe("/uploads/test.png");
+    expect(progress.at(-1)?.phase).toBe("complete");
+  });
+  it("reports malformed success responses as failures", async () => {
+    const progress: UploadProgress[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ ok: true })),
+    );
+    await expect(
+      uploadPublicCommentImage({ file, onUploadProgress: (item) => progress.push(item) }),
+    ).rejects.toThrow("Comment image upload response was invalid.");
+    expect(progress.at(-1)?.phase).toBe("error");
+  });
+});
+
 describe("OAuth navigation URLs", () => {
   it.each(["google", "github"] as const)(
     "starts %s sign-in on the production website origin",
@@ -35,14 +113,29 @@ describe("OAuth navigation URLs", () => {
       vi.stubEnv("PROD", true);
       vi.stubEnv("VITE_API_BASE_URL", undefined);
       vi.resetModules();
-      const { createBlogOAuthStartUrl } = await import("./admin-api");
+      const { startBlogOAuthLogin } = await import("./admin-api");
       const returnTo = "/articles/标签?tag=C++&lang=en#评论";
-      const url = new URL(createBlogOAuthStartUrl({ provider, returnTo }), "https://taolei.net");
-      expect(url.origin).toBe("https://taolei.net");
-      expect(url.pathname).toBe(`/api/blog/auth/oauth/${provider}/start`);
-      expect(url.searchParams.get("returnTo")).toBe(returnTo);
-      expect([...url.searchParams.keys()]).toEqual(["returnTo"]);
-      expect(url.hash).toBe("");
+      const authorizationUrl =
+        provider === "github"
+          ? "https://github.com/login/oauth/authorize?state=test"
+          : "https://accounts.google.com/o/oauth2/v2/auth?state=test";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input, init) => {
+          expect(input).toBe(`/api/blog/auth/oauth/${provider}/start`);
+          expect(init?.method).toBe("POST");
+          expect(init?.credentials).toBe("include");
+          expect(JSON.parse(String(init?.body))).toEqual({
+            altcha: "fresh-proof",
+            locale: "en",
+            returnTo,
+          });
+          return Response.json({ ok: true, authorizationUrl });
+        }),
+      );
+      expect(
+        await startBlogOAuthLogin({ provider, returnTo, altcha: "fresh-proof", locale: "en" }),
+      ).toBe(authorizationUrl);
     },
   );
 
@@ -51,13 +144,35 @@ describe("OAuth navigation URLs", () => {
     async (provider) => {
       vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
       vi.resetModules();
-      const { createBlogOAuthStartUrl } = await import("./admin-api");
-      const url = new URL(createBlogOAuthStartUrl({ provider, returnTo: "/" }));
-      expect(url.origin).toBe("https://api.example.test");
-      expect(url.pathname).toBe(`/api/blog/auth/oauth/${provider}/start`);
-      expect(url.searchParams.get("returnTo")).toBe("/");
+      const { startBlogOAuthLogin } = await import("./admin-api");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input) => {
+          expect(input).toBe(`https://api.example.test/api/blog/auth/oauth/${provider}/start`);
+          return Response.json({ message: "Human verification failed." }, { status: 400 });
+        }),
+      );
+      await expect(
+        startBlogOAuthLogin({ provider, returnTo: "/", altcha: "invalid", locale: "en" }),
+      ).rejects.toThrow("Human verification failed.");
     },
   );
+
+  it("rejects an authorization URL outside the selected provider", async () => {
+    const { startBlogOAuthLogin } = await import("./admin-api");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          ok: true,
+          authorizationUrl: "https://attacker.example/login",
+        }),
+      ),
+    );
+    await expect(
+      startBlogOAuthLogin({ provider: "github", returnTo: "/", altcha: "proof", locale: "en" }),
+    ).rejects.toThrow("第三方登录授权地址无效。");
+  });
 });
 
 describe("admin media display URLs", () => {

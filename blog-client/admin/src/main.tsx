@@ -252,7 +252,7 @@ function AdminExperience({ themeMode, onToggleThemeMode }: AdminExperienceProps)
   if (isCheckingSession) {
     return (
       <Center axis="both" padding={6} style={{ minHeight: "100vh" }}>
-        <Spinner label="Loading" />
+        <Spinner label={t("admin.asyncContent.loading")} />
       </Center>
     );
   }

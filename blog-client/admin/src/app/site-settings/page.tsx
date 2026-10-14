@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
 import {
   Copy,
   CloudUpload,
@@ -737,6 +738,7 @@ export function SiteSettingsPage({
   onSettingsUpdated,
 }: SiteSettingsPageProps) {
   const { i18n, t } = useTranslation();
+  const { uploads, onUploadProgress } = useUploadProgress();
   const [form, setForm] = useState(createEmptyFormState);
   const [isLoading, setIsLoading] = useState(true);
   const [savingTarget, setSavingTarget] = useState<SiteSettingsSaveTarget>();
@@ -1238,6 +1240,7 @@ export function SiteSettingsPage({
 
   const uploadSiteFile = async (file: File) => {
     const uploadedAsset = await uploadMediaAsset({
+      onUploadProgress,
       file,
       folderSlug: "site",
       token: authToken,
@@ -1326,10 +1329,9 @@ export function SiteSettingsPage({
       return;
     }
 
-    const didSave = await saveSettings(saveConfirmationTarget);
-    if (didSave || Object.keys(errors).length > 0) {
-      setSaveConfirmationTarget(undefined);
-    }
+    const target = saveConfirmationTarget;
+    setSaveConfirmationTarget(undefined);
+    await saveSettings(target);
   };
 
   const revealingSecretLabel =
@@ -1572,6 +1574,7 @@ export function SiteSettingsPage({
                       />
                     </Grid>
                   </FormLayout>
+                  <UploadProgressList language={activeLocale} uploads={uploads} />
                   <SiteSettingsPanelSaveButton
                     isLoading={savingTarget === "site"}
                     isDisabled={isLoading || isSaving}

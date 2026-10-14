@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { UploadProgressList, useUploadProgress } from "../../../shared/upload-progress";
+import type { UploadProgress } from "../../../shared/upload-request";
 import type { ChangeEvent, CSSProperties, FormEvent, MouseEvent, ReactNode } from "react";
 import type { EmojiClickData } from "emoji-picker-react";
 import type { EmojiData } from "emoji-picker-react/dist/types/exposedTypes";
@@ -2116,6 +2118,7 @@ function ArticleCommentThread({
 }
 
 type ArticleCommentComposerProps = {
+  uploads: readonly UploadProgress[];
   copy: FrontArticleCopy;
   draft: string;
   images: readonly UploadedCommentImage[];
@@ -2134,6 +2137,7 @@ type ArticleCommentComposerProps = {
 };
 
 function ArticleCommentComposer({
+  uploads,
   copy,
   draft,
   images,
@@ -2248,6 +2252,7 @@ function ArticleCommentComposer({
           </div>
         </div>
       </div>
+      <UploadProgressList language={language} uploads={uploads} />
       {images.length > 0 ? (
         <div className="article-comment-image-list">
           {images.map((image) => {
@@ -2328,6 +2333,7 @@ const getCommentTargetCopy = ({
 };
 
 function PublicCommentsSection(props: PublicCommentsSectionProps) {
+  const { uploads, onUploadProgress } = useUploadProgress();
   const { authUser, commentsEnabled, copy, language, onFeedback, onOpenAuth, timeZone } = props;
   const target = props.target;
   const articleSlug = target === "article" ? props.article.slug : undefined;
@@ -2430,7 +2436,7 @@ function PublicCommentsSection(props: PublicCommentsSectionProps) {
         files.map(async (file) => ({
           id: createCommentUploadId(file),
           name: file.name,
-          url: await uploadPublicCommentImage({ file }),
+          url: await uploadPublicCommentImage({ file, onUploadProgress }),
         })),
       );
       setUploadedImages((currentImages) => [...currentImages, ...nextImages]);
@@ -2534,6 +2540,7 @@ function PublicCommentsSection(props: PublicCommentsSectionProps) {
           </button>
         </div>
         <ArticleCommentComposer
+          uploads={uploads}
           copy={commentCopy}
           draft={draft}
           images={uploadedImages}
@@ -2626,6 +2633,7 @@ function PublicCommentsSection(props: PublicCommentsSectionProps) {
           </Text>
         ) : replyTargetId === undefined ? (
           <ArticleCommentComposer
+            uploads={uploads}
             copy={commentCopy}
             draft={draft}
             images={uploadedImages}

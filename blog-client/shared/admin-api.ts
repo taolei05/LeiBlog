@@ -1,6 +1,8 @@
 import type { AppLanguage } from "./i18n";
 import { resolveApiBaseUrl } from "./api-base-url";
 import { versionLocalMediaUrl } from "./media-url";
+import { uploadFileRequest } from "./upload-request";
+import type { UploadProgressHandler } from "./upload-request";
 
 // A blank token selects HttpOnly cookie transport; API clients can still supply a bearer token.
 export const COOKIE_ADMIN_AUTH_TOKEN = "";
@@ -865,7 +867,9 @@ type RequestBlogEmailCodeParams = {
   purpose: Extract<BlogEmailCodePurpose, "password_reset" | "register">;
 };
 
-type CreateBlogOAuthStartUrlParams = {
+type StartBlogOAuthLoginParams = {
+  altcha: AltchaPayload;
+  locale: AppLanguage;
   provider: AuthProvider;
   returnTo: string;
 };
@@ -993,6 +997,7 @@ type DeleteMediaFolderParameters = {
 };
 
 type UploadMediaAssetParameters = {
+  onUploadProgress?: UploadProgressHandler;
   file: File;
   fileName?: string;
   folderSlug?: string;
@@ -1192,15 +1197,18 @@ type CreatePublicGuestbookCommentParameters = {
 };
 
 type UploadPublicCommentImageParameters = {
+  onUploadProgress?: UploadProgressHandler;
   file: File;
 };
 
 type UploadBlogUserAvatarParameters = {
+  onUploadProgress?: UploadProgressHandler;
   file: File;
   fileName?: string;
 };
 
 type UploadInitialSetupMediaAssetParameters = {
+  onUploadProgress?: UploadProgressHandler;
   file: File;
   fileName?: string;
   folderSlug?: string;
@@ -1281,6 +1289,7 @@ type DownloadBackupArchiveParameters = {
 };
 
 type PreviewBackupArchiveParameters = {
+  onUploadProgress?: UploadProgressHandler;
   file: File;
   token: string;
 };
@@ -1316,6 +1325,45 @@ const readErrorMessage = (body: unknown, fallback: string) => {
   const record = body as Record<string, unknown>;
   return typeof record.message === "string" ? record.message : fallback;
 };
+
+type UploadJsonParameters<Result> = {
+  body: FormData;
+  file: File;
+  headers?: HeadersInit;
+  onUploadProgress?: UploadProgressHandler;
+  url: string;
+  isResponse: (value: unknown) => value is Result;
+  failureMessage: string;
+  invalidMessage: string;
+};
+
+const uploadJson = <Result>({
+  body,
+  file,
+  headers,
+  onUploadProgress,
+  url,
+  isResponse,
+  failureMessage,
+  invalidMessage,
+}: UploadJsonParameters<Result>) =>
+  uploadFileRequest({
+    body,
+    file,
+    headers,
+    onProgress: onUploadProgress,
+    url,
+    readResponse: async (response) => {
+      const payload = await parseJson(response);
+      if (!response.ok) {
+        throw new Error(readErrorMessage(payload, failureMessage));
+      }
+      if (!isResponse(payload)) {
+        throw new Error(invalidMessage);
+      }
+      return payload;
+    },
+  });
 
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -2880,10 +2928,33 @@ export const getBlogOAuthProviders = async () => {
   return body.items;
 };
 
-export const createBlogOAuthStartUrl = ({ provider, returnTo }: CreateBlogOAuthStartUrlParams) => {
-  const query = new URLSearchParams({ returnTo });
+export const startBlogOAuthLogin = async ({ provider, ...payload }: StartBlogOAuthLoginParams) => {
+  const response = await fetch(`${API_BASE_URL}/api/blog/auth/oauth/${provider}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseJson(response);
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "第三方登录验证失败。"));
+  }
+  if (typeof body !== "object" || body === null) {
+    throw new Error("第三方登录响应格式异常。");
+  }
+  const record = body as Record<string, unknown>;
+  if (record.ok !== true || typeof record.authorizationUrl !== "string") {
+    throw new Error("第三方登录响应格式异常。");
+  }
+  const authorization = new URL(record.authorizationUrl);
+  const expected =
+    provider === "github"
+      ? "https://github.com/login/oauth/authorize"
+      : "https://accounts.google.com/o/oauth2/v2/auth";
+  if (`${authorization.origin}${authorization.pathname}` !== expected) {
+    throw new Error("第三方登录授权地址无效。");
+  }
 
-  return `${API_BASE_URL}/api/blog/auth/oauth/${provider}/start?${query.toString()}`;
+  return authorization.toString();
 };
 
 export const getBlogMe = async () => {
@@ -2935,27 +3006,26 @@ export const updateBlogUserProfile = async (payload: UpdateBlogUserProfileParams
   return body.user;
 };
 
-export const uploadBlogUserAvatar = async ({ file, fileName }: UploadBlogUserAvatarParameters) => {
+export const uploadBlogUserAvatar = async ({
+  file,
+  fileName,
+  onUploadProgress,
+}: UploadBlogUserAvatarParameters) => {
   const formData = new FormData();
   formData.set("file", file);
   if (fileName !== undefined && fileName.trim().length > 0) {
     formData.set("fileName", fileName.trim());
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/blog/auth/me/avatar`, {
+  const body = await uploadJson({
+    file,
+    onUploadProgress,
+    url: `${API_BASE_URL}/api/blog/auth/me/avatar`,
     body: formData,
-    credentials: "include",
-    method: "POST",
+    isResponse: isMediaAssetMutationResponse,
+    failureMessage: "头像上传失败。",
+    invalidMessage: "头像上传响应格式异常。",
   });
-  const body = await parseJson(response);
-
-  if (!response.ok) {
-    throw new Error(readErrorMessage(body, "头像上传失败。"));
-  }
-
-  if (!isMediaAssetMutationResponse(body)) {
-    throw new Error("头像上传响应格式异常。");
-  }
 
   return body.item;
 };
@@ -3123,6 +3193,7 @@ export const uploadInitialSetupMediaAsset = async ({
   fileName,
   folderSlug,
   setupToken,
+  onUploadProgress,
 }: UploadInitialSetupMediaAssetParameters) => {
   const formData = new FormData();
   formData.set("file", file);
@@ -3133,20 +3204,16 @@ export const uploadInitialSetupMediaAsset = async ({
     formData.set("folderSlug", folderSlug.trim());
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/admin/setup/media`, {
+  const body = await uploadJson({
+    file,
+    onUploadProgress,
+    url: `${API_BASE_URL}/api/admin/setup/media`,
     body: formData,
-    method: "POST",
     headers: { "X-Setup-Token": setupToken ?? "" },
+    isResponse: isMediaAssetMutationResponse,
+    failureMessage: "Initial setup media upload failed.",
+    invalidMessage: "Initial setup media upload response was invalid.",
   });
-  const body = await parseJson(response);
-
-  if (!response.ok) {
-    throw new Error(readErrorMessage(body, "Initial setup media upload failed."));
-  }
-
-  if (!isMediaAssetMutationResponse(body)) {
-    throw new Error("Initial setup media upload response was invalid.");
-  }
 
   return body.item;
 };
@@ -3450,6 +3517,7 @@ export const uploadMediaAsset = async ({
   folderSlug,
   targetProvider,
   token,
+  onUploadProgress,
 }: UploadMediaAssetParameters) => {
   const formData = new FormData();
   formData.set("file", file);
@@ -3463,22 +3531,18 @@ export const uploadMediaAsset = async ({
     formData.set("targetProvider", targetProvider);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/admin/media`, {
+  const body = await uploadJson({
+    file,
+    onUploadProgress,
+    url: `${API_BASE_URL}/api/admin/media`,
     body: formData,
     headers: {
       Authorization: `Bearer ${token}`,
     },
-    method: "POST",
+    isResponse: isMediaAssetMutationResponse,
+    failureMessage: "Media upload failed.",
+    invalidMessage: "Media upload response was invalid.",
   });
-  const body = await parseJson(response);
-
-  if (!response.ok) {
-    throw new Error(readErrorMessage(body, "Media upload failed."));
-  }
-
-  if (!isMediaAssetMutationResponse(body)) {
-    throw new Error("Media upload response was invalid.");
-  }
 
   return body.item;
 };
@@ -3865,46 +3929,43 @@ const createBackupFormData = (file: File, mode?: "replace") => {
   return formData;
 };
 
-export const previewBackupArchive = async ({ file, token }: PreviewBackupArchiveParameters) => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/backup/preview`, {
+export const previewBackupArchive = async ({
+  file,
+  token,
+  onUploadProgress,
+}: PreviewBackupArchiveParameters) => {
+  return uploadJson({
+    file,
+    onUploadProgress,
+    url: `${API_BASE_URL}/api/admin/backup/preview`,
     body: createBackupFormData(file),
     headers: {
       Authorization: `Bearer ${token}`,
     },
-    method: "POST",
+    isResponse: isBackupPreviewResponse,
+    failureMessage: "Backup preview failed.",
+    invalidMessage: "Backup preview response was invalid.",
   });
-  const body = await parseJson(response);
-
-  if (!response.ok) {
-    throw new Error(readErrorMessage(body, "Backup preview failed."));
-  }
-
-  if (!isBackupPreviewResponse(body)) {
-    throw new Error("Backup preview response was invalid.");
-  }
-
-  return body;
 };
 
-export const importBackupArchive = async ({ file, mode, token }: ImportBackupArchiveParameters) => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/backup/import`, {
+export const importBackupArchive = async ({
+  file,
+  mode,
+  token,
+  onUploadProgress,
+}: ImportBackupArchiveParameters) => {
+  return uploadJson({
+    file,
+    onUploadProgress,
+    url: `${API_BASE_URL}/api/admin/backup/import`,
     body: createBackupFormData(file, mode),
     headers: {
       Authorization: `Bearer ${token}`,
     },
-    method: "POST",
+    isResponse: isBackupImportResponse,
+    failureMessage: "Backup import failed.",
+    invalidMessage: "Backup import response was invalid.",
   });
-  const body = await parseJson(response);
-
-  if (!response.ok) {
-    throw new Error(readErrorMessage(body, "Backup import failed."));
-  }
-
-  if (!isBackupImportResponse(body)) {
-    throw new Error("Backup import response was invalid.");
-  }
-
-  return body;
 };
 
 export const resolveAdminAssetUrl = (url: string) => {
@@ -4150,25 +4211,23 @@ export const createPublicGuestbookComment = async ({
   return body.item;
 };
 
-export const uploadPublicCommentImage = async ({ file }: UploadPublicCommentImageParameters) => {
+export const uploadPublicCommentImage = async ({
+  file,
+  onUploadProgress,
+}: UploadPublicCommentImageParameters) => {
   const formData = new FormData();
   formData.set("file", file);
   formData.set("fileName", file.name);
 
-  const response = await fetch(`${API_BASE_URL}/api/blog/comments/images`, {
+  const body = await uploadJson({
+    file,
+    onUploadProgress,
+    url: `${API_BASE_URL}/api/blog/comments/images`,
     body: formData,
-    credentials: "include",
-    method: "POST",
+    isResponse: isCommentImageUploadResponse,
+    failureMessage: "Comment image upload failed.",
+    invalidMessage: "Comment image upload response was invalid.",
   });
-  const body = await parseJson(response);
-
-  if (!response.ok) {
-    throw new Error(readErrorMessage(body, "Comment image upload failed."));
-  }
-
-  if (!isCommentImageUploadResponse(body)) {
-    throw new Error("Comment image upload response was invalid.");
-  }
 
   return body.accessUrl;
 };

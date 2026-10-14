@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
 import {
   AtSign,
   Clock3,
@@ -520,6 +521,7 @@ export function AdminSettingsPage({
 }: AdminSettingsPageProps) {
   const { i18n, t } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const { uploads, onUploadProgress } = useUploadProgress();
   const [form, setForm] = useState(() => createFormState({ user, socialLinks: [] }));
   const [savedForm, setSavedForm] = useState(() => createFormState({ user, socialLinks: [] }));
   const [isLoading, setIsLoading] = useState(true);
@@ -815,6 +817,7 @@ export function AdminSettingsPage({
     try {
       if (target === "profile" && avatarFile !== undefined) {
         const uploadedAvatar = await uploadMediaAsset({
+          onUploadProgress,
           file: avatarFile,
           folderSlug: "avatars",
           token: authToken,
@@ -863,8 +866,9 @@ export function AdminSettingsPage({
       return;
     }
 
-    await saveSettings(saveConfirmationTarget);
+    const target = saveConfirmationTarget;
     setSaveConfirmationTarget(undefined);
+    await saveSettings(target);
   };
 
   const emptyLoginValue = t("admin.settings.summary.latestLoginPlaceholder");
@@ -1115,6 +1119,7 @@ export function AdminSettingsPage({
                       </Grid>
                     ))}
                   </FormLayout>
+                  <UploadProgressList language={language} uploads={uploads} />
                   <SettingsPanelSaveButton
                     isLoading={savingTarget === "profile"}
                     isDisabled={isLoading || isSaving}

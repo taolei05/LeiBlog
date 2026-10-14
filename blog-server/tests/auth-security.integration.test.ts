@@ -49,6 +49,20 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
 
   const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
+  const createProof = async () => {
+    const challenge = await createChallenge({
+      algorithm: "PBKDF2/SHA-256",
+      cost: 10,
+      counter: 2,
+      deriveKey,
+      expiresAt: new Date(Date.now() + 600_000),
+      hmacSignatureSecret: altchaSecret,
+      hmacKeySignatureSecret: `${altchaSecret}:key-signature`,
+    });
+    const solution = await solveChallenge({ challenge, deriveKey });
+    return JSON.stringify({ challenge, solution });
+  };
+
   const createUser = async (role: "admin" | "user" = "admin") => {
     const id = crypto.randomUUID();
     const passwordHash = await Bun.password.hash("test-original-password");
@@ -504,12 +518,17 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
 
   test("OAuth callback rejects missing or mismatched browser state before token exchange", async () => {
     await configureGithub();
-    const start = await routes.handle(new Request("http://localhost/auth/oauth/github/start"));
-    expect(start.status).toBe(302);
+    const start = await routes.handle(new Request("http://localhost/auth/oauth/github/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ altcha: await createProof() }),
+    }));
+    expect(start.status).toBe(200);
     const setCookie = start.headers.get("set-cookie") ?? "";
     expect(setCookie).toContain("HttpOnly");
     expect(setCookie).toContain("SameSite=Lax");
-    const state = new URL(start.headers.get("location") ?? "").searchParams.get("state");
+    const { authorizationUrl } = await start.json();
+    const state = new URL(authorizationUrl).searchParams.get("state");
     for (const cookie of ["", "leiblog_oauth_state_github=wrong-state"]) {
       const response = await routes.handle(
         new Request(`http://localhost/auth/oauth/github/callback?code=test-code&state=${state}`, {
@@ -526,6 +545,45 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
     expect(states[0]?.consumedAt).toBeNull();
   });
 
+  for (const provider of ["github", "google"] as const) {
+    test(`${provider} cannot start OAuth without a fresh human verification proof`, async () => {
+      await configureProvider({
+        provider,
+        redirectUri: `https://api.example.test/api/auth/oauth/${provider}/callback`,
+      });
+      const path = `http://localhost/api/blog/auth/oauth/${provider}/start`;
+      const bypass = await appRoutes.handle(new Request(path));
+      expect(bypass.status).toBe(405);
+      for (const altcha of [undefined, "invalid-proof"]) {
+        const response = await appRoutes.handle(new Request(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: frontendOrigin },
+          body: JSON.stringify({ altcha, locale: "en", returnTo: "/" }),
+        }));
+        expect(response.status).toBe(400);
+        expect(response.headers.get("set-cookie")).toBeNull();
+      }
+      const before = await sql`SELECT count(*)::int AS count FROM oauth_login_states`;
+      expect(before[0]?.count).toBe(0);
+      const altcha = await createProof();
+      const request = () => new Request(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: frontendOrigin },
+        body: JSON.stringify({ altcha, locale: "en", returnTo: "/" }),
+      });
+      const started = await appRoutes.handle(request());
+      expect(started.status).toBe(200);
+      expect(await started.json()).toMatchObject({ ok: true, authorizationUrl: expect.any(String) });
+      expect(started.headers.get("set-cookie")).toContain(`leiblog_oauth_state_${provider}=`);
+      const replay = await appRoutes.handle(request());
+      expect(replay.status).toBe(400);
+      expect(await replay.json()).toMatchObject({ reason: "altcha-replayed" });
+      const after = await sql`SELECT count(*)::int AS count FROM oauth_login_states`;
+      expect(after[0]?.count).toBe(1);
+      expect(networkCalls).toBe(0);
+    });
+  }
+
   for (const prefix of ["/api/auth", "/api/blog/auth"]) {
     for (const provider of ["github", "google"] as const) {
       test(`${provider} callback at ${prefix} establishes a session and rejects replay`, async () => {
@@ -534,11 +592,17 @@ suite("authentication security with isolated PostgreSQL and Redis", () => {
         const returnTo = "/articles/oauth?lang=en#comments";
         const start = await appRoutes.handle(
           new Request(
-            `http://localhost/api/blog/auth/oauth/${provider}/start?${new URLSearchParams({ returnTo })}`,
+            `http://localhost/api/blog/auth/oauth/${provider}/start`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Origin: frontendOrigin },
+              body: JSON.stringify({ altcha: await createProof(), returnTo }),
+            },
           ),
         );
-        expect(start.status).toBe(302);
-        const authorization = new URL(start.headers.get("location") ?? "");
+        expect(start.status).toBe(200);
+        const { authorizationUrl } = await start.json();
+        const authorization = new URL(authorizationUrl);
         expect(authorization.searchParams.get("redirect_uri")).toBe(redirectUri);
         const state = authorization.searchParams.get("state") ?? "";
         const stateCookie = start.headers.getSetCookie()

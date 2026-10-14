@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
 import { Archive, Database, Download, FileArchive, ShieldCheck, UploadCloud } from "lucide-react";
 
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
@@ -126,6 +127,7 @@ export const BackupPage = ({ authToken, isNarrow, timeZone }: BackupPageProps) =
   const [pendingImportFile, setPendingImportFile] = useState<File>();
   const [banner, setBanner] = useState<AdminFeedbackBannerState>();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const { uploads, onUploadProgress } = useUploadProgress();
   const isBusy = operation !== undefined;
   const previewCreatedAt =
     serverPreview === undefined
@@ -190,7 +192,7 @@ export const BackupPage = ({ authToken, isNarrow, timeZone }: BackupPageProps) =
     setLastImport(undefined);
 
     try {
-      const preview = await previewBackupArchive({ file, token: authToken });
+      const preview = await previewBackupArchive({ file, token: authToken, onUploadProgress });
       setServerPreview(preview);
       showBanner({
         status: "success",
@@ -222,10 +224,13 @@ export const BackupPage = ({ authToken, isNarrow, timeZone }: BackupPageProps) =
       return;
     }
 
+    const file = pendingImportFile;
+    setPendingImportFile(undefined);
     setOperation("import");
     try {
       const response = await importBackupArchive({
-        file: pendingImportFile,
+        onUploadProgress,
+        file,
         mode: "replace",
         token: authToken,
       });
@@ -306,6 +311,7 @@ export const BackupPage = ({ authToken, isNarrow, timeZone }: BackupPageProps) =
                   {t("admin.backups.import.description")}
                 </Text>
               </VStack>
+              <UploadProgressList language={language} uploads={uploads} />
               <input
                 ref={inputRef}
                 accept=".zip,application/zip"

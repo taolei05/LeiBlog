@@ -74,6 +74,12 @@ for prefix in /api/auth /api/blog/auth; do
     [[ "$callback_headers" == *'302'* && "$callback_headers" == *'oauth_status=error'* ]]
   done
 done
+for provider in github google; do
+  start_url="$url/api/blog/auth/oauth/$provider/start"
+  [[ "$(request --no-fail --output /dev/null --write-out '%{http_code}' "$start_url")" == 405 ]]
+  [[ "$(request --no-fail --output /dev/null --write-out '%{http_code}' \
+    --header 'Content-Type: application/json' --data '{"altcha":"invalid-proof","locale":"en"}' "$start_url")" == 400 ]]
+done
 empty_count() {
   compose exec -T postgres psql -U leiblog_test -d leiblog_test_production -Atc 'SELECT (SELECT count(*) FROM users) + (SELECT count(*) FROM site_settings) + (SELECT count(*) FROM auth_provider_settings) + (SELECT count(*) FROM media_folders) + (SELECT count(*) FROM articles) + (SELECT count(*) FROM article_categories) + (SELECT count(*) FROM article_tags) + (SELECT count(*) FROM article_contributors) + (SELECT count(*) FROM comments) + (SELECT count(*) FROM navigation_groups) + (SELECT count(*) FROM navigation_items) + (SELECT count(*) FROM media_assets)'
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
+import type { UploadProgressHandler } from "../../../../shared/upload-request";
 import {
   ArrowLeft,
   Ban,
@@ -677,16 +679,19 @@ const readArticlePayload = async ({
   authToken,
   coverFile,
   form,
+  onUploadProgress,
 }: {
   authToken: string;
   coverFile?: File;
   form: ArticleFormState;
+  onUploadProgress: UploadProgressHandler;
 }): Promise<ArticleContentPayload> => {
   const coverImageUrl =
     coverFile === undefined
       ? cleanOptionalText(form.coverImageUrl)
       : (
           await uploadMediaAsset({
+            onUploadProgress,
             file: coverFile,
             fileName: coverFile.name,
             folderSlug: "article-covers",
@@ -738,16 +743,19 @@ const readContributorPayload = async ({
   authToken,
   avatarFile,
   form,
+  onUploadProgress,
 }: {
   authToken: string;
   avatarFile?: File;
   form: ContributorFormState;
+  onUploadProgress: UploadProgressHandler;
 }): Promise<ArticleContributorPayload> => {
   const avatarUrl =
     avatarFile === undefined
       ? cleanOptionalText(form.avatarUrl)
       : (
           await uploadMediaAsset({
+            onUploadProgress,
             file: avatarFile,
             fileName: avatarFile.name,
             folderSlug: "avatars",
@@ -1083,6 +1091,7 @@ export function ContentManagementPage({
 }: ContentManagementPageProps) {
   const { i18n, t } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const { uploads, onUploadProgress } = useUploadProgress();
   const unsetLabel = t("admin.contentManagement.placeholders.unset");
   const noDescriptionLabel = t("admin.contentManagement.placeholders.noDescription");
   const [activeView, setActiveView] = useState<ContentView>(initialView);
@@ -1538,6 +1547,7 @@ export function ContentManagementPage({
   const uploadArticleMdxImage = useCallback(
     async (file: File) => {
       const asset = await uploadMediaAsset({
+        onUploadProgress,
         file,
         fileName: file.name,
         folderSlug: "article-covers",
@@ -1546,7 +1556,7 @@ export function ContentManagementPage({
 
       return resolveAdminAssetUrl(asset.accessUrl);
     },
-    [authToken],
+    [authToken, onUploadProgress],
   );
 
   const saveArticle = async () => {
@@ -1562,7 +1572,12 @@ export function ContentManagementPage({
     const isUpdatingArticle = articleEditorState.mode === "edit";
     setIsSaving(true);
     try {
-      const payload = await readArticlePayload({ authToken, coverFile, form: articleForm });
+      const payload = await readArticlePayload({
+        authToken,
+        coverFile,
+        form: articleForm,
+        onUploadProgress,
+      });
       if (isUpdatingArticle) {
         await updateArticleContent({
           articleId: articleEditorState.article.id,
@@ -1700,6 +1715,7 @@ export function ContentManagementPage({
     setIsSaving(true);
     try {
       const payload = await readContributorPayload({
+        onUploadProgress,
         authToken,
         avatarFile: contributorAvatarFile,
         form: contributorForm,
@@ -2833,6 +2849,7 @@ export function ContentManagementPage({
           }
           width={720}
         >
+          <UploadProgressList language={language} uploads={uploads} />
           <Grid columns={{ minWidth: 240, repeat: "fit" }} gap={3}>
             <TextInput
               label={t("admin.contentManagement.fields.name")}
@@ -2889,6 +2906,7 @@ export function ContentManagementPage({
 
     return (
       <VStack gap={4} style={pageStyle}>
+        <UploadProgressList language={language} uploads={uploads} />
         <AdminFeedbackBanner
           banner={feedbackBanner}
           onDismiss={() => {
@@ -3103,6 +3121,7 @@ export function ContentManagementPage({
                 <MdxEditorField
                   aria-label={t("admin.contentManagement.editor.mdxZhAria")}
                   imageUploadHandler={uploadArticleMdxImage}
+                  uploads={uploads}
                   mediaLibraryFolderSlug="article-covers"
                   mediaLibraryToken={authToken}
                   onChange={(contentMdx) =>
@@ -3128,6 +3147,7 @@ export function ContentManagementPage({
                 <MdxEditorField
                   aria-label={t("admin.contentManagement.editor.mdxEnAria")}
                   imageUploadHandler={uploadArticleMdxImage}
+                  uploads={uploads}
                   mediaLibraryFolderSlug="article-covers"
                   mediaLibraryToken={authToken}
                   onChange={(contentMdxEn) =>

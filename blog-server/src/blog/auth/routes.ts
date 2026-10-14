@@ -283,12 +283,26 @@ export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
   .get("/providers", () => listPublicOAuthProviders())
   .get(
     "/oauth/:provider/start",
-    async ({ cookie, params, query }) => {
-      const provider = readAuthProvider(params.provider);
+    ({ set }) => {
+      set.headers.Allow = "POST";
+      return status(405, { message: "Complete human verification before starting OAuth." });
+    },
+  )
+  .post(
+    "/oauth/:provider/start",
+    async ({ body, cookie, params }) => {
+      const altchaResponse = await createAltchaVerificationResponse({
+        locale: body.locale,
+        payload: body.altcha,
+      });
+      if (altchaResponse !== undefined) {
+        return altchaResponse;
+      }
+
       try {
         const authorization = await createOAuthAuthorization({
           providerValue: params.provider,
-          returnTo: query.returnTo,
+          returnTo: body.returnTo,
         });
 
         cookie[oauthStateCookieName(authorization.provider)].set({
@@ -300,24 +314,18 @@ export const blogAuthRoutes = new Elysia({ prefix: "/auth" })
           value: authorization.state,
         });
 
-        return Response.redirect(authorization.authorizationUrl, 302);
+        return { ok: true, authorizationUrl: authorization.authorizationUrl };
       } catch (error) {
-        return Response.redirect(
-          createOAuthResultRedirectUrl({
-            provider,
-            reason: readOAuthErrorReason(error),
-            returnTo: query.returnTo,
-            status: "error",
-          }),
-          302,
-        );
+        return createAuthErrorResponse(error);
       }
     },
     {
       params: t.Object({
         provider: t.String({ maxLength: 20 }),
       }),
-      query: t.Object({
+      body: t.Object({
+        altcha: t.String({ minLength: 1, maxLength: 20_000 }),
+        locale: t.Optional(t.String({ maxLength: 12 })),
         returnTo: t.Optional(t.String({ maxLength: 2048 })),
       }),
     },

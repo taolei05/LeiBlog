@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
 import {
   CloudUpload,
   Copy,
@@ -570,13 +571,26 @@ type MediaPreviewProps = {
 const MediaPreview = ({ frameStyle, mediaStyle, media }: MediaPreviewProps) => {
   const { t } = useTranslation();
   const assetUrl = resolveAdminAssetUrl(media.accessUrl);
-  const resolvedFrameStyle =
-    frameStyle === undefined
-      ? previewFrameStyle
-      : {
-          ...previewFrameStyle,
-          ...frameStyle,
-        };
+  const [settledAssetUrl, setSettledAssetUrl] = useState("");
+  const resolvedFrameStyle: CSSProperties = {
+    ...previewFrameStyle,
+    ...frameStyle,
+    position: "relative",
+  };
+  const loadingSpinner =
+    settledAssetUrl === assetUrl ? null : (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "grid",
+          placeItems: "center",
+          pointerEvents: "none",
+        }}
+      >
+        <Spinner label={t("admin.mediaLibrary.loading")} size="sm" />
+      </div>
+    );
   const resolvedMediaStyle =
     mediaStyle === undefined
       ? previewImageStyle
@@ -588,9 +602,15 @@ const MediaPreview = ({ frameStyle, mediaStyle, media }: MediaPreviewProps) => {
   if (media.fileType === "image") {
     return (
       <div style={resolvedFrameStyle}>
+        {loadingSpinner}
         <img
           alt={t("admin.mediaLibrary.previewAlt", { name: media.fileName })}
           src={assetUrl}
+          onLoad={() => setSettledAssetUrl(assetUrl)}
+          onError={() => setSettledAssetUrl(assetUrl)}
+          ref={(image) => {
+            if (image?.complete) setSettledAssetUrl(assetUrl);
+          }}
           style={resolvedMediaStyle}
         />
       </div>
@@ -600,12 +620,15 @@ const MediaPreview = ({ frameStyle, mediaStyle, media }: MediaPreviewProps) => {
   if (media.fileType === "video") {
     return (
       <div style={resolvedFrameStyle}>
+        {loadingSpinner}
         <video
           controls
           muted
           playsInline
           preload="metadata"
           src={assetUrl}
+          onLoadedMetadata={() => setSettledAssetUrl(assetUrl)}
+          onError={() => setSettledAssetUrl(assetUrl)}
           style={resolvedMediaStyle}
         />
       </div>
@@ -1247,6 +1270,7 @@ const RenameMediaDialog = ({
 export function MediaLibraryPage({ authToken, isNarrow, timeZone }: MediaLibraryPageProps) {
   const { i18n, t } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const { uploads, onUploadProgress } = useUploadProgress();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [mediaData, setMediaData] = useState<MediaLibraryList>(EMPTY_MEDIA_LIBRARY_LIST);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
@@ -1621,6 +1645,7 @@ export function MediaLibraryPage({ authToken, isNarrow, timeZone }: MediaLibrary
     try {
       for (const file of files) {
         await uploadMediaAsset({
+          onUploadProgress,
           file,
           folderSlug,
           token: authToken,
@@ -1947,6 +1972,7 @@ export function MediaLibraryPage({ authToken, isNarrow, timeZone }: MediaLibrary
   return (
     <VStack gap={4} style={pageStackStyle}>
       <AdminFeedbackBanner banner={banner} onDismiss={() => setBanner(undefined)} />
+      <UploadProgressList language={language} uploads={uploads} />
 
       <input
         ref={uploadInputRef}

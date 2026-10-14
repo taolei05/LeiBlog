@@ -2,7 +2,9 @@ import "@mdxeditor/editor/style.css";
 
 import type { ChangeEvent, FormEvent } from "react";
 import { getSafeLinkUrl } from "../../../../shared/content-url";
-import { useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import { UploadProgressList } from "../../../../shared/upload-progress";
+import type { UploadProgress } from "../../../../shared/upload-request";
 import {
   Copy,
   ExternalLink,
@@ -267,12 +269,17 @@ const parseDimensionValue = (value: string): number | undefined => {
 type MdxEditorImageDialogProps = {
   mediaLibraryFolderSlug?: string;
   mediaLibraryToken?: string;
+  uploads?: readonly UploadProgress[];
 };
 
-const MdxEditorImageDialog = ({
-  mediaLibraryFolderSlug,
-  mediaLibraryToken,
-}: MdxEditorImageDialogProps) => {
+const MdxImageDialogContext = createContext<MdxEditorImageDialogProps>({});
+
+const MdxEditorImageDialog = () => {
+  const {
+    mediaLibraryFolderSlug,
+    mediaLibraryToken,
+    uploads = [],
+  } = useContext(MdxImageDialogContext);
   const [
     imageAutocompleteSuggestions,
     imageDialogState,
@@ -466,6 +473,10 @@ const MdxEditorImageDialog = ({
           </HStack>
 
           <VStack className="mdx-image-dialog__body" gap={4}>
+            <UploadProgressList
+              language={normalizeLanguage(i18n.resolvedLanguage ?? i18n.language)}
+              uploads={uploads}
+            />
             {hasUpload && (
               <div className="mdx-image-dialog__upload-panel">
                 <div className="mdx-image-dialog__upload-copy">
@@ -964,6 +975,7 @@ const MdxEditorToolbar = () => (
 );
 
 type MdxEditorFieldProps = {
+  uploads?: readonly UploadProgress[];
   "aria-label"?: string;
   className?: string;
   imageUploadHandler: ImageUploadHandler;
@@ -976,6 +988,7 @@ type MdxEditorFieldProps = {
 };
 
 export function MdxEditorField({
+  uploads,
   "aria-label": ariaLabel,
   className,
   imageUploadHandler,
@@ -996,12 +1009,6 @@ export function MdxEditorField({
   const translation = language === "zh-CN" ? mdxEditorChineseTranslation : undefined;
   const resolvedAriaLabel = ariaLabel ?? t("admin.contentManagement.editor.defaultMdxAria");
   const resolvedPlaceholder = placeholder ?? t("admin.contentManagement.placeholders.writeMdx");
-  const ImageDialog = () => (
-    <MdxEditorImageDialog
-      mediaLibraryFolderSlug={mediaLibraryFolderSlug}
-      mediaLibraryToken={mediaLibraryToken}
-    />
-  );
 
   useEffect(() => {
     if (value === lastAppliedValueRef.current) {
@@ -1013,70 +1020,72 @@ export function MdxEditorField({
   }, [value]);
 
   return (
-    <div
-      aria-disabled={readOnly}
-      aria-label={resolvedAriaLabel}
-      className={fieldClassName}
-      role="group"
-    >
-      <MDXEditor
-        className="mdx-editor-field__editor"
-        contentEditableClassName="mdx-editor-field__content"
-        key={language}
-        markdown={value}
-        onChange={(markdown) => {
-          lastAppliedValueRef.current = markdown;
-          onChange?.(markdown);
-        }}
-        placeholder={resolvedPlaceholder}
-        plugins={[
-          headingsPlugin(),
-          listsPlugin(),
-          quotePlugin(),
-          thematicBreakPlugin(),
-          linkPlugin(),
-          linkDialogPlugin({
-            LinkDialog: MdxEditorLinkDialog,
-            showLinkTitleField: true,
-          }),
-          imagePlugin({
-            disableImageResize: true,
-            ImageDialog,
-            imageUploadHandler,
-          }),
-          tablePlugin(),
-          frontmatterPlugin(),
-          codeBlockPlugin({ defaultCodeBlockLanguage: "ts" }),
-          codeMirrorPlugin({
-            autoLoadLanguageSupport: false,
-            codeBlockLanguages: {
-              bash: "Shell",
-              css: "CSS",
-              html: "HTML",
-              js: "JavaScript",
-              json: "JSON",
-              mdx: "MDX",
-              ts: "TypeScript",
-              tsx: "TSX",
-              typescript: "TypeScript",
-            },
-          }),
-          jsxPlugin({
-            allowFragment: false,
-            jsxComponentDescriptors: mdxJsxComponentDescriptors,
-          }),
-          diffSourcePlugin({ diffMarkdown: value, viewMode: "rich-text" }),
-          markdownShortcutPlugin(),
-          toolbarPlugin({
-            toolbarClassName: "mdx-editor-field__toolbar",
-            toolbarContents: MdxEditorToolbar,
-          }),
-        ]}
-        readOnly={readOnly}
-        ref={editorRef}
-        suppressHtmlProcessing
-        translation={translation}
-      />
-    </div>
+    <MdxImageDialogContext.Provider value={{ mediaLibraryFolderSlug, mediaLibraryToken, uploads }}>
+      <div
+        aria-disabled={readOnly}
+        aria-label={resolvedAriaLabel}
+        className={fieldClassName}
+        role="group"
+      >
+        <MDXEditor
+          className="mdx-editor-field__editor"
+          contentEditableClassName="mdx-editor-field__content"
+          key={language}
+          markdown={value}
+          onChange={(markdown) => {
+            lastAppliedValueRef.current = markdown;
+            onChange?.(markdown);
+          }}
+          placeholder={resolvedPlaceholder}
+          plugins={[
+            headingsPlugin(),
+            listsPlugin(),
+            quotePlugin(),
+            thematicBreakPlugin(),
+            linkPlugin(),
+            linkDialogPlugin({
+              LinkDialog: MdxEditorLinkDialog,
+              showLinkTitleField: true,
+            }),
+            imagePlugin({
+              disableImageResize: true,
+              ImageDialog: MdxEditorImageDialog,
+              imageUploadHandler,
+            }),
+            tablePlugin(),
+            frontmatterPlugin(),
+            codeBlockPlugin({ defaultCodeBlockLanguage: "ts" }),
+            codeMirrorPlugin({
+              autoLoadLanguageSupport: false,
+              codeBlockLanguages: {
+                bash: "Shell",
+                css: "CSS",
+                html: "HTML",
+                js: "JavaScript",
+                json: "JSON",
+                mdx: "MDX",
+                ts: "TypeScript",
+                tsx: "TSX",
+                typescript: "TypeScript",
+              },
+            }),
+            jsxPlugin({
+              allowFragment: false,
+              jsxComponentDescriptors: mdxJsxComponentDescriptors,
+            }),
+            diffSourcePlugin({ diffMarkdown: value, viewMode: "rich-text" }),
+            markdownShortcutPlugin(),
+            toolbarPlugin({
+              toolbarClassName: "mdx-editor-field__toolbar",
+              toolbarContents: MdxEditorToolbar,
+            }),
+          ]}
+          readOnly={readOnly}
+          ref={editorRef}
+          suppressHtmlProcessing
+          translation={translation}
+        />
+      </div>
+    </MdxImageDialogContext.Provider>
   );
 }

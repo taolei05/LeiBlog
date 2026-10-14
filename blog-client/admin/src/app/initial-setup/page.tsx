@@ -26,6 +26,7 @@ import { Moon, Sun } from "lucide-react";
 import { APP_LANGUAGES, changeAppLanguage, normalizeLanguage } from "../../../../shared/i18n";
 import type { AdminAuthState, InitialSetupPayload } from "../../../../shared/admin-api";
 import { completeInitialSetup, uploadInitialSetupMediaAsset } from "../../../../shared/admin-api";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
 import { MediaAssetField, MultiMediaAssetField } from "../components/media-asset-field";
 import { TextTokenizer } from "../components/text-tokenizer";
 import {
@@ -164,6 +165,7 @@ export function InitialSetupPage({
   const isNarrow = useMediaQuery("(max-width: 640px)");
   const { t, i18n } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
+  const { uploads, onUploadProgress } = useUploadProgress();
   const isDarkTheme = themeMode === "dark";
   const themeToggleLabel = t(isDarkTheme ? "theme.switchToLight" : "theme.switchToDark");
   const defaultTags = t("initialSetup.defaults.tags");
@@ -515,6 +517,7 @@ export function InitialSetupPage({
 
   const uploadSetupFile = async ({ file, folderSlug }: { file: File; folderSlug: string }) => {
     const uploadedAsset = await uploadInitialSetupMediaAsset({
+      onUploadProgress,
       file,
       folderSlug,
       setupToken: setupToken.trim(),
@@ -1331,40 +1334,43 @@ export function InitialSetupPage({
       }
       footer={
         <LayoutFooter>
-          <HStack gap={3} vAlign="center" wrap="wrap">
-            <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : FOOTER_ZONE_STYLE}>
+          <VStack gap={3}>
+            <UploadProgressList language={language} uploads={uploads} />
+            <HStack gap={3} vAlign="center" wrap="wrap">
+              <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : FOOTER_ZONE_STYLE}>
+                <Text type="supporting" color="secondary">
+                  {currentStep.description}
+                </Text>
+              </StackItem>
               <Text type="supporting" color="secondary">
-                {currentStep.description}
+                {step + 1} {t("common.of")} {steps.length}
               </Text>
-            </StackItem>
-            <Text type="supporting" color="secondary">
-              {step + 1} {t("common.of")} {steps.length}
-            </Text>
-            <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : FOOTER_ZONE_STYLE}>
-              <HStack gap={3} hAlign={isNarrow ? "start" : "end"} wrap="wrap">
-                <Button
-                  label={t("actions.previous")}
-                  variant="secondary"
-                  width={isNarrow ? "100%" : undefined}
-                  isDisabled={step === 0 || isSubmitting}
-                  onClick={() => setStep((value) => Math.max(0, value - 1))}
-                />
-                <Button
-                  label={
-                    isSubmitting
-                      ? t("actions.saving")
-                      : isLastStep
-                        ? t("actions.finish")
-                        : t("actions.next")
-                  }
-                  variant="primary"
-                  width={isNarrow ? "100%" : undefined}
-                  isLoading={isSubmitting}
-                  onClick={goNext}
-                />
-              </HStack>
-            </StackItem>
-          </HStack>
+              <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : FOOTER_ZONE_STYLE}>
+                <HStack gap={3} hAlign={isNarrow ? "start" : "end"} wrap="wrap">
+                  <Button
+                    label={t("actions.previous")}
+                    variant="secondary"
+                    width={isNarrow ? "100%" : undefined}
+                    isDisabled={step === 0 || isSubmitting}
+                    onClick={() => setStep((value) => Math.max(0, value - 1))}
+                  />
+                  <Button
+                    label={
+                      isSubmitting
+                        ? t("actions.saving")
+                        : isLastStep
+                          ? t("actions.finish")
+                          : t("actions.next")
+                    }
+                    variant="primary"
+                    width={isNarrow ? "100%" : undefined}
+                    isLoading={isSubmitting}
+                    onClick={goNext}
+                  />
+                </HStack>
+              </StackItem>
+            </HStack>
+          </VStack>
         </LayoutFooter>
       }
     />

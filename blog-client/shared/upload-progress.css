@@ -1,0 +1,22 @@
+.leiblog-upload-progress {
+  display: grid;
+  gap: 12px;
+  max-height: 240px;
+  min-width: 0;
+  overflow: auto;
+  padding-block: 8px;
+  width: 100%;
+}
+
+.leiblog-upload-progress__item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.leiblog-upload-progress__file {
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

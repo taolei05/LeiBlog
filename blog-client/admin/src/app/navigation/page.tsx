@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { UploadProgressList, useUploadProgress } from "../../../../shared/upload-progress";
+import { LoadingStatus } from "../../../../shared/loading-status";
 import {
   ArrowDown,
   ArrowUp,
@@ -154,6 +156,7 @@ const moveOrderedId = ({
 
 export function NavigationManagementPage({ authToken, isNarrow }: NavigationManagementPageProps) {
   const { i18n, t } = useTranslation();
+  const { uploads, onUploadProgress } = useUploadProgress();
   const [groups, setGroups] = useState<NavigationGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [groupDialog, setGroupDialog] = useState<GroupDialogState>();
@@ -409,6 +412,7 @@ export function NavigationManagementPage({ authToken, isNarrow }: NavigationMana
           ? itemForm.iconUrl.trim()
           : (
               await uploadMediaAsset({
+                onUploadProgress,
                 file: iconFile,
                 folderSlug: "website-icons",
                 token: authToken,
@@ -679,11 +683,7 @@ export function NavigationManagementPage({ authToken, isNarrow }: NavigationMana
                   />
                 </VStack>
               )}
-              {isLoading && (
-                <Text type="supporting" color="secondary">
-                  {t("admin.navigationManagement.loading")}
-                </Text>
-              )}
+              {isLoading && <LoadingStatus label={t("admin.navigationManagement.loading")} />}
             </VStack>
           </VStack>
         </Card>
@@ -860,6 +860,12 @@ export function NavigationManagementPage({ authToken, isNarrow }: NavigationMana
             columns={{ minWidth: 280, repeat: "fit" }}
             gap={3}
           >
+            <GridSpan columns="full">
+              <UploadProgressList
+                language={i18n.language.startsWith("en") ? "en" : "zh-CN"}
+                uploads={uploads}
+              />
+            </GridSpan>
             <TextInput
               label={t("admin.navigationManagement.fields.siteName")}
               onChange={(name) => setItemForm((current) => ({ ...current, name }))}

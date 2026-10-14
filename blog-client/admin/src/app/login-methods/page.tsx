@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingStatus } from "../../../../shared/loading-status";
 import { Copy, ExternalLink, Eye, GitBranch, Globe2, KeyRound, Mail, Save, X } from "lucide-react";
 
 import { Badge } from "@astryxdesign/core/Badge";
@@ -603,7 +604,7 @@ export function LoginMethodsPage({ authToken, isNarrow }: LoginMethodsPageProps)
   if (isLoading) {
     return (
       <Card>
-        <Text color="secondary">{t("admin.loginMethods.loading")}</Text>
+        <LoadingStatus label={t("admin.loginMethods.loading")} />
       </Card>
     );
   }

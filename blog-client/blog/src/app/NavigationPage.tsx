@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LoadingStatus } from "../../../shared/loading-status";
 import { ExternalLink, FolderOpen, Globe2, List, Map, SearchX } from "lucide-react";
 
 import { Badge } from "@astryxdesign/core/Badge";
@@ -345,9 +346,7 @@ export function NavigationPage({ coverUrls, fallbackCoverUrl, language }: Naviga
 
       {isLoading ? (
         <Card className="navigation-state" padding={5}>
-          <Text type="body" color="secondary">
-            {copy.loading}
-          </Text>
+          <LoadingStatus label={copy.loading} />
         </Card>
       ) : null}
 

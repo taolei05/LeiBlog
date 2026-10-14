@@ -5,6 +5,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingStatus } from "./loading-status";
 import { CheckCircle2, Image as ImageIcon, RotateCcw, UserCircle, X } from "lucide-react";
 
 import { Button } from "@astryxdesign/core/Button";
@@ -556,11 +557,9 @@ export const LocalImageEditorDialog = ({
               style={imageStyle ?? LOADING_IMAGE_STYLE}
             />
           ) : null}
-          {!isEditorReady ? (
+          {!isEditorReady && message === undefined ? (
             <div className="local-image-editor__empty">
-              <Text color="secondary" type="supporting">
-                {t("imageEditor.loading")}
-              </Text>
+              <LoadingStatus label={t("imageEditor.loading")} />
             </div>
           ) : null}
           <div className="local-image-editor__overlay">

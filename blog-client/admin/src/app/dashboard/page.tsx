@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LoadingStatus } from "../../../../shared/loading-status";
 import type { CSSProperties, ReactNode } from "react";
 import {
   Archive,
@@ -982,11 +983,7 @@ export function AdminDashboardPage({
                     timeZone={timeZone}
                   />
                 ))}
-                {isLoading && (
-                  <Text type="supporting" color="secondary">
-                    {copy.loading}
-                  </Text>
-                )}
+                {isLoading && <LoadingStatus label={copy.loading} />}
               </VStack>
             )}
           </VStack>
@@ -1013,11 +1010,7 @@ export function AdminDashboardPage({
                     timeZone={timeZone}
                   />
                 ))}
-                {isLoading && (
-                  <Text type="supporting" color="secondary">
-                    {copy.loading}
-                  </Text>
-                )}
+                {isLoading && <LoadingStatus label={copy.loading} />}
               </VStack>
             )}
           </VStack>

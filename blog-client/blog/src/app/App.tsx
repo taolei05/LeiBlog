@@ -93,7 +93,7 @@ import type {
 import {
   changeBlogUserEmail,
   changeBlogUserPassword,
-  createBlogOAuthStartUrl,
+  startBlogOAuthLogin,
   getPublicArticleCategories,
   getPublicArticles,
   getPublicArticleTags,
@@ -128,6 +128,10 @@ import {
   resolveContentAssetUrl as resolveApiAssetUrl,
 } from "../../../shared/content-url";
 import { createAuthSessionGuard } from "../../../shared/auth-session";
+import { OAuthSignInOptions } from "./oauth-sign-in-options";
+import { UploadProgressList, useUploadProgress } from "../../../shared/upload-progress";
+import { LoadingStatus } from "../../../shared/loading-status";
+import { Spinner } from "@astryxdesign/core/Spinner";
 import { NavigationPage } from "./NavigationPage";
 import { AboutAuthorPage, AboutSitePage } from "./SitePages";
 import {
@@ -469,7 +473,6 @@ type AuthCopy = {
     usernameRequired: string;
   };
   social: {
-    apple: string;
     github: string;
     google: string;
   };
@@ -964,7 +967,6 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         usernameRequired: "请输入至少 2 位用户名。",
       },
       social: {
-        apple: "Apple 登录",
         github: "GitHub 登录",
         google: "Google 登录",
       },
@@ -1266,7 +1268,6 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         usernameRequired: "Enter a username with at least 2 characters.",
       },
       social: {
-        apple: "Sign in with Apple",
         github: "Sign in with GitHub",
         google: "Sign in with Google",
       },
@@ -2104,12 +2105,6 @@ function HeaderLanguageToggle({ language, onLanguageChange }: HeaderLanguageTogg
   );
 }
 
-const AppleIcon = (props: SVGProps<SVGSVGElement>) => (
-  <svg aria-hidden="true" fill="currentColor" height={16} viewBox="0 0 24 24" width={16} {...props}>
-    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-  </svg>
-);
-
 const GoogleIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg aria-hidden="true" fill="currentColor" height={16} viewBox="0 0 24 24" width={16} {...props}>
     <path
@@ -2168,6 +2163,7 @@ type AuthNoticeBannerProps = {
 };
 
 type SiteAccountBlockProps = {
+  isCheckingAuth?: boolean;
   authState: BlogAuthState | null;
   copy: FrontCopy;
   onNavigate: (path: string) => void;
@@ -2490,6 +2486,7 @@ function AccountProfileEditor({
   user,
 }: AccountProfileEditorProps) {
   const profileCopy = copy.auth.profile;
+  const { uploads, onUploadProgress } = useUploadProgress();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [profileForm, setProfileForm] = useState<AccountProfileFormState>(() =>
     createAccountProfileFormState(user),
@@ -2639,6 +2636,7 @@ function AccountProfileEditor({
               ...profileForm,
               avatarUrl: (
                 await uploadBlogUserAvatar({
+                  onUploadProgress,
                   file: avatarFile,
                   fileName: avatarFile.name,
                 })
@@ -3063,6 +3061,7 @@ function AccountProfileEditor({
                         {profileCopy.avatarPending(avatarFile.name)}
                       </p>
                     )}
+                    <UploadProgressList language={language} uploads={uploads} />
                   </div>
                 </div>
                 <TextInput
@@ -3404,6 +3403,7 @@ function AccountProfileEditor({
 }
 
 export function SiteAccountBlock({
+  isCheckingAuth = false,
   authState,
   copy,
   onNavigate,
@@ -3412,6 +3412,14 @@ export function SiteAccountBlock({
 }: SiteAccountBlockProps) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  if (isCheckingAuth) {
+    return (
+      <div aria-busy="true" className="site-account-control">
+        <Spinner label={copy.auth.submit.working} size="sm" />
+      </div>
+    );
+  }
 
   if (authState === null) {
     return (
@@ -3584,6 +3592,7 @@ function AuthDialog({
   const actionPendingRef = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOauthProvidersLoading, setIsOauthProvidersLoading] = useState(false);
+  const [oauthPendingProvider, setOAuthPendingProvider] = useState<AuthProvider>();
   const [oauthProviders, setOauthProviders] = useState<PublicAuthProvider[]>([]);
   const [codePurposeLoading, setCodePurposeLoading] = useState<AuthDialogEmailCodePurpose | null>(
     null,
@@ -3641,6 +3650,7 @@ function AuthDialog({
 
     const loadOAuthProviders = async () => {
       setIsOauthProvidersLoading(true);
+      setOauthProviders([]);
       try {
         const providers = await getBlogOAuthProviders();
         if (isMounted) {
@@ -3719,7 +3729,7 @@ function AuthDialog({
     return oauthProviders.some((item) => item.provider === provider);
   }
 
-  function startOAuthLogin(provider: AuthProvider) {
+  async function startOAuthLogin(provider: AuthProvider) {
     if (isOauthProvidersLoading || actionPendingRef.current) {
       return;
     }
@@ -3729,12 +3739,32 @@ function AuthDialog({
       return;
     }
 
-    window.location.assign(
-      createBlogOAuthStartUrl({
-        provider,
-        returnTo: getCurrentReturnTo(),
-      }),
-    );
+    actionPendingRef.current = true;
+    setOAuthPendingProvider(provider);
+    try {
+      const result = await runWithAltcha({
+        runAction: (altcha) =>
+          startBlogOAuthLogin({
+            altcha,
+            locale: language,
+            provider,
+            returnTo: getCurrentReturnTo(),
+          }),
+        successMessage:
+          language === "en" ? "Verified. Redirecting to sign in…" : "验证成功，正在前往登录…",
+      });
+      if (result.status !== "cancelled") {
+        window.location.assign(result.value);
+      }
+    } catch (error) {
+      onNotice({
+        tone: "error",
+        text: readAuthErrorReason(error, authCopy.dialog.placeholderUnavailable),
+      });
+    } finally {
+      actionPendingRef.current = false;
+      setOAuthPendingProvider(undefined);
+    }
   }
 
   function readCodeCooldownSeconds(purpose: AuthDialogEmailCodePurpose) {
@@ -4198,6 +4228,7 @@ function AuthDialog({
 
             <Button
               icon={submitIcon}
+              isDisabled={oauthPendingProvider !== undefined || codePurposeLoading !== null}
               isLoading={isSubmitting}
               label={isSubmitting ? authCopy.submit.working : submitLabel}
               size="lg"
@@ -4206,43 +4237,25 @@ function AuthDialog({
               width="100%"
             />
 
-            {mode === "login" ? (
-              <>
-                <Divider label={authCopy.dialog.socialDivider} />
-
-                <div className="auth-social-buttons">
-                  <Button
-                    icon={<AppleIcon />}
-                    label={authCopy.social.apple}
-                    onClick={showPlaceholderStatus}
-                    size="lg"
-                    variant="secondary"
-                    width="100%"
-                  />
-                  <Button
-                    icon={<GoogleIcon />}
-                    isLoading={isOauthProvidersLoading}
-                    label={authCopy.social.google}
-                    onClick={() => {
-                      startOAuthLogin("google");
-                    }}
-                    size="lg"
-                    variant="secondary"
-                    width="100%"
-                  />
-                  <Button
-                    icon={<GitHubIcon />}
-                    isLoading={isOauthProvidersLoading}
-                    label={authCopy.social.github}
-                    onClick={() => {
-                      startOAuthLogin("github");
-                    }}
-                    size="lg"
-                    variant="secondary"
-                    width="100%"
-                  />
-                </div>
-              </>
+            {mode === "login" && isOauthProvidersLoading ? (
+              <LoadingStatus
+                label={language === "en" ? "Loading sign-in options..." : "正在加载登录方式..."}
+              />
+            ) : null}
+            {mode === "login" && !isOauthProvidersLoading ? (
+              <OAuthSignInOptions
+                dividerLabel={authCopy.dialog.socialDivider}
+                isPending={isSubmitting || codePurposeLoading !== null}
+                pendingProvider={oauthPendingProvider}
+                onSelect={(provider) => {
+                  void startOAuthLogin(provider);
+                }}
+                options={[
+                  { provider: "google", label: authCopy.social.google, icon: <GoogleIcon /> },
+                  { provider: "github", label: authCopy.social.github, icon: <GitHubIcon /> },
+                ]}
+                providers={oauthProviders}
+              />
             ) : null}
 
             <p className="auth-card__switch">
@@ -4383,6 +4396,7 @@ function MobileNavigationItems({ copy, currentPath, onItemClick }: MobileNavigat
 }
 
 type SiteHeaderProps = {
+  isCheckingAuth: boolean;
   authState: BlogAuthState | null;
   copy: FrontCopy;
   currentPath: string;
@@ -4398,6 +4412,7 @@ type SiteHeaderProps = {
 };
 
 function SiteHeader({
+  isCheckingAuth,
   authState,
   copy,
   currentPath,
@@ -4477,6 +4492,7 @@ function SiteHeader({
             />
 
             <SiteAccountBlock
+              isCheckingAuth={isCheckingAuth}
               authState={authState}
               copy={copy}
               onLogout={onLogout}
@@ -4713,6 +4729,7 @@ function useHomeHeroCarousel(coverUrls: readonly string[], intervalMs = 6500) {
 }
 
 function HomePage({ copy, language, onNavigate, siteAuthor, siteBrand, timeZone }: HomePageProps) {
+  const loadingLabel = language === "en" ? "Loading..." : "加载中...";
   const [articleLoadState, setArticleLoadState] = useState<"error" | "idle" | "loading">("loading");
   const [categoryLoadState, setCategoryLoadState] = useState<"error" | "idle" | "loading">(
     "loading",
@@ -4906,6 +4923,8 @@ function HomePage({ copy, language, onNavigate, siteAuthor, siteBrand, timeZone 
         <div className="home-content-grid">
           <div className="home-main-column">
             <ArticleSection
+              isLoading={articleLoadState === "loading"}
+              loadingLabel={loadingLabel}
               articles={pinnedArticles}
               emptyText={copy.articleSections.pinnedEmpty}
               fallbackCoverUrls={heroCoverUrls}
@@ -4916,6 +4935,8 @@ function HomePage({ copy, language, onNavigate, siteAuthor, siteBrand, timeZone 
               viewAllLabel={copy.articleSections.all}
             />
             <ArticleSection
+              isLoading={articleLoadState === "loading"}
+              loadingLabel={loadingLabel}
               articles={latestArticles}
               emptyText={copy.articleSections.latestEmpty}
               fallbackCoverUrls={heroCoverUrls}
@@ -4930,6 +4951,8 @@ function HomePage({ copy, language, onNavigate, siteAuthor, siteBrand, timeZone 
           <aside aria-label={copy.homeSidebarLabel} className="home-sidebar">
             <AuthorPanel copy={copy} siteAuthor={siteAuthor} />
             <TaxonomyPanel
+              isLoading={categoryLoadState === "loading"}
+              loadingLabel={loadingLabel}
               emptyText={copy.taxonomy.categoriesEmpty}
               icon={<FolderOpen size={18} />}
               items={categoryItems}
@@ -4937,6 +4960,8 @@ function HomePage({ copy, language, onNavigate, siteAuthor, siteBrand, timeZone 
               title={copy.taxonomy.categoriesTitle}
             />
             <TaxonomyPanel
+              isLoading={tagLoadState === "loading"}
+              loadingLabel={loadingLabel}
               emptyText={copy.taxonomy.tagsEmpty}
               icon={<Tags size={18} />}
               items={tagItems}
@@ -4952,6 +4977,8 @@ function HomePage({ copy, language, onNavigate, siteAuthor, siteBrand, timeZone 
 }
 
 type ArticleSectionProps = {
+  isLoading: boolean;
+  loadingLabel: string;
   articles: readonly Article[];
   emptyText: string;
   fallbackCoverUrls: readonly string[];
@@ -5003,6 +5030,8 @@ const getHomeArticleRowClassName = ({
 };
 
 function ArticleSection({
+  isLoading,
+  loadingLabel,
   articles,
   emptyText,
   fallbackCoverUrls,
@@ -5033,7 +5062,11 @@ function ArticleSection({
           {viewAllLabel}
         </a>
       </div>
-      {articles.length > 0 ? (
+      {isLoading ? (
+        <div className="home-empty-state">
+          <LoadingStatus label={loadingLabel} />
+        </div>
+      ) : articles.length > 0 ? (
         <div className="home-doc-list">
           {articles.map((article, index) => {
             const explicitCoverUrl = getNonEmptyText(article.coverImageUrl ?? undefined);
@@ -5189,6 +5222,8 @@ function AuthorPanel({ copy, siteAuthor }: AuthorPanelProps) {
 }
 
 type TaxonomyPanelProps = {
+  isLoading: boolean;
+  loadingLabel: string;
   emptyText: string;
   icon: ReactNode;
   items: readonly HomeTaxonomyItem[];
@@ -5198,6 +5233,8 @@ type TaxonomyPanelProps = {
 };
 
 function TaxonomyPanel({
+  isLoading,
+  loadingLabel,
   emptyText,
   icon,
   items,
@@ -5211,7 +5248,11 @@ function TaxonomyPanel({
         {icon}
         <Heading level={3}>{title}</Heading>
       </div>
-      {items.length > 0 ? (
+      {isLoading ? (
+        <div className="home-empty-state">
+          <LoadingStatus label={loadingLabel} />
+        </div>
+      ) : items.length > 0 ? (
         variant === "tag" ? (
           <div className="home-tag-cloud">
             {items.map((item) => (
@@ -5393,6 +5434,7 @@ export function App() {
   const [siteSettings, setSiteSettings] = useState<PublicSiteSettings>();
   const [themeMode, setThemeMode] = useState<AppThemeMode>(getInitialThemeMode);
   const [authState, setAuthState] = useState<BlogAuthState | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [authSessionGuard] = useState(createAuthSessionGuard);
   const logoutPendingRef = useRef(false);
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
@@ -5474,6 +5516,8 @@ export function App() {
           setAuthState(null);
           clearStoredBlogAuthState();
         }
+      } finally {
+        if (isMounted) setIsCheckingAuth(false);
       }
     };
 
@@ -5645,6 +5689,7 @@ export function App() {
           mobileNav={{ breakpoint: "md" }}
           topNav={
             <SiteHeader
+              isCheckingAuth={isCheckingAuth}
               authState={authState}
               copy={copy}
               currentPath={currentPath}
@@ -5780,17 +5825,23 @@ export function App() {
               timeZone={siteTimeZone}
             />
           ) : currentPath === "/profile" ? (
-            <AccountProfilePage
-              copy={copy}
-              language={language}
-              onNotice={showAuthNotice}
-              onOpenAuth={openAuthDialog}
-              onPasswordChanged={handlePasswordChanged}
-              onProfileUpdated={handleProfileUpdated}
-              panelMode={profilePanelMode}
-              timeZone={siteTimeZone}
-              user={authState?.user ?? null}
-            />
+            isCheckingAuth ? (
+              <main className="page-shell profile-page">
+                <LoadingStatus label={copy.auth.submit.working} />
+              </main>
+            ) : (
+              <AccountProfilePage
+                copy={copy}
+                language={language}
+                onNotice={showAuthNotice}
+                onOpenAuth={openAuthDialog}
+                onPasswordChanged={handlePasswordChanged}
+                onProfileUpdated={handleProfileUpdated}
+                panelMode={profilePanelMode}
+                timeZone={siteTimeZone}
+                user={authState?.user ?? null}
+              />
+            )
           ) : (
             <PlaceholderPage
               coverUrls={siteBrand.coverUrls}
