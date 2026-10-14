@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 const envModule = new URL("./env.ts", import.meta.url).href;
+const corsPolicyModule = new URL("./cors-policy.ts", import.meta.url).href;
 const productionEnv = {
   NODE_ENV: "production",
   JWT_SECRET: "a".repeat(40),
@@ -48,4 +49,33 @@ describe("production configuration", () => {
     expect(checkEnvironment({ SETUP_TOKEN: "change-me-now" }).exitCode).not.toBe(0);
     expect(checkEnvironment({ SETUP_TOKEN: "a".repeat(48) }).exitCode).toBe(0);
   });
+});
+
+test("development permits LAN HTTPS only on its dedicated port, without opening public origins", () => {
+  const result = Bun.spawnSync({
+    cmd: [
+      process.execPath,
+      "--no-env-file",
+      "-e",
+      `
+      const {env}=await import(${JSON.stringify(envModule)});
+      const {parseCorsOrigins,isAllowedOrigin}=await import(${JSON.stringify(corsPolicyModule)});
+      const allowedOrigins=parseCorsOrigins(env.corsOrigins);
+      const origins=["https://192.168.3.125:5175","https://10.0.0.2:5175","https://172.16.1.2:5175","https://localhost:5175","http://localhost:5174","https://example.com:5175","https://192.168.3.125:5176","https://192.168.3.125.evil.test:5175"];
+      console.log(JSON.stringify(origins.map(origin=>isAllowedOrigin({origin,allowedOrigins}))));
+    `,
+    ],
+    env: { ...productionEnv, NODE_ENV: "development", CORS_ORIGINS: undefined },
+  });
+  expect(result.exitCode).toBe(0);
+  expect(JSON.parse(result.stdout.toString())).toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+  ]);
 });

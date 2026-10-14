@@ -12,7 +12,7 @@ export const resolveApiBaseUrl = ({
   if (configuredUrl !== undefined) {
     return configuredUrl.trim().replace(/\/+$/, "");
   }
-  if (isProduction) {
+  if (isProduction || location?.protocol === "https:") {
     return "";
   }
   return `${location?.protocol ?? "http:"}//${location?.hostname ?? "127.0.0.1"}:3000`;

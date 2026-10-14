@@ -1,5 +1,18 @@
+import { X509Certificate } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { defineConfig } from "vite-plus";
-import type { Plugin } from "vite-plus";
+import type { Plugin, ProxyOptions } from "vite-plus";
+
+const httpsCert = process.env.LEIBLOG_DEV_HTTPS_CERT;
+const httpsKey = process.env.LEIBLOG_DEV_HTTPS_KEY;
+if (Boolean(httpsCert) !== Boolean(httpsKey)) {
+  throw new Error("Local HTTPS requires both LEIBLOG_DEV_HTTPS_CERT and LEIBLOG_DEV_HTTPS_KEY.");
+}
+const useHttps = Boolean(httpsCert && httpsKey);
+const caPath = join(homedir(), ".local", "share", "leiblog", "dev-https", "ca", "rootCA.pem");
 
 const ENTRY_POINTS = {
   root: "index.html",
@@ -75,12 +88,70 @@ const adminHistoryFallbackPlugin = (): Plugin => ({
   },
 });
 
+const localCertificateDownloadPlugin = (): Plugin => ({
+  name: "leiblog-local-certificate-download",
+  configureServer(server) {
+    server.middlewares.use((request, response, next) => {
+      if (
+        !["GET", "HEAD"].includes(request.method ?? "") ||
+        getPathname(request.url ?? "") !== "/__dev/leiblog-local-ca.crt"
+      ) {
+        next();
+        return;
+      }
+      try {
+        // Re-encode only the public certificate; never serve PEM contents or adjacent keys.
+        const certificate = new X509Certificate(readFileSync(caPath));
+        response.setHeader("Content-Type", "application/x-x509-ca-cert");
+        response.setHeader("Content-Disposition", 'attachment; filename="leiblog-local-ca.crt"');
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.end(request.method === "HEAD" ? undefined : certificate.raw);
+      } catch {
+        response.statusCode = 404;
+        response.end("Local development certificate is not available.");
+      }
+    });
+  },
+});
+
+const developmentApiProxy: ProxyOptions = {
+  target: "http://127.0.0.1:3000",
+  configure(proxy) {
+    proxy.on("proxyReq", (proxyRequest, request) => {
+      const ip = request.socket.remoteAddress;
+      for (const header of [
+        "X-Forwarded-For",
+        "X-Real-IP",
+        "X-Leiblog-Country-Code",
+        "CF-Connecting-IP",
+        "CF-IPCountry",
+      ]) {
+        proxyRequest.removeHeader(header);
+      }
+      if (ip !== undefined) {
+        proxyRequest.setHeader("X-Forwarded-For", ip);
+        proxyRequest.setHeader("X-Real-IP", ip);
+      }
+      proxyRequest.setHeader("X-Forwarded-Proto", useHttps ? "https" : "http");
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [adminHistoryFallbackPlugin()],
+  plugins: [adminHistoryFallbackPlugin(), localCertificateDownloadPlugin()],
   server: {
     host: "0.0.0.0",
-    port: 5174,
+    port: useHttps ? 5175 : 5174,
     strictPort: true,
+    https:
+      httpsCert && httpsKey
+        ? { cert: readFileSync(httpsCert), key: readFileSync(httpsKey) }
+        : undefined,
+    proxy: {
+      "/api": developmentApiProxy,
+      "/uploads": developmentApiProxy,
+    },
   },
   build: {
     rolldownOptions: {

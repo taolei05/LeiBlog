@@ -16,6 +16,14 @@ describe("API deployment origin", () => {
   it("honors an explicit empty same-origin configuration", () => {
     expect(resolveApiBaseUrl({ isProduction: false, configuredUrl: "" })).toBe("");
   });
+  it("uses the same-origin proxy for HTTPS development without accessing an HTTP backend", () => {
+    expect(
+      resolveApiBaseUrl({
+        isProduction: false,
+        location: { protocol: "https:", hostname: "192.168.3.125" },
+      }),
+    ).toBe("");
+  });
   it("normalizes a configured origin", () => {
     expect(
       resolveApiBaseUrl({ isProduction: true, configuredUrl: " https://api.example.com/ " }),

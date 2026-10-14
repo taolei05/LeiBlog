@@ -62,9 +62,13 @@ ensure_docker_running() {
 
 ensure_docker_running
 
-echo "Starting LeiBlog backend..."
-(cd "$ROOT_DIR/blog-server" && bun run dev) &
-PIDS+=("$!")
+if [[ "${LEIBLOG_REUSE_BACKEND:-0}" == 1 ]] && bun -e 'const r=await fetch("http://127.0.0.1:3000/api/health",{signal:AbortSignal.timeout(2000)});const b=await r.json();if(!r.ok||b.ok!==true||b.services?.postgres!=="ok"||b.services?.redis!=="ok")process.exit(1);' >/dev/null 2>&1; then
+  echo "Reusing the healthy local LeiBlog backend on port 3000."
+else
+  echo "Starting LeiBlog backend..."
+  (cd "$ROOT_DIR/blog-server" && bun run dev) &
+  PIDS+=("$!")
+fi
 
 echo "Starting LeiBlog frontend..."
 (cd "$ROOT_DIR/blog-client" && bun run dev) &
@@ -73,7 +77,11 @@ PIDS+=("$!")
 echo
 echo "LeiBlog development servers are starting."
 echo "Backend:  http://localhost:3000/"
-echo "Frontend: check the Vite+ output below, usually http://localhost:5173/ or http://localhost:5174/"
+if [[ -n "${LEIBLOG_DEV_HTTPS_CERT:-}" ]]; then
+  echo "Frontend: https://${LEIBLOG_DEV_HOST:-localhost}:5175/"
+else
+  echo "Frontend: http://localhost:5174/"
+fi
 echo "Press Ctrl+C to stop both."
 echo
 
