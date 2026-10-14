@@ -69,6 +69,7 @@ import {
 } from "../../../../shared/altcha-challenge";
 import { getAltchaSuccessMessage } from "../../../../shared/altcha-feedback";
 import { MediaAssetField, MultiMediaAssetField } from "../components/media-asset-field";
+import { TextTokenizer } from "../components/text-tokenizer";
 import {
   createTimeZoneOptions,
   formatCurrentMinuteInTimeZone,
@@ -101,7 +102,7 @@ type SiteSettingsFormState = {
   seoTitleEn: string;
   seoDescriptionZh: string;
   seoDescriptionEn: string;
-  seoKeywords: string;
+  seoKeywords: string[];
   copyright: string;
   commentsEnabled: boolean;
   resendDomain: string;
@@ -140,7 +141,6 @@ type SiteSettingsTextField =
   | "seoTitleEn"
   | "seoDescriptionZh"
   | "seoDescriptionEn"
-  | "seoKeywords"
   | "copyright"
   | "resendDomain"
   | "resendApiKey"
@@ -382,7 +382,7 @@ const createFormState = (settings: SiteSettings): SiteSettingsFormState => {
     seoTitleEn: localizations.en.seoTitle,
     seoDescriptionZh: localizations.zhCN.seoDescription,
     seoDescriptionEn: localizations.en.seoDescription,
-    seoKeywords: settings.basics.seoKeywords.join(", "),
+    seoKeywords: [...settings.basics.seoKeywords],
     copyright: settings.basics.copyright,
     commentsEnabled: settings.basics.commentsEnabled,
     resendDomain: settings.basics.resendDomain,
@@ -839,7 +839,6 @@ export function SiteSettingsPage({
   }, [revealCodeSendCooldownSeconds]);
 
   const coverUrlValues = useMemo(() => splitValues(form.coverUrls), [form.coverUrls]);
-  const keywordValues = useMemo(() => splitValues(form.seoKeywords), [form.seoKeywords]);
   const timeZoneOptions = useMemo(
     () => createTimeZoneOptions({ selectedTimeZone: form.timeZone }),
     [form.timeZone],
@@ -1159,7 +1158,7 @@ export function SiteSettingsPage({
       timeZone: normalizeTimeZone(targetForm.timeZone),
     },
     basics: {
-      seoKeywords: splitValues(targetForm.seoKeywords),
+      seoKeywords: targetForm.seoKeywords,
       copyright: targetForm.copyright.trim(),
       commentsEnabled: targetForm.commentsEnabled,
       resendDomain: targetForm.resendDomain.trim(),
@@ -1630,19 +1629,17 @@ export function SiteSettingsPage({
                         placeholder={t("admin.siteSettings.placeholders.seoDescriptionEn")}
                       />
                     </Grid>
-                    <TextInput
+                    <TextTokenizer
                       label={t("initialSetup.basics.seoKeywords")}
                       value={form.seoKeywords}
-                      onChange={(value) => updateTextField("seoKeywords", value)}
+                      onChange={(values) =>
+                        setForm((current) => ({ ...current, seoKeywords: values }))
+                      }
+                      createLabel={(value) => t("initialSetup.createToken", { value })}
+                      placeholder={t("initialSetup.basics.seoKeywordsPlaceholder")}
                       description={t("initialSetup.basics.seoKeywordsDescription")}
+                      isDisabled={isLoading || isSaving}
                     />
-                    {keywordValues.length > 0 && (
-                      <HStack gap={2} wrap="wrap">
-                        {keywordValues.map((keyword) => (
-                          <Badge key={keyword} variant="neutral" label={keyword} />
-                        ))}
-                      </HStack>
-                    )}
                     <TextInput
                       label={t("initialSetup.basics.copyright")}
                       value={form.copyright}

@@ -27,6 +27,7 @@ import { APP_LANGUAGES, changeAppLanguage, normalizeLanguage } from "../../../..
 import type { AdminAuthState, InitialSetupPayload } from "../../../../shared/admin-api";
 import { completeInitialSetup, uploadInitialSetupMediaAsset } from "../../../../shared/admin-api";
 import { MediaAssetField, MultiMediaAssetField } from "../components/media-asset-field";
+import { TextTokenizer } from "../components/text-tokenizer";
 import {
   createTimeZoneOptions,
   formatCurrentMinuteInTimeZone,
@@ -197,7 +198,6 @@ export function InitialSetupPage({
     email: useRef<HTMLInputElement>(null),
     avatarUrl: useRef<HTMLInputElement>(null),
     bio: useRef<HTMLTextAreaElement>(null),
-    tags: useRef<HTMLInputElement>(null),
     blogUrl: useRef<HTMLInputElement>(null),
     siteName: useRef<HTMLInputElement>(null),
     foundedAt: useRef<HTMLInputElement>(null),
@@ -209,7 +209,6 @@ export function InitialSetupPage({
     faviconUrl: useRef<HTMLInputElement>(null),
     seoTitle: useRef<HTMLInputElement>(null),
     seoDescription: useRef<HTMLTextAreaElement>(null),
-    seoKeywords: useRef<HTMLInputElement>(null),
     copyright: useRef<HTMLInputElement>(null),
     resendDomain: useRef<HTMLInputElement>(null),
     resendApiKey: useRef<HTMLInputElement>(null),
@@ -228,7 +227,7 @@ export function InitialSetupPage({
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarFile, setAvatarFile] = useState<File>();
   const [bio, setBio] = useState("");
-  const [tags, setTags] = useState(defaultTags);
+  const [tagValues, setTags] = useState(() => splitValues(defaultTags));
   const [hasCustomizedTags, setHasCustomizedTags] = useState(false);
   const [commentEmailNotifications, setCommentEmailNotifications] = useState(false);
   const [newPostEmailNotifications, setNewPostEmailNotifications] = useState(false);
@@ -253,7 +252,7 @@ export function InitialSetupPage({
 
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
-  const [seoKeywords, setSeoKeywords] = useState("");
+  const [keywordValues, setSeoKeywords] = useState<string[]>([]);
   const [copyright, setCopyright] = useState("");
   const [commentsEnabled, setCommentsEnabled] = useState(true);
   const [resendDomain, setResendDomain] = useState("");
@@ -268,13 +267,11 @@ export function InitialSetupPage({
 
   useEffect(() => {
     if (!hasCustomizedTags) {
-      setTags(defaultTags);
+      setTags(splitValues(defaultTags));
     }
   }, [defaultTags, hasCustomizedTags]);
 
-  const tagValues = useMemo(() => splitValues(tags), [tags]);
   const coverUrlValues = useMemo(() => splitValues(coverUrls), [coverUrls]);
-  const keywordValues = useMemo(() => splitValues(seoKeywords), [seoKeywords]);
   const timeZoneOptions = useMemo(
     () => createTimeZoneOptions({ selectedTimeZone: timeZone }),
     [timeZone],
@@ -292,9 +289,9 @@ export function InitialSetupPage({
     );
   };
 
-  const updateTags = (value: string) => {
+  const updateTags = (values: string[]) => {
     setHasCustomizedTags(true);
-    setTags(value);
+    setTags(values);
   };
 
   const errorsByStep = useMemo<Array<ErrorMap>>(() => {
@@ -413,7 +410,7 @@ export function InitialSetupPage({
     coverUrlValues,
     seoTitle,
     seoDescription,
-    seoKeywords,
+    keywordValues,
     copyright,
     resendDomain,
     resendApiKey,
@@ -717,23 +714,23 @@ export function InitialSetupPage({
                   </Text>
                 </VStack>
                 <FormLayout defaultOptionality="optional">
-                  <Grid columns={{ minWidth: 260 }} gap={3}>
-                    {requiresSetupToken ? (
-                      <TextInput
-                        label={t("initialSetup.admin.setupToken")}
-                        ref={fieldRefs.setupToken}
-                        isRequired
-                        type="password"
-                        value={setupToken}
-                        onChange={setSetupToken}
-                        placeholder={t("initialSetup.admin.setupTokenPlaceholder")}
-                        status={
-                          currentErrors.setupToken
-                            ? { type: "error", message: currentErrors.setupToken }
-                            : undefined
-                        }
-                      />
-                    ) : null}
+                  {requiresSetupToken ? (
+                    <TextInput
+                      label={t("initialSetup.admin.setupToken")}
+                      ref={fieldRefs.setupToken}
+                      isRequired
+                      type="password"
+                      value={setupToken}
+                      onChange={setSetupToken}
+                      placeholder={t("initialSetup.admin.setupTokenPlaceholder")}
+                      status={
+                        currentErrors.setupToken
+                          ? { type: "error", message: currentErrors.setupToken }
+                          : undefined
+                      }
+                    />
+                  ) : null}
+                  <Grid columns={isNarrow ? 1 : 4} gap={3} align="start">
                     <TextInput
                       label={t("initialSetup.admin.name")}
                       ref={fieldRefs.adminName}
@@ -817,11 +814,12 @@ export function InitialSetupPage({
                       currentErrors.bio ? { type: "error", message: currentErrors.bio } : undefined
                     }
                   />
-                  <TextInput
+                  <TextTokenizer
                     label={t("initialSetup.admin.tags")}
-                    ref={fieldRefs.tags}
-                    value={tags}
+                    value={tagValues}
                     onChange={updateTags}
+                    createLabel={(value) => t("initialSetup.createToken", { value })}
+                    placeholder={t("admin.settings.tagsPlaceholder")}
                     description={t("initialSetup.admin.tagsDescription")}
                     status={
                       currentErrors.tags
@@ -829,13 +827,6 @@ export function InitialSetupPage({
                         : undefined
                     }
                   />
-                  {tagValues.length > 0 && (
-                    <HStack gap={2} wrap="wrap">
-                      {tagValues.map((tag) => (
-                        <Badge key={tag} variant="neutral" label={tag} />
-                      ))}
-                    </HStack>
-                  )}
                   <Grid columns={{ minWidth: 260 }} gap={3}>
                     <Switch
                       label={t("initialSetup.admin.commentEmailNotifications")}
@@ -926,7 +917,7 @@ export function InitialSetupPage({
                   </Text>
                 </VStack>
                 <FormLayout defaultOptionality="optional">
-                  <Grid columns={{ minWidth: 260 }} gap={3}>
+                  <Grid columns={isNarrow ? 1 : 3} gap={3} align="start">
                     <TextInput
                       label={t("initialSetup.site.siteName")}
                       ref={fieldRefs.siteName}
@@ -939,55 +930,57 @@ export function InitialSetupPage({
                           : undefined
                       }
                     />
-                    <HStack gap={2} vAlign="end" wrap="wrap">
-                      <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : undefined}>
-                        <TextInput
-                          label={t("initialSetup.site.foundedAt")}
-                          ref={fieldRefs.foundedAt}
-                          value={foundedAt}
-                          onChange={setFoundedAt}
-                          placeholder={t("initialSetup.site.foundedAtPlaceholder")}
-                          status={
-                            currentErrors.foundedAt
-                              ? { type: "error", message: currentErrors.foundedAt }
-                              : undefined
-                          }
-                        />
-                      </StackItem>
-                      <Button
-                        label={t("actions.now")}
-                        variant="secondary"
-                        width={isNarrow ? "100%" : undefined}
-                        onClick={() => setFoundedAt(formatCurrentMinuteInTimeZone(timeZone))}
+                    <VStack gap={2}>
+                      <TextInput
+                        label={t("initialSetup.site.foundedAt")}
+                        ref={fieldRefs.foundedAt}
+                        value={foundedAt}
+                        onChange={setFoundedAt}
+                        placeholder={t("initialSetup.site.foundedAtPlaceholder")}
+                        status={
+                          currentErrors.foundedAt
+                            ? { type: "error", message: currentErrors.foundedAt }
+                            : undefined
+                        }
                       />
-                    </HStack>
-                    <HStack gap={2} vAlign="end" wrap="wrap">
-                      <StackItem size="fill" style={isNarrow ? MOBILE_FULL_WIDTH_STYLE : undefined}>
-                        <Selector
-                          label={t("initialSetup.site.timeZone")}
-                          options={timeZoneOptions}
-                          value={timeZone}
-                          onChange={setTimeZone}
-                          hasSearch
-                          searchPlaceholder={t("initialSetup.site.timeZoneSearch")}
-                          description={t("initialSetup.site.timeZoneDescription", {
-                            offset: formatTimeZoneOffset({ timeZone }),
-                          })}
-                          status={
-                            currentErrors.timeZone
-                              ? { type: "error", message: currentErrors.timeZone }
-                              : undefined
-                          }
+                      <HStack>
+                        <Button
+                          label={t("actions.now")}
+                          variant="secondary"
+                          width={isNarrow ? "100%" : undefined}
+                          onClick={() => setFoundedAt(formatCurrentMinuteInTimeZone(timeZone))}
                         />
-                      </StackItem>
-                      <Button
-                        label={t("initialSetup.site.useSystemTimeZone")}
-                        variant="secondary"
-                        width={isNarrow ? "100%" : undefined}
-                        onClick={() => setTimeZone(getSystemTimeZone())}
+                      </HStack>
+                    </VStack>
+                    <VStack gap={2}>
+                      <Selector
+                        label={t("initialSetup.site.timeZone")}
+                        options={timeZoneOptions}
+                        value={timeZone}
+                        onChange={setTimeZone}
+                        hasSearch
+                        searchPlaceholder={t("initialSetup.site.timeZoneSearch")}
+                        status={
+                          currentErrors.timeZone
+                            ? { type: "error", message: currentErrors.timeZone }
+                            : undefined
+                        }
                       />
-                    </HStack>
+                      <HStack>
+                        <Button
+                          label={t("initialSetup.site.useSystemTimeZone")}
+                          variant="secondary"
+                          width={isNarrow ? "100%" : undefined}
+                          onClick={() => setTimeZone(getSystemTimeZone())}
+                        />
+                      </HStack>
+                    </VStack>
                   </Grid>
+                  <Text type="supporting" color="secondary">
+                    {t("initialSetup.site.timeZoneDescription", {
+                      offset: formatTimeZoneOffset({ timeZone }),
+                    })}
+                  </Text>
                   <TextArea
                     label={t("initialSetup.site.descriptionLabel")}
                     ref={fieldRefs.siteDescription}
@@ -1119,11 +1112,12 @@ export function InitialSetupPage({
                         : undefined
                     }
                   />
-                  <TextInput
+                  <TextTokenizer
                     label={t("initialSetup.basics.seoKeywords")}
-                    ref={fieldRefs.seoKeywords}
-                    value={seoKeywords}
+                    value={keywordValues}
                     onChange={setSeoKeywords}
+                    createLabel={(value) => t("initialSetup.createToken", { value })}
+                    placeholder={t("initialSetup.basics.seoKeywordsPlaceholder")}
                     description={t("initialSetup.basics.seoKeywordsDescription")}
                     status={
                       currentErrors.seoKeywords
@@ -1131,13 +1125,6 @@ export function InitialSetupPage({
                         : undefined
                     }
                   />
-                  {keywordValues.length > 0 && (
-                    <HStack gap={2} wrap="wrap">
-                      {keywordValues.map((keyword) => (
-                        <Badge key={keyword} variant="neutral" label={keyword} />
-                      ))}
-                    </HStack>
-                  )}
                   <TextInput
                     label={t("initialSetup.basics.copyright")}
                     ref={fieldRefs.copyright}

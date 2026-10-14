@@ -174,9 +174,9 @@ const resources = {
           tagsEn: "英文标签",
           tagsPlaceholder: "输入标签...",
           tagsEnPlaceholder: "Enter English tags...",
-          tagsDescription: "输入标签后创建，可自定义，例如：管理员、作者、小可爱。",
-          tagsZhDescription: "输入中文标签后创建，可自定义，例如：管理员、作者、小可爱。",
-          tagsEnDescription: "输入英文标签后创建，可自定义，例如：Admin、Author、Cutie。",
+          tagsDescription: "输入标签后创建，可自定义，例如：管理员、作者。",
+          tagsZhDescription: "输入中文标签后创建，可自定义，例如：管理员、作者。",
+          tagsEnDescription: "输入英文标签后创建，可自定义，例如：Admin、Author。",
           createTag: "创建标签「{{tag}}」",
           blogUrl: "博客链接",
           socialLinks: "社交链接",
@@ -1249,11 +1249,12 @@ const resources = {
         title: "首次配置",
         intro: "先把后台需要的站点、管理员、服务密钥和备案信息保存到后端。",
         progressLabel: "首次配置进度",
+        createToken: "创建「{{value}}」",
         submit: {
           failed: "配置保存失败，请稍后重试。",
         },
         defaults: {
-          tags: "管理员, 作者, 小可爱",
+          tags: "管理员, 作者",
         },
         steps: {
           admin: {
@@ -1294,7 +1295,7 @@ const resources = {
           bio: "个人描述/签名",
           bioPlaceholder: "写代码、做产品，也记录一些真正有用的小事。",
           tags: "标签",
-          tagsDescription: "用逗号分隔，可自定义，例如：管理员、作者、小可爱。",
+          tagsDescription: "输入标签后创建，可自定义，例如：管理员、作者。",
           commentEmailNotifications: "评论邮件通知",
           commentEmailNotificationsDescription: "有新评论时向管理员邮箱发送提醒。",
           newPostEmailNotifications: "新文章邮箱通知",
@@ -1342,7 +1343,8 @@ const resources = {
           seoDescription: "SEO 描述",
           seoDescriptionPlaceholder: "一份关于软件开发、产品判断和长期写作的个人博客。",
           seoKeywords: "SEO 关键词",
-          seoKeywordsDescription: "用逗号分隔，例如：Bun, ElysiaJS, React, 产品",
+          seoKeywordsPlaceholder: "输入关键词...",
+          seoKeywordsDescription: "输入关键词后创建，例如：Bun、ElysiaJS、React、产品。",
           copyright: "版权信息",
           copyrightPlaceholder: "Copyright © 2026 LeiBlog. All rights reserved.",
           comments: "评论",
@@ -1547,12 +1549,11 @@ const resources = {
           tagsEn: "English tags",
           tagsPlaceholder: "Enter tags...",
           tagsEnPlaceholder: "Enter English tags...",
-          tagsDescription:
-            "Type a tag and create it. Customize them, for example: Admin, Author, Cutie.",
+          tagsDescription: "Type a tag and create it. Customize them, for example: Admin, Author.",
           tagsZhDescription:
-            "Type a Chinese tag and create it. Customize them, for example: 管理员, 作者, 小可爱.",
+            "Type a Chinese tag and create it. Customize them, for example: 管理员, 作者.",
           tagsEnDescription:
-            "Type an English tag and create it. Customize them, for example: Admin, Author, Cutie.",
+            "Type an English tag and create it. Customize them, for example: Admin, Author.",
           createTag: 'Create tag "{{tag}}"',
           blogUrl: "Blog URL",
           socialLinks: "Social links",
@@ -2654,11 +2655,12 @@ const resources = {
         title: "First setup",
         intro: "Save the site, administrator, service keys, and filing records to the backend.",
         progressLabel: "Setup progress",
+        createToken: 'Create "{{value}}"',
         submit: {
           failed: "Setup could not be saved. Please try again.",
         },
         defaults: {
-          tags: "Admin, Author, Cutie",
+          tags: "Admin, Author",
         },
         steps: {
           admin: {
@@ -2699,8 +2701,7 @@ const resources = {
           bio: "Bio/signature",
           bioPlaceholder: "Building software, shaping products, and saving useful notes.",
           tags: "Tags",
-          tagsDescription:
-            "Separate with commas. Customize them, for example: Admin, Author, Cutie.",
+          tagsDescription: "Type a tag and create it. Customize them, for example: Admin, Author.",
           commentEmailNotifications: "Comment email notifications",
           commentEmailNotificationsDescription:
             "Send an email to the administrator when a new comment arrives.",
@@ -2753,8 +2754,9 @@ const resources = {
           seoDescriptionPlaceholder:
             "A personal blog about software development, product judgment, and long-term writing.",
           seoKeywords: "SEO keywords",
+          seoKeywordsPlaceholder: "Enter keywords...",
           seoKeywordsDescription:
-            "Separate with commas, for example: Bun, ElysiaJS, React, Product",
+            "Type a keyword and create it, for example: Bun, ElysiaJS, React, Product.",
           copyright: "Copyright",
           copyrightPlaceholder: "Copyright © 2026 LeiBlog. All rights reserved.",
           comments: "Comments",
