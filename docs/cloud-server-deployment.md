@@ -107,6 +107,7 @@ sudo leiblog uninstall --purge
 - 静态 HTML 禁缓存并配置 CSP、HSTS、防嵌入和 no-sniff；带 hash 的静态资源长期缓存。`/uploads` 继续由 API 返回独立的 sandbox 策略。
 - Caddy 已按 [Cloudflare 官方网段](https://www.cloudflare.com/ips/) 配置 `trusted_proxies`、`trusted_proxies_strict`，优先读取可信代理的 `CF-Connecting-IP`。API 仍只信任 Caddy 的确切内网 IP；直连源站提供的访客 IP 和国家请求头不会被采信。Cloudflare 使用 Full (strict)，不要使用 Flexible。官方网段变更时同步维护 `blog-client/Caddyfile`。参考 [Caddy 代理文档](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)。
 - 登录地点优先使用后台配置的 IPGeolocation 服务，显示国家、省份和城市，并合并重复名称；未配置或查询失败时，使用可信 Cloudflare 提供的国家信息（需启用 Cloudflare IP Geolocation）。地点和翻译服务失败不会阻断登录。地点仅为 IP 归属地估算，不代表精确物理位置；历史记录不会被重新推断或覆盖，重新登录后才会记录新的真实 IP 和地点。
+- 登录和评论的地点、设备以 JSONB 对象写入，不要先 `JSON.stringify` 再交给数据库驱动编码。读取兼容早期保存成 JSON 字符串的记录及驱动转换后的驼峰字段名；已有地点无需重新查询或改写历史 IP，更新后刷新即可恢复显示。安全集成测试使用真实 PostgreSQL 检查写入类型及读取结果。
 - 启动依赖使用健康检查与 `service_healthy`，不是只判断容器存在。参考 [Docker Compose 启动顺序](https://docs.docker.com/compose/how-tos/startup-order)。
 - 验收首页、后台刷新、登录、ALTCHA、注册/验证码、邮件投递、评论、图片上传、图片预览、OAuth 回跳和备份恢复。观察磁盘、内存、API 错误和备份是否可恢复。
 - 本次本地验证不替代实际公网证书签发、DNS、CDN、浏览器和外部邮件/OAuth 服务验收。

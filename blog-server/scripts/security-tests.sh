@@ -21,7 +21,7 @@ test_pg_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports 
 test_redis_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "6379/tcp") 0).HostPort}}' "$test_redis_container")"
 
 test_services_ready=false
-for attempt in {1..30}; do
+for ((attempt = 0; attempt < 30; attempt++)); do
   if docker exec "$test_pg_container" pg_isready -h 127.0.0.1 -U leiblog_test -d leiblog_test_security >/dev/null 2>&1 &&
     docker exec "$test_redis_container" redis-cli ping >/dev/null 2>&1; then
     test_services_ready=true
@@ -38,6 +38,7 @@ cd "$server_dir"
 export NODE_ENV=test
 export AUTH_TEST_DATABASE_URL="postgres://leiblog_test:test-only-password@127.0.0.1:$test_pg_port/leiblog_test_security"
 export AUTH_TEST_REDIS_URL="redis://127.0.0.1:$test_redis_port"
+bun test tests/login-metadata.integration.test.ts
 bun test tests/auth-security.integration.test.ts
 bun test tests/comment-settings.integration.test.ts
 bun test tests/email-notifications.integration.test.ts

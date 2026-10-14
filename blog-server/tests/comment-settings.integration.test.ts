@@ -161,4 +161,24 @@ suite("comment entry settings with isolated PostgreSQL", () => {
     const [count] = await sql`SELECT count(*)::int AS total FROM media_assets`;
     expect(count.total).toBe(0);
   });
+
+  test("article and guestbook location metadata survives a real database round-trip", async () => {
+    const locationMeta = {
+      ip: "203.0.113.9",
+      countryCode: "CN",
+      userAgent: "comment-test-browser",
+    };
+    const countryName = new Intl.DisplayNames(["zh-CN"], { type: "region" }).of("CN") ?? null;
+    for (const target of ["article", "guestbook"] as const) {
+      const parameters = { input: { content: "Location regression" }, meta: locationMeta, user };
+      const result =
+        target === "article"
+          ? await comments.createPublicComment({ ...parameters, articleSlug: slug })
+          : await comments.createPublicGuestbookComment(parameters);
+      expect(result.item.location).toBe(countryName);
+      const [stored] =
+        await sql`SELECT jsonb_typeof(comment_location) AS location_type, jsonb_typeof(comment_device) AS device_type FROM comments WHERE id = ${result.item.id}`;
+      expect(stored).toEqual({ locationType: "object", deviceType: "object" });
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import type { Sql, TransactionSql } from "postgres";
+import type { JSONValue, Sql, TransactionSql } from "postgres";
 
 import { getSql } from "./db/postgres";
 import { env } from "./env";
@@ -101,6 +101,24 @@ const toIsoString = (value: Date | string | null) => {
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const readMetadataRecord = (value: unknown) => {
+  if (isObjectRecord(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  // Earlier versions stored JSON text inside JSONB; decode that one extra layer on read.
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isObjectRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 const readJsonText = (value: unknown, key: string) => {
   if (!isObjectRecord(value)) {
     return null;
@@ -123,11 +141,16 @@ const BROWSER_PATTERNS: readonly UserAgentMatch[] = [
 ];
 
 const readUserAgentText = (value: unknown) => {
+  const record = readMetadataRecord(value);
+  if (record !== null) {
+    return readJsonText(record, "userAgent");
+  }
+
   if (typeof value === "string" && value.trim().length > 0) {
     return value.trim();
   }
 
-  return readJsonText(value, "userAgent");
+  return null;
 };
 
 const getMajorVersion = (version: string | undefined) => version?.split(".")[0];
@@ -186,17 +209,24 @@ export const describeDevice = (value: unknown) => {
 
 const countryNames = new Intl.DisplayNames(["zh-CN"], { type: "region", fallback: "none" });
 
-export const describeLocation = (value: unknown) => {
+export const describeLocation = (input: unknown) => {
+  const value = readMetadataRecord(input);
   const location = readJsonText(value, "location");
   if (location !== null) {
     return location;
   }
 
   const city = readJsonText(value, "city");
-  const province = readJsonText(value, "state_prov") ?? readJsonText(value, "region");
-  const countryCode = normalizeCountryCode(readJsonText(value, "country_code2") ?? undefined);
+  const province =
+    readJsonText(value, "state_prov") ??
+    readJsonText(value, "stateProv") ??
+    readJsonText(value, "region");
+  const countryCode = normalizeCountryCode(
+    readJsonText(value, "country_code2") ?? readJsonText(value, "countryCode2") ?? undefined,
+  );
   const country =
     readJsonText(value, "country_name") ??
+    readJsonText(value, "countryName") ??
     readJsonText(value, "country") ??
     (countryCode === undefined ? null : (countryNames.of(countryCode) ?? null));
   const parts = [country, province, city].filter(
@@ -330,8 +360,8 @@ export const recordLoginAttempt = async ({
   const timeZoneOffsetMinutes = getTimeZoneOffsetMinutes({ date: now, timeZone });
   const location = success ? await resolveLoginLocation({ meta, sql }) : null;
   const device = { userAgent: meta.userAgent };
-  const locationJson = location === null ? null : JSON.stringify(location);
-  const deviceJson = JSON.stringify(device);
+  const locationJson = location === null ? null : sql.json(location as JSONValue);
+  const deviceJson = sql.json(device);
 
   await sql`
     INSERT INTO login_audit_logs (

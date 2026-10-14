@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { Sql } from "postgres";
 
 import { env } from "./env";
-import { describeLocation, resolveLoginLocation } from "./login-metadata";
+import { describeDevice, describeLocation, resolveLoginLocation } from "./login-metadata";
 import { encryptSecret } from "./security/encryption";
 
 const noSettingsSql = (async () => []) as unknown as Sql;
@@ -15,6 +15,30 @@ afterEach(() => {
 });
 
 describe("login location", () => {
+  test("reads existing JSON-encoded metadata as well as structured objects", () => {
+    const location = { country_name: "中国", state_prov: "山东省", city: "济南市" };
+    expect(describeLocation(JSON.stringify(location))).toBe("中国 山东省 济南市");
+    expect(describeLocation(JSON.stringify({ location: "已保存的地点" }))).toBe("已保存的地点");
+    expect(describeLocation(JSON.stringify({ country_code2: "CN" }))).toBe(countryName);
+    const device = { userAgent: "unrecognized-test-browser" };
+    expect(describeDevice(JSON.stringify(device))).toBe(device.userAgent);
+    expect(describeDevice(JSON.stringify({ userAgent: null }))).toBeNull();
+    expect(describeDevice("unrecognized-test-browser")).toBe("unrecognized-test-browser");
+  });
+
+  test("ignores malformed or non-object stored location values", () => {
+    for (const value of ["{invalid", "null", "[]", '"text"', "42", "", [], 42, null]) {
+      expect(describeLocation(value)).toBeNull();
+    }
+  });
+
+  test("accepts database camelCase JSON keys and original provider keys", () => {
+    expect(describeLocation({ countryCode2: "CN" })).toBe(countryName);
+    expect(describeLocation({ countryName: "中国", stateProv: "山东省", city: "济南市" })).toBe(
+      "中国 山东省 济南市",
+    );
+  });
+
   test("includes province and city without repeating identical names", () => {
     expect(describeLocation({ country_name: "中国", state_prov: "山东省", city: "济南市" })).toBe(
       "中国 山东省 济南市",

@@ -1,4 +1,4 @@
-import type { Sql, TransactionSql } from "postgres";
+import type { JSONValue, Sql, TransactionSql } from "postgres";
 
 import type { BlogUserProfile } from "../auth/service";
 import { getSql } from "../../shared/db/postgres";
@@ -484,8 +484,8 @@ export const createPublicComment = async ({
         ${parentId},
         ${content},
         ${meta.ip},
-        ${JSON.stringify(location)}::jsonb,
-        ${JSON.stringify(device)}::jsonb
+        ${location === null ? null : transaction.json(location as JSONValue)},
+        ${device === null ? null : transaction.json(device)}
       )
       RETURNING id
     `;
@@ -550,8 +550,8 @@ export const createPublicGuestbookComment = async ({
         ${parentId},
         ${content},
         ${meta.ip},
-        ${JSON.stringify(location)}::jsonb,
-        ${JSON.stringify(device)}::jsonb
+        ${location === null ? null : transaction.json(location as JSONValue)},
+        ${device === null ? null : transaction.json(device)}
       )
       RETURNING id
     `;
