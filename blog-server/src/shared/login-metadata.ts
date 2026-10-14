@@ -4,7 +4,7 @@ import { getSql } from "./db/postgres";
 import { env } from "./env";
 import { translateTexts } from "./profile-tags";
 import type { RequestMeta } from "./request-meta";
-import { isPrivateIp } from "./request-meta";
+import { isPrivateIp, normalizeCountryCode } from "./request-meta";
 import { decryptSecret } from "./security/encryption";
 import { getTimeZoneOffsetMinutes, normalizeTimeZone, readSiteTimeZone } from "./time-zone";
 
@@ -184,6 +184,8 @@ export const describeDevice = (value: unknown) => {
   return parts.length > 0 ? parts.join(" / ") : userAgent.slice(0, 160);
 };
 
+const countryNames = new Intl.DisplayNames(["zh-CN"], { type: "region", fallback: "none" });
+
 export const describeLocation = (value: unknown) => {
   const location = readJsonText(value, "location");
   if (location !== null) {
@@ -191,8 +193,17 @@ export const describeLocation = (value: unknown) => {
   }
 
   const city = readJsonText(value, "city");
-  const country = readJsonText(value, "country_name") ?? readJsonText(value, "country");
-  const parts = [country, city].filter((part) => part !== null);
+  const province = readJsonText(value, "state_prov") ?? readJsonText(value, "region");
+  const countryCode = normalizeCountryCode(readJsonText(value, "country_code2") ?? undefined);
+  const country =
+    readJsonText(value, "country_name") ??
+    readJsonText(value, "country") ??
+    (countryCode === undefined ? null : (countryNames.of(countryCode) ?? null));
+  const parts = [country, province, city].filter(
+    (part, index, all): part is string =>
+      part !== null &&
+      all.findIndex((other) => other?.toLowerCase() === part.toLowerCase()) === index,
+  );
 
   return parts.length > 0 ? parts.join(" ") : null;
 };
@@ -238,20 +249,28 @@ const localizeLocation = async ({
     return location;
   }
 
-  const deeplApiKey = await readEncryptedSetting({ key: "deepl_api_key", sql });
-  if (deeplApiKey === undefined) {
+  if (/\p{Script=Han}/u.test(sourceText)) {
     return withLocationText(location, sourceText);
   }
 
-  const translatedTexts = await translateTexts({
-    apiKey: deeplApiKey,
-    sourceLocale: "en",
-    targetLocale: "zh-CN",
-    texts: [sourceText],
-  });
-  const translatedText = translatedTexts[0]?.trim();
+  try {
+    const deeplApiKey = await readEncryptedSetting({ key: "deepl_api_key", sql });
+    if (deeplApiKey === undefined) {
+      return withLocationText(location, sourceText);
+    }
 
-  return withLocationText(location, translatedText?.length ? translatedText : sourceText);
+    const translatedTexts = await translateTexts({
+      apiKey: deeplApiKey,
+      sourceLocale: "en",
+      targetLocale: "zh-CN",
+      texts: [sourceText],
+    });
+    const translatedText = translatedTexts[0]?.trim();
+
+    return withLocationText(location, translatedText?.length ? translatedText : sourceText);
+  } catch {
+    return withLocationText(location, sourceText);
+  }
 };
 
 export const resolveLoginLocation = async ({
@@ -265,32 +284,35 @@ export const resolveLoginLocation = async ({
     return null;
   }
 
-  const apiKey = await readEncryptedSetting({ key: "ip_geolocation_api_key", sql });
-  if (apiKey === undefined) {
-    return null;
-  }
-
-  const apiUrl = new URL("https://api.ipgeolocation.io/ipgeo");
-  apiUrl.searchParams.set("apiKey", apiKey);
-  apiUrl.searchParams.set("ip", meta.ip);
-  apiUrl.searchParams.set("lang", "cn");
+  const countryCode = normalizeCountryCode(meta.countryCode);
+  const fallback = countryCode === undefined ? null : { country_code2: countryCode };
 
   try {
+    const apiKey = await readEncryptedSetting({ key: "ip_geolocation_api_key", sql });
+    if (apiKey === undefined) {
+      return fallback;
+    }
+
+    const apiUrl = new URL("https://api.ipgeolocation.io/ipgeo");
+    apiUrl.searchParams.set("apiKey", apiKey);
+    apiUrl.searchParams.set("ip", meta.ip);
+    apiUrl.searchParams.set("lang", "cn");
+
     const response = await fetch(apiUrl, {
       signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) {
-      return null;
+      return fallback;
     }
 
     const payload: unknown = await response.json();
-    if (!isObjectRecord(payload)) {
-      return null;
+    if (!isObjectRecord(payload) || describeLocation(payload) === null) {
+      return fallback;
     }
 
-    return localizeLocation({ location: payload, sql });
+    return await localizeLocation({ location: payload, sql });
   } catch {
-    return null;
+    return fallback;
   }
 };
 

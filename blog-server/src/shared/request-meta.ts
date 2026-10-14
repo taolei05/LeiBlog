@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 import { env } from "./env";
 
 export type RequestMeta = {
+  countryCode?: string;
   ip: string | null;
   userAgent: string | null;
 };
@@ -13,6 +14,16 @@ type GetRequestMetaParameters = {
   headers: HeaderRecord;
   requestIp?: string | null;
   trustedProxyIps?: readonly string[];
+};
+
+const countryNames = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" });
+
+export const normalizeCountryCode = (value: string | undefined) => {
+  const code = value?.trim().toUpperCase();
+  if (code === undefined || !/^[A-Z]{2}$/.test(code) || ["XX", "ZZ"].includes(code)) {
+    return undefined;
+  }
+  return countryNames.of(code) === undefined ? undefined : code;
 };
 
 const normalizeIp = (value: string | null | undefined) => {
@@ -160,8 +171,13 @@ export const getRequestMeta = ({
       ? readForwardedIp({ value: forwarded, directIp, trustedProxyIps })
       : null;
   const realIp = trustsProxy ? normalizeIp(headers["x-real-ip"]) : null;
+  // Caddy replaces this header after removing country hints from non-Cloudflare peers.
+  const countryCode = trustsProxy
+    ? normalizeCountryCode(headers["x-leiblog-country-code"])
+    : undefined;
 
   return {
+    ...(countryCode === undefined ? {} : { countryCode }),
     ip: forwardedIp ?? realIp ?? directIp,
     userAgent: headers["user-agent"]?.slice(0, 1024) ?? null,
   };

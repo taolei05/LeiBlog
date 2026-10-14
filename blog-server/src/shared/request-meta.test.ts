@@ -65,5 +65,34 @@ describe("client IP trust boundary", () => {
     expect(isPrivateIp("::ffff:c0a8:101")).toBe(true);
     expect(isPrivateIp("0:0:0:0:0:0:0:1")).toBe(true);
     expect(isPrivateIp("fe80::1%lo0")).toBe(true);
+    expect(isPrivateIp("172.68.174.142")).toBe(false);
+  });
+
+  test("only accepts country hints sanitized by a trusted proxy", () => {
+    const headers = { "x-leiblog-country-code": "CN", "cf-ipcountry": "US" };
+    expect(getRequestMeta({ headers, requestIp: "203.0.113.9" }).countryCode).toBeUndefined();
+    expect(
+      getRequestMeta({ headers, requestIp: "127.0.0.1", trustedProxyIps: ["127.0.0.1"] })
+        .countryCode,
+    ).toBe("CN");
+    expect(
+      getRequestMeta({
+        headers: { "cf-ipcountry": "US" },
+        requestIp: "127.0.0.1",
+        trustedProxyIps: ["127.0.0.1"],
+      }).countryCode,
+    ).toBeUndefined();
+  });
+
+  test("rejects unknown, Tor and malformed country hints", () => {
+    for (const value of ["XX", "T1", "ZZ", "CN,US", "<script>", "china", ""]) {
+      expect(
+        getRequestMeta({
+          headers: { "x-leiblog-country-code": value },
+          requestIp: "127.0.0.1",
+          trustedProxyIps: ["127.0.0.1"],
+        }).countryCode,
+      ).toBeUndefined();
+    }
   });
 });

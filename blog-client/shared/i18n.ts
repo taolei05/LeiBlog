@@ -209,7 +209,7 @@ const resources = {
             notifications: "控制评论提醒和新文章邮件通知的默认开关。",
             links: "维护管理员公开链接，博客链接可用于前台作者卡片。",
             security: "只有填写新密码时才会更新登录密码。",
-            loginInfo: "展示最近登录、登录 IP、地点和设备信息。",
+            loginInfo: "展示最近登录、登录 IP、地点和设备信息。地点根据 IP 估算，仅供参考。",
             preferences: "控制评论提醒和新文章邮件通知的默认开关。",
           },
           loginInfo: {
@@ -233,7 +233,7 @@ const resources = {
             unrecordedDevice: "未记录设备",
             unknown: "未知",
             unknownDevice: "未知设备",
-            unknownLocation: "未知地点",
+            unknownLocation: "未查询到 IP 归属地",
           },
           confirmSave: {
             title: "保存{{section}}？",
@@ -1585,7 +1585,8 @@ const resources = {
             notifications: "Control comment reminders and new-post email notifications.",
             links: "Maintain public administrator links for author cards and profiles.",
             security: "The login password changes only when a new password is provided.",
-            loginInfo: "Shows the latest sign-in, login IP, location, and device information.",
+            loginInfo:
+              "Shows the latest sign-in, login IP, location, and device. Locations are approximate and based on IP addresses.",
             preferences: "Control comment reminders and new-post email notifications.",
           },
           loginInfo: {
@@ -1609,7 +1610,7 @@ const resources = {
             unrecordedDevice: "Device not recorded",
             unknown: "Unknown",
             unknownDevice: "Unknown device",
-            unknownLocation: "Unknown location",
+            unknownLocation: "IP location unavailable",
           },
           confirmSave: {
             title: "Save {{section}}?",

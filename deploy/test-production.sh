@@ -54,6 +54,7 @@ printf '\n' >> "$temporary/test.Caddyfile"
 chmod 644 "$temporary/test.Caddyfile"
 compose config --quiet
 compose build
+bash "$root/deploy/test-proxy.sh" "$project-api:local" "$project-web:local"
 compose up -d --wait --wait-timeout 240
 compose exec -T web caddy validate --config /etc/caddy/Caddyfile
 port="$(compose port web 443 | sed 's/.*://')"

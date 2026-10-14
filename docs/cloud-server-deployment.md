@@ -105,7 +105,8 @@ sudo leiblog uninstall --purge
 
 - 前台与 API 同域；生产前端默认使用相对 `/api` 地址，避免访问内部 `:3000`。`/admin/*` 刷新会返回后台入口，不是前台 HTML。
 - 静态 HTML 禁缓存并配置 CSP、HSTS、防嵌入和 no-sniff；带 hash 的静态资源长期缓存。`/uploads` 继续由 API 返回独立的 sandbox 策略。
-- Caddy 默认不信任客户端提供的代理头。若使用 Cloudflare，使用 Full (strict)，不要使用 Flexible。未配置可信 CDN 网段时，限流/位置看到的是 CDN 节点而非访客 IP；按官方 CIDR 列表配置 Caddy 的 `trusted_proxies` 和 `trusted_proxies_strict`，不要直接信任任意 `CF-Connecting-IP`。参考 [Caddy 代理文档](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)。
+- Caddy 已按 [Cloudflare 官方网段](https://www.cloudflare.com/ips/) 配置 `trusted_proxies`、`trusted_proxies_strict`，优先读取可信代理的 `CF-Connecting-IP`。API 仍只信任 Caddy 的确切内网 IP；直连源站提供的访客 IP 和国家请求头不会被采信。Cloudflare 使用 Full (strict)，不要使用 Flexible。官方网段变更时同步维护 `blog-client/Caddyfile`。参考 [Caddy 代理文档](https://caddyserver.com/docs/caddyfile/directives/reverse_proxy)。
+- 登录地点优先使用后台配置的 IPGeolocation 服务，显示国家、省份和城市，并合并重复名称；未配置或查询失败时，使用可信 Cloudflare 提供的国家信息（需启用 Cloudflare IP Geolocation）。地点和翻译服务失败不会阻断登录。地点仅为 IP 归属地估算，不代表精确物理位置；历史记录不会被重新推断或覆盖，重新登录后才会记录新的真实 IP 和地点。
 - 启动依赖使用健康检查与 `service_healthy`，不是只判断容器存在。参考 [Docker Compose 启动顺序](https://docs.docker.com/compose/how-tos/startup-order)。
 - 验收首页、后台刷新、登录、ALTCHA、注册/验证码、邮件投递、评论、图片上传、图片预览、OAuth 回跳和备份恢复。观察磁盘、内存、API 错误和备份是否可恢复。
 - 本次本地验证不替代实际公网证书签发、DNS、CDN、浏览器和外部邮件/OAuth 服务验收。
@@ -119,4 +120,4 @@ cd blog-server && bun run test:security
 cd .. && bash deploy/test-production.sh
 ```
 
-最后一项使用随机测试项目名、测试数据库、随机本地 TLS 端口和内部测试证书，构建真实生产镜像，检查路由、CSP、健康、非 root、并发迁移/初始化及备份恢复，结束时删除测试容器和数据卷。需要 Docker、联网下载构建依赖及足够磁盘；不会连接现有业务数据库或发送真实邮件。
+最后一项使用随机测试项目名、测试数据库、随机本地 TLS 端口和内部测试证书，构建真实生产镜像，检查 Cloudflare 访客 IP 转发与直连防伪造、路由、CSP、健康、非 root、并发迁移/初始化及备份恢复，结束时删除测试容器和数据卷。需要 Docker、联网下载构建依赖及足够磁盘；不会连接现有业务数据库或发送真实邮件。

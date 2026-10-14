@@ -931,7 +931,7 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         loginMethodGoogle: "Google",
         loginMethodPassword: "密码",
         loginUnrecordedDevice: "未记录设备",
-        loginUnknownLocation: "未知地点",
+        loginUnknownLocation: "未查询到 IP 归属地",
         newEmail: "新邮箱",
         newEmailCode: "新邮箱验证码",
         newPassword: "新密码",
@@ -1231,7 +1231,7 @@ export const frontCopyByLanguage: Record<AppLanguage, FrontCopy> = {
         loginMethodGoogle: "Google",
         loginMethodPassword: "Password",
         loginUnrecordedDevice: "Device not recorded",
-        loginUnknownLocation: "Unknown location",
+        loginUnknownLocation: "IP location unavailable",
         newEmail: "New email",
         newEmailCode: "New email code",
         newPassword: "New password",
@@ -2290,8 +2290,8 @@ const getProfileLoginLocationLabel = ({
   location,
   profileCopy,
 }: GetProfileLoginLocationLabelParameters) => {
-  if (location !== undefined && location !== null) {
-    return location;
+  if (location !== undefined && location !== null && location.trim().length > 0) {
+    return location.trim();
   }
 
   if (isPrivateLoginIp(ip)) {

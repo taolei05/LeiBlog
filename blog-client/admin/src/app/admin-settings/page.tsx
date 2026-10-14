@@ -880,8 +880,8 @@ export function AdminSettingsPage({
   };
 
   const getLoginLocationLabel = ({ ip, location }: GetLoginLocationLabelParameters) => {
-    if (location !== null) {
-      return location;
+    if (location !== null && location.trim().length > 0) {
+      return location.trim();
     }
 
     if (isPrivateLoginIp(ip)) {
