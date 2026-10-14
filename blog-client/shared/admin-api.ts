@@ -2881,10 +2881,9 @@ export const getBlogOAuthProviders = async () => {
 };
 
 export const createBlogOAuthStartUrl = ({ provider, returnTo }: CreateBlogOAuthStartUrlParams) => {
-  const url = new URL(`${API_BASE_URL}/api/blog/auth/oauth/${provider}/start`);
-  url.searchParams.set("returnTo", returnTo);
+  const query = new URLSearchParams({ returnTo });
 
-  return url.toString();
+  return `${API_BASE_URL}/api/blog/auth/oauth/${provider}/start?${query.toString()}`;
 };
 
 export const getBlogMe = async () => {

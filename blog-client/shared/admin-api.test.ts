@@ -22,7 +22,43 @@ const adminUser = {
   newPostEmailNotifications: false,
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
+
+describe("OAuth navigation URLs", () => {
+  it.each(["google", "github"] as const)(
+    "starts %s sign-in on the production website origin",
+    async (provider) => {
+      vi.stubEnv("PROD", true);
+      vi.stubEnv("VITE_API_BASE_URL", undefined);
+      vi.resetModules();
+      const { createBlogOAuthStartUrl } = await import("./admin-api");
+      const returnTo = "/articles/标签?tag=C++&lang=en#评论";
+      const url = new URL(createBlogOAuthStartUrl({ provider, returnTo }), "https://taolei.net");
+      expect(url.origin).toBe("https://taolei.net");
+      expect(url.pathname).toBe(`/api/blog/auth/oauth/${provider}/start`);
+      expect(url.searchParams.get("returnTo")).toBe(returnTo);
+      expect([...url.searchParams.keys()]).toEqual(["returnTo"]);
+      expect(url.hash).toBe("");
+    },
+  );
+
+  it.each(["google", "github"] as const)(
+    "preserves an explicitly configured API origin for %s",
+    async (provider) => {
+      vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test/");
+      vi.resetModules();
+      const { createBlogOAuthStartUrl } = await import("./admin-api");
+      const url = new URL(createBlogOAuthStartUrl({ provider, returnTo: "/" }));
+      expect(url.origin).toBe("https://api.example.test");
+      expect(url.pathname).toBe(`/api/blog/auth/oauth/${provider}/start`);
+      expect(url.searchParams.get("returnTo")).toBe("/");
+    },
+  );
+});
 
 describe("admin media display URLs", () => {
   it("uses the same stable version for media previews and absolute local URLs", () => {
