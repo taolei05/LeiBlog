@@ -166,7 +166,8 @@ const readNotificationSource = async ({ job, sql }: ReadNotificationSourceParame
   if (job.kind === "subscription_expiry") {
     const timeZone = await readSiteTimeZone({ sql });
     const [subscription] = await sql<SubscriptionReminderContent[]>`
-      SELECT name, expiry_date::text AS expiry_date, renewal_price::text AS renewal_price, currency, renewal_type, service_url
+      SELECT name, details, expiry_date::text AS expiry_date, renewal_price::text AS renewal_price,
+        renewal_currency AS currency, renewal_type, service_url
       FROM subscriptions WHERE id = ${job.subscriptionId} AND reminder_revision = ${job.subscriptionRevision}
         AND expiry_date = ${job.subscriptionExpiry}::date AND reminder_recipient_id = ${job.recipientId}
         AND reminder_enabled AND expiry_date >= (now() AT TIME ZONE ${timeZone})::date

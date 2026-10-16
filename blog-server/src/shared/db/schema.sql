@@ -925,6 +925,16 @@ CREATE TABLE IF NOT EXISTS subscriptions (
   CHECK ((renewal_type = 'perpetual' AND expiry_date IS NULL AND NOT reminder_enabled)
     OR (renewal_type <> 'perpetual' AND expiry_date IS NOT NULL AND expiry_date >= start_date))
 );
+-- Preserve the original currency for legacy clients and backups.
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS initial_currency text
+  CHECK (initial_currency IN ('CNY','HKD','USD','EUR','GBP','JPY'));
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS renewal_currency text
+  CHECK (renewal_currency IN ('CNY','HKD','USD','EUR','GBP','JPY'));
+UPDATE subscriptions SET initial_currency = COALESCE(initial_currency, currency),
+  renewal_currency = COALESCE(renewal_currency, currency)
+  WHERE initial_currency IS NULL OR renewal_currency IS NULL;
+ALTER TABLE subscriptions ALTER COLUMN initial_currency SET NOT NULL;
+ALTER TABLE subscriptions ALTER COLUMN renewal_currency SET NOT NULL;
 CREATE INDEX IF NOT EXISTS subscriptions_expiry_idx ON subscriptions (expiry_date);
 DROP TRIGGER IF EXISTS subscriptions_set_updated_at ON subscriptions;
 CREATE TRIGGER subscriptions_set_updated_at BEFORE UPDATE ON subscriptions
@@ -940,6 +950,40 @@ CREATE TABLE IF NOT EXISTS subscription_attachments (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS subscription_attachments_parent_idx ON subscription_attachments (subscription_id);
+
+ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS subscription_attachment_id uuid
+  REFERENCES subscription_attachments(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS media_assets_subscription_attachment_unique
+  ON media_assets (subscription_attachment_id) WHERE subscription_attachment_id IS NOT NULL;
+UPDATE media_folders SET system_key = 'subscription-attachments', is_protected = true
+  WHERE lower(slug) = 'subscription-attachments'
+    AND (system_key IS DISTINCT FROM 'subscription-attachments' OR NOT is_protected);
+
+CREATE OR REPLACE FUNCTION sync_subscription_attachment_media() RETURNS trigger AS $$
+BEGIN
+  INSERT INTO media_folders (name, slug, system_key, description, is_protected)
+    VALUES ('订阅附件', 'subscription-attachments', 'subscription-attachments',
+      '订阅发票、合同和图片，仅管理员可访问。', true)
+    ON CONFLICT (lower(slug)) DO UPDATE SET system_key = EXCLUDED.system_key, is_protected = true
+      WHERE media_folders.system_key IS DISTINCT FROM EXCLUDED.system_key OR NOT media_folders.is_protected;
+  INSERT INTO media_assets (id, file_name, file_format, file_type, file_size_bytes,
+    access_url, folder_id, storage_provider, subscription_attachment_id, uploaded_by, created_at)
+  SELECT NEW.id, NEW.file_name, lower(substring(NEW.file_name FROM '\.([^.]+)$')),
+    CASE WHEN lower(substring(NEW.file_name FROM '\.([^.]+)$')) IN ('jpg','jpeg','png','gif','webp','ico')
+      THEN 'image' ELSE 'document' END,
+    NEW.file_size, '/api/admin/media/' || NEW.id || '/download', mf.id, 'local', NEW.id,
+    s.reminder_recipient_id, NEW.created_at
+  FROM media_folders mf, subscriptions s
+  WHERE mf.system_key = 'subscription-attachments' AND s.id = NEW.subscription_id
+  ON CONFLICT (id) DO UPDATE SET file_name = EXCLUDED.file_name, file_size_bytes = EXCLUDED.file_size_bytes;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS subscription_attachment_media_sync ON subscription_attachments;
+CREATE TRIGGER subscription_attachment_media_sync AFTER INSERT OR UPDATE OF file_name
+  ON subscription_attachments FOR EACH ROW EXECUTE FUNCTION sync_subscription_attachment_media();
+UPDATE subscription_attachments a SET file_name = a.file_name
+  WHERE NOT EXISTS (SELECT 1 FROM media_assets m WHERE m.subscription_attachment_id = a.id);
 
 ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_id uuid REFERENCES subscriptions(id) ON DELETE CASCADE;
 ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_revision integer;

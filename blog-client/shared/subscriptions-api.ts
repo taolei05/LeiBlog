@@ -10,6 +10,7 @@ export const subscriptionCategories = [
   "other",
 ] as const;
 export const subscriptionCurrencies = ["CNY", "HKD", "USD", "EUR", "GBP", "JPY"] as const;
+export type SubscriptionCurrency = (typeof subscriptionCurrencies)[number];
 export const subscriptionRenewalTypes = ["automatic", "manual", "perpetual"] as const;
 export type SubscriptionInput = {
   name: string;
@@ -20,7 +21,8 @@ export type SubscriptionInput = {
   expiryDate: string | null;
   initialPrice: string;
   renewalPrice: string;
-  currency: (typeof subscriptionCurrencies)[number];
+  initialCurrency: SubscriptionCurrency;
+  renewalCurrency: SubscriptionCurrency;
   renewalType: (typeof subscriptionRenewalTypes)[number];
   notes: string;
   reminderEnabled: boolean;
@@ -102,7 +104,8 @@ export const isSubscription = (value: unknown): value is Subscription => {
       "reminderTime",
     ].every((key) => typeof value[key] === "string") &&
     subscriptionCategories.some((item) => item === value.category) &&
-    subscriptionCurrencies.some((item) => item === value.currency) &&
+    subscriptionCurrencies.some((item) => item === value.initialCurrency) &&
+    subscriptionCurrencies.some((item) => item === value.renewalCurrency) &&
     subscriptionRenewalTypes.some((item) => item === value.renewalType) &&
     ["normal", "expiring", "expired"].includes(String(value.status)) &&
     [null, "pending", "sent", "skipped", "failed"].includes(
@@ -167,6 +170,7 @@ export const getSubscriptions = async ({
   category,
   status,
   page,
+  pageSize = 12,
   signal,
 }: {
   token: string;
@@ -174,10 +178,11 @@ export const getSubscriptions = async ({
   category: string;
   status: string;
   page: number;
+  pageSize?: number;
   signal?: AbortSignal;
 }): Promise<SubscriptionList> => {
   const body = await request(
-    `/?${new URLSearchParams({ search, category, status, page: String(page) })}`,
+    `/?${new URLSearchParams({ search, category, status, page: String(page), pageSize: String(pageSize) })}`,
     token,
     { signal },
   );
@@ -284,8 +289,8 @@ export const downloadSubscriptionAttachment = async ({
 
 export const convertSubscriptionPrice = (
   price: string,
-  from: SubscriptionInput["currency"],
-  to: SubscriptionInput["currency"],
+  from: SubscriptionCurrency,
+  to: SubscriptionCurrency,
   rates: ExchangeRates,
 ) => {
   // Original money is stored as decimal text. Converted figures are display-only estimates.

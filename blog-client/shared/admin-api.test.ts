@@ -11,12 +11,14 @@ import {
   importBackupArchive,
   previewBackupArchive,
   resolveAdminAssetUrl,
+  readMediaAssetForPreview,
   uploadBlogUserAvatar,
   uploadInitialSetupMediaAsset,
   uploadMediaAsset,
   uploadPublicCommentImage,
   updateBlogUserProfile,
   translateArticleBody,
+  testExchangeRateApiKey,
 } from "./admin-api";
 import type { UploadProgress, UploadProgressHandler } from "./upload-request";
 
@@ -34,6 +36,94 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.resetModules();
+});
+
+describe("authenticated media preview reads", () => {
+  const parameters = {
+    mediaId: "private-file",
+    token: "",
+    maxBytes: 10,
+    signal: new AbortController().signal,
+  };
+  it("uses the admin download route, cookies, no cache and an abort signal", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input, init) => {
+        expect(String(input)).toContain("/api/admin/media/private-file/download");
+        expect(init?.credentials).toBe("include");
+        expect(init?.cache).toBe("no-store");
+        expect(init?.signal).toBe(parameters.signal);
+        expect(new Headers(init?.headers).has("authorization")).toBe(false);
+        return new Response("hello");
+      }),
+    );
+    expect(await (await readMediaAssetForPreview(parameters)).text()).toBe("hello");
+  });
+  it("preserves authentication failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ message: "Not authorized" }, { status: 401 })),
+    );
+    await expect(readMediaAssetForPreview(parameters)).rejects.toThrow("Not authorized");
+  });
+  it("rejects excessive declared size before reading the file", async () => {
+    const response = new Response("file", { headers: { "content-length": "100" } });
+    const cancel = vi.spyOn(response.body!, "cancel");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+    await expect(readMediaAssetForPreview(parameters)).rejects.toBeInstanceOf(RangeError);
+    expect(cancel).toHaveBeenCalled();
+  });
+  it("bounds streamed data even without a trustworthy content length", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(8));
+        controller.enqueue(new Uint8Array(8));
+      },
+      cancel,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body)),
+    );
+    await expect(readMediaAssetForPreview(parameters)).rejects.toBeInstanceOf(RangeError);
+    expect(cancel).toHaveBeenCalled();
+  });
+});
+
+describe("ExchangeRate API key test messages", () => {
+  it.each([
+    { locale: "zh-CN", message: "ExchangeRate API 密钥测试失败。" },
+    { locale: "en", message: "ExchangeRate API key test failed." },
+  ] as const)(
+    "uses the $locale fallback when the response has no message",
+    async ({ locale, message }) => {
+      const fetcher = vi.fn(async (_input, init) => {
+        expect(new Headers(init?.headers).get("x-leiblog-locale")).toBe(locale);
+        return Response.json({}, { status: 502 });
+      });
+      vi.stubGlobal("fetch", fetcher);
+
+      await expect(testExchangeRateApiKey({ apiKey: "", locale, token: "" })).rejects.toThrow(
+        message,
+      );
+    },
+  );
+
+  it("preserves the server's detailed Chinese error message", async () => {
+    const message = "汇率请求失败，请检查密钥、账户与额度。";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ message }, { status: 400 })),
+    );
+
+    await expect(
+      testExchangeRateApiKey({ apiKey: "", locale: "zh-CN", token: "" }),
+    ).rejects.toThrow(message);
+  });
 });
 
 describe("all multipart upload endpoints", () => {

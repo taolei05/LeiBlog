@@ -129,6 +129,7 @@ const readMediaLibraryFailureMessage = (reason: MediaLibraryFailure) => {
     case MEDIA_LIBRARY_FAILURE.FolderSlugExists:
     case MEDIA_LIBRARY_FAILURE.NotFound:
     case MEDIA_LIBRARY_FAILURE.ProtectedFolder:
+    case MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly:
     case MEDIA_LIBRARY_FAILURE.R2ConfigurationIncomplete:
     case MEDIA_LIBRARY_FAILURE.RemoteStorageUnsupported:
       return "评论图片上传失败。";
@@ -150,6 +151,7 @@ const createMediaLibraryFailureResponse = (error: MediaLibraryError) => {
     case MEDIA_LIBRARY_FAILURE.FileTooLarge:
     case MEDIA_LIBRARY_FAILURE.FolderSlugExists:
     case MEDIA_LIBRARY_FAILURE.ProtectedFolder:
+    case MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly:
     case MEDIA_LIBRARY_FAILURE.R2ConfigurationIncomplete:
     case MEDIA_LIBRARY_FAILURE.RemoteStorageUnsupported:
     case MEDIA_LIBRARY_FAILURE.UnsupportedFileType:

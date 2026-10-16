@@ -34,12 +34,13 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     name: "Domain <example>",
     serviceUrl: "https://example.test",
     category: "domain" as const,
-    details: "Contract details",
+    details: "taolei.net\nContract <details>",
     startDate: "2020-01-01",
     expiryDate: "2099-01-01",
     initialPrice: "1.20",
     renewalPrice: "99.90",
-    currency: "USD" as const,
+    initialCurrency: "HKD" as const,
+    renewalCurrency: "USD" as const,
     renewalType: "manual" as const,
     notes: "Private notes",
     reminderEnabled: true,
@@ -126,7 +127,8 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     encrypt = (await import("../src/shared/security/encryption")).encryptSecret;
     const { adminSubscriptionRoutes } = await import("../src/admin/subscriptions/routes");
     const { adminSettingsRoutes } = await import("../src/admin/settings/routes");
-    app = new Elysia().use(adminSubscriptionRoutes).use(adminSettingsRoutes);
+    const { adminMediaRoutes } = await import("../src/admin/media/routes");
+    app = new Elysia().use(adminSubscriptionRoutes).use(adminSettingsRoutes).use(adminMediaRoutes);
   });
   beforeEach(async () => {
     await sql`TRUNCATE users, site_settings, site_settings_en, encrypted_settings CASCADE`;
@@ -156,6 +158,22 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     mock.restore();
   });
 
+  test("creates the protected attachment folder lazily and protects an existing matching folder", async () => {
+    await sql`DELETE FROM media_folders WHERE slug = 'subscription-attachments'`;
+    const schema = await Bun.file(new URL("../src/shared/db/schema.sql", import.meta.url)).text();
+    await sql.unsafe(schema);
+    await sql.unsafe(schema);
+    expect(await sql`SELECT id FROM media_folders WHERE slug = 'subscription-attachments'`).toHaveLength(0);
+    await sql`INSERT INTO media_folders (name, slug, is_protected)
+      VALUES ('Existing folder', 'subscription-attachments', false)`;
+    await create();
+    const body = new FormData();
+    body.set("file", new File(["private invoice"], "invoice.txt"));
+    expect((await request(`/${id}/attachments`, { method: "POST", body })).status).toBe(200);
+    const [folder] = await sql`SELECT system_key, is_protected FROM media_folders WHERE slug = 'subscription-attachments'`;
+    expect(folder).toEqual({ systemKey: "subscription-attachments", isProtected: true });
+    expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id IS NOT NULL`).toHaveLength(1);
+  });
   test("CRUD, exact money, pagination, filters and no private bytes in list", async () => {
     await create();
     const response = await request("/?search=domain&category=domain&status=normal");
@@ -164,6 +182,8 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     expect(result.total).toBe(1);
     expect(result.items[0].initialPrice).toBe("1.20");
     expect(result.items[0].renewalPrice).toBe("99.90");
+    expect(result.items[0].initialCurrency).toBe("HKD");
+    expect(result.items[0].renewalCurrency).toBe("USD");
     expect(result.items[0].startDate).toBe("2020-01-01");
     expect(result.items[0].recipientEmail).toBe("admin@example.test");
     expect(JSON.stringify(result)).not.toContain("password_hash");
@@ -171,11 +191,14 @@ suite("subscriptions with isolated database, authenticated routes and captured m
       (
         await request(`/${id}`, {
           method: "PUT",
-          body: JSON.stringify({ ...input(), name: "Changed" }),
+      body: JSON.stringify({ ...input(), name: "Changed", initialCurrency: "EUR", renewalCurrency: "JPY" }),
         })
       ).status,
     ).toBe(200);
-    expect((await (await request("/?search=Changed")).json()).total).toBe(1);
+    const updated = await (await request("/?search=Changed")).json();
+    expect(updated.total).toBe(1);
+    expect(updated.items[0].initialCurrency).toBe("EUR");
+    expect(updated.items[0].renewalCurrency).toBe("JPY");
     expect((await request(`/${id}`, { method: "DELETE" })).status).toBe(200);
     expect((await (await request()).json()).total).toBe(0);
   });
@@ -186,11 +209,40 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     await sql`UPDATE users SET role = 'user'`;
     expect((await request()).status).toBe(401);
   });
+  test("legacy API inputs initialize both price currencies", async () => {
+    const { initialCurrency, renewalCurrency, ...legacy } = input();
+    expect((await request("/", {
+      method: "POST", body: JSON.stringify({ ...legacy, currency: "EUR" }),
+    })).status).toBe(200);
+    const result = await (await request()).json();
+    expect(result.items[0].initialCurrency).toBe("EUR");
+    expect(result.items[0].renewalCurrency).toBe("EUR");
+  });
+  test("schema upgrades legacy currencies without overwriting independent selections on restart", async () => {
+    await sql`ALTER TABLE subscriptions DROP COLUMN initial_currency, DROP COLUMN renewal_currency`;
+    await sql`INSERT INTO subscriptions (name, category, start_date, expiry_date,
+      initial_price, renewal_price, currency, renewal_type)
+      VALUES ('Legacy', 'domain', '2020-01-01', '2099-01-01', 12.50, 25.00, 'GBP', 'manual')`;
+    const schema = await Bun.file(new URL("../src/shared/db/schema.sql", import.meta.url)).text();
+    await sql.unsafe(schema);
+    const [migrated] = await sql`SELECT initial_currency, renewal_currency, initial_price::text, renewal_price::text FROM subscriptions`;
+    expect(migrated).toMatchObject({ initialCurrency: "GBP", renewalCurrency: "GBP", initialPrice: "12.50", renewalPrice: "25.00" });
+    await sql`UPDATE subscriptions SET initial_currency = 'EUR', renewal_currency = 'JPY'`;
+    await sql.unsafe(schema);
+    const [restarted] = await sql`SELECT initial_currency, renewal_currency FROM subscriptions`;
+    expect(restarted).toEqual({ initialCurrency: "EUR", renewalCurrency: "JPY" });
+    await expect(sql`UPDATE subscriptions SET initial_currency = 'XYZ'`.then((rows) => rows)).rejects.toThrow();
+    await expect(sql`UPDATE subscriptions SET renewal_currency = 'XYZ'`.then((rows) => rows)).rejects.toThrow();
+  });
   test("rejects invalid dates, currency, prices, UUIDs and unsafe vendor links", async () => {
     for (const change of [
       { startDate: "2026-02-30" },
       { expiryDate: "2010-01-01" },
       { currency: "XYZ" },
+      { initialCurrency: "XYZ" },
+      { renewalCurrency: "XYZ" },
+      { initialCurrency: undefined },
+      { renewalCurrency: undefined },
       { initialPrice: "-1" },
       { renewalPrice: "1.234" },
       { serviceUrl: "javascript:alert(1)" },
@@ -242,6 +294,8 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     expect(deliveries[0].body.subject).toContain("Subscription expiring");
     expect(deliveries[0].body.html).toContain("Domain &lt;example&gt;");
     expect(deliveries[0].body.text).toContain("USD 99.90");
+    expect(deliveries[0].body.text).toContain("Details: taolei.net\nContract <details>");
+    expect(deliveries[0].body.html).toContain("Contract &lt;details&gt;");
     expect(deliveries[0].body.text).toContain("/admin/#subscriptions");
     await service.queueDueSubscriptionReminders(sql);
     expect(await notifications.processNextEmailNotification({ sql })).toBe(false);
@@ -400,6 +454,74 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     );
     await request(`/${id}`, { method: "DELETE" });
     expect(await sql`SELECT id FROM subscription_attachments`).toHaveLength(0);
+    expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id IS NOT NULL`).toHaveLength(0);
+  });
+  test("private subscription attachments appear in a fixed media folder with synchronized rename and deletion", async () => {
+    await create();
+    const file = new FormData();
+    file.set("file", new File(["private invoice"], "invoice.txt"));
+    expect((await request(`/${id}/attachments`, { method: "POST", body: file })).status).toBe(200);
+    const mediaRequest = (path: string, init: RequestInit = {}, auth = token) => app.handle(new Request(`http://localhost/api/admin/media${path}`, {
+      ...init, headers: { ...(auth ? { authorization: `Bearer ${auth}` } : {}),
+        ...(typeof init.body === "string" ? { "Content-Type": "application/json" } : {}) },
+    }));
+    const folders = await (await mediaRequest("/folders")).json();
+    const folder = folders.folders.find((item: { slug: string }) => item.slug === "subscription-attachments");
+    expect(folder.isProtected).toBe(true);
+    expect(folder.fileCount).toBe(1);
+    expect((await mediaRequest(`/folders/${folder.id}`, { method: "DELETE" })).status).toBe(400);
+    const list = await (await mediaRequest("?folderSlug=subscription-attachments")).json();
+    const asset = list.media[0];
+    expect(asset.fileName).toBe("invoice.txt");
+    expect(asset.accessUrl).toBe(`/api/admin/media/${asset.id}/download`);
+    expect(asset.accessUrl).not.toContain("/uploads/");
+    const picker = await (await mediaRequest("?excludePrivate=true")).json();
+    expect(picker.media).toHaveLength(0);
+    expect(picker.pageInfo.totalItems).toBe(0);
+    expect((await mediaRequest(`/${asset.id}/download`, {}, "")).status).toBe(401);
+    const download = await mediaRequest(`/${asset.id}/download`);
+    expect(download.headers.get("cache-control")).toBe("private, no-store");
+    expect(await download.text()).toBe("private invoice");
+    expect((await mediaRequest(`/${asset.id}`, { method: "PATCH", body: JSON.stringify({ fileName: "contract.txt" }) })).status).toBe(200);
+    const renamed = await (await request()).json();
+    expect(renamed.items[0].attachments[0].fileName).toBe("contract.txt");
+    const forbidden = new FormData();
+    forbidden.set("file", new File(["private"], "contract.txt"));
+    forbidden.set("folderSlug", "subscription-attachments");
+    expect((await mediaRequest("", { method: "POST", body: forbidden })).status).toBe(400);
+    expect((await mediaRequest(`/${asset.id}`, { method: "DELETE" })).status).toBe(200);
+    expect(await sql`SELECT id FROM subscription_attachments`).toHaveLength(0);
+    expect(await sql`SELECT id FROM media_assets WHERE id = ${asset.id}`).toHaveLength(0);
+  });
+  test("existing private attachments are indexed once on upgrade", async () => {
+    await create();
+    await sql`DROP TRIGGER subscription_attachment_media_sync ON subscription_attachments`;
+    const [file] = await sql`INSERT INTO subscription_attachments (subscription_id, file_name, content_type, file_size, content)
+      VALUES (${id}, 'legacy.txt', 'application/octet-stream', 7, ${Buffer.from("invoice")}) RETURNING id`;
+    const schema = await Bun.file(new URL("../src/shared/db/schema.sql", import.meta.url)).text();
+    await sql.unsafe(schema);
+    await sql.unsafe(schema);
+    expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id = ${file.id}`).toHaveLength(1);
+    await request(`/${id}/attachments/${file.id}`, { method: "DELETE" });
+    expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id = ${file.id}`).toHaveLength(0);
+  });
+  test("image attachments retain authenticated image downloads without a public storage object", async () => {
+    await create();
+    const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j9WQAAAAASUVORK5CYII=", "base64");
+    const body = new FormData();
+    body.set("file", new File([bytes], "invoice.png"));
+    const response = await request(`/${id}/attachments`, { method: "POST", body });
+    expect(response.status).toBe(200);
+    const { item } = await response.json();
+    const [asset] = await sql`SELECT file_type, file_format, storage_key FROM media_assets WHERE subscription_attachment_id = ${item.id}`;
+    expect(asset).toEqual({ fileType: "image", fileFormat: "png", storageKey: null });
+    const url = `http://localhost/api/admin/media/${item.id}/download`;
+    const download = await app.handle(new Request(url, { headers: { authorization: `Bearer ${token}` } }));
+    expect(download.headers.get("content-type")).toBe("image/png");
+    expect(Buffer.from(await download.arrayBuffer())).toEqual(bytes);
+    expect((await app.handle(new Request(url))).status).toBe(401);
+    await sql`UPDATE users SET role = 'user'`;
+    expect((await app.handle(new Request(url, { headers: { authorization: `Bearer ${token}` } }))).status).toBe(401);
   });
   test("renewal after a sent reminder permits only the new expiry; demotion cancels pending mail", async () => {
     await create();
@@ -426,7 +548,7 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     const body = new FormData();
     body.set("file", new File(["private invoice"], "invoice.txt"));
     expect((await request(`/${id}/attachments`, { method: "POST", body })).status).toBe(200);
-    const { createBackupArchive } = await import("../src/admin/backup/service");
+    const { createBackupArchive, importBackupArchive } = await import("../src/admin/backup/service");
     const { readBackupZip } = await import("../src/admin/backup/archive");
     const { readBackupPayload } = await import("../src/admin/backup/payload");
     const backup = await createBackupArchive();
@@ -439,6 +561,22 @@ suite("subscriptions with isolated database, authenticated routes and captured m
       `\\x${Buffer.from("private invoice").toString("hex")}`,
     );
     expect(payload.data.tables.subscriptions[0].initial_price).toBe(1.2);
+    expect(payload.data.tables.subscriptions[0].initial_currency).toBe("HKD");
+    expect(payload.data.tables.subscriptions[0].renewal_currency).toBe("USD");
+    expect(payload.data.tables.media_assets).toHaveLength(0);
+    await importBackupArchive({ file: new File([new Uint8Array(backup.data)], "backup.zip") });
+    const [restored] = await sql`SELECT initial_currency, renewal_currency, reminder_enabled FROM subscriptions`;
+    expect(restored).toEqual({ initialCurrency: "HKD", renewalCurrency: "USD", reminderEnabled: false });
+    expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id IS NOT NULL`).toHaveLength(1);
+    const rawData: typeof payload.data = JSON.parse(dataText);
+    for (const row of rawData.tables.subscriptions) {
+      delete row.initial_currency;
+      delete row.renewal_currency;
+    }
+    zip.updateFile("data.json", Buffer.from(JSON.stringify(rawData)));
+    await importBackupArchive({ file: new File([new Uint8Array(zip.toBuffer())], "legacy.zip") });
+    const [legacy] = await sql`SELECT initial_currency, renewal_currency, reminder_enabled FROM subscriptions`;
+    expect(legacy).toEqual({ initialCurrency: "HKD", renewalCurrency: "HKD", reminderEnabled: false });
     const corrupt = zip
       .getEntries()
       .find((entry) => entry.entryName.startsWith("private/subscriptions/"))!;

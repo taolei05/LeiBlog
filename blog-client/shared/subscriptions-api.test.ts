@@ -4,6 +4,7 @@ import {
   getSubscriptions,
   isExchangeRates,
   isSubscription,
+  saveSubscription,
 } from "./subscriptions-api";
 import type { ExchangeRates } from "./subscriptions-api";
 
@@ -24,7 +25,8 @@ const item = {
   expiryDate: "2027-01-01",
   initialPrice: "1.20",
   renewalPrice: "9.00",
-  currency: "USD",
+  initialCurrency: "HKD" as const,
+  renewalCurrency: "USD" as const,
   renewalType: "manual",
   reminderEnabled: true,
   reminderDays: 7,
@@ -41,7 +43,9 @@ describe("subscriptions API", () => {
   it("validates entries, attachment metadata and rates before rendering", () => {
     expect(isSubscription(item)).toBe(true);
     expect(isSubscription({ ...item, attachments: [{ fileName: "invoice" }] })).toBe(false);
-    expect(isSubscription({ ...item, currency: "XYZ" })).toBe(false);
+    expect(isSubscription({ ...item, initialCurrency: "XYZ" })).toBe(false);
+    expect(isSubscription({ ...item, renewalCurrency: "XYZ" })).toBe(false);
+    expect(isSubscription({ ...item, initialCurrency: undefined })).toBe(false);
     expect(isExchangeRates(rates)).toBe(true);
     expect(isExchangeRates({ ...rates, rates: { ...rates.rates, CNY: 0 } })).toBe(false);
   });
@@ -49,6 +53,20 @@ describe("subscriptions API", () => {
     expect(convertSubscriptionPrice("10.00", "USD", "CNY", rates)).toBe(70);
     expect(convertSubscriptionPrice("7.00", "CNY", "JPY", rates)).toBe(150);
     expect(item.initialPrice).toBe("1.20");
+  });
+  it("saves each price with its own currency", async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true, id: "test" }));
+    vi.stubGlobal("fetch", fetcher);
+    await saveSubscription({
+      token: "",
+      input: { ...item, category: "domain", renewalType: "manual" },
+    });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({
+      initialPrice: "1.20",
+      initialCurrency: "HKD",
+      renewalPrice: "9.00",
+      renewalCurrency: "USD",
+    });
   });
   it("uses HttpOnly credentials without a blank bearer and encodes filters", async () => {
     const fetcher = vi.fn().mockResolvedValue(
@@ -68,10 +86,12 @@ describe("subscriptions API", () => {
       category: "all",
       status: "all",
       page: 1,
+      pageSize: 24,
     });
     expect(data.items).toHaveLength(1);
     const [url, init] = fetcher.mock.calls[0];
     expect(String(url)).toContain("search=domain+%26+server");
+    expect(String(url)).toContain("pageSize=24");
     expect(init.credentials).toBe("include");
     expect(new Headers(init.headers).has("authorization")).toBe(false);
   });

@@ -700,7 +700,6 @@ export function AdminShellPage({
                       authToken={authToken}
                       isNarrow={isNarrow}
                       timeZone={siteTimeZone}
-                      adminEmail={user.email}
                     />
                   ) : activePageId === "media" ? (
                     <MediaLibraryPage

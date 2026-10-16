@@ -10,15 +10,18 @@ if (entry === undefined) throw new Error("Admin entry was not found.");
 const files = (await readdir(assets)).filter((file) => file.endsWith(".js"));
 const management = [];
 const subscriptions = [];
+const documentViewers = [];
 for (const file of files) {
   const source = await readFile(path.join(assets, file), "utf8");
   if (source.includes("as ContentManagementPage")) {
     management.push(file);
   }
   if (source.includes("as SubscriptionsPage")) subscriptions.push(file);
+  if (source.includes("as DocumentViewer")) documentViewers.push(file);
 }
 if (management.length !== 1) throw new Error("Content management module was not found.");
 if (subscriptions.length !== 1) throw new Error("Subscriptions module was not found.");
+if (documentViewers.length !== 1) throw new Error("Document preview module was not found.");
 
 // Evaluate real production modules without Node's Prism global or rendering a UI.
 const element = () => ({
@@ -85,6 +88,7 @@ const evaluate = async (file) => {
 await evaluate(entry);
 await evaluate(management[0]);
 await evaluate(subscriptions[0]);
+await evaluate(documentViewers[0]);
 console.log(
-  "Production admin, content management and subscriptions modules evaluated successfully.",
+  "Production admin, content management, subscriptions and document preview modules evaluated successfully.",
 );

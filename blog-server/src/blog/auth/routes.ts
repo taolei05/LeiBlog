@@ -159,6 +159,8 @@ const readMediaLibraryFailureMessage = (reason: MediaLibraryFailure) => {
       return "媒体资源不存在。";
     case MEDIA_LIBRARY_FAILURE.ProtectedFolder:
       return "受保护的媒体文件夹不能删除。";
+    case MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly:
+      return "请在订阅与提醒管理中上传附件。";
     case MEDIA_LIBRARY_FAILURE.R2ConfigurationIncomplete:
       return "Cloudflare R2 存储配置不完整。";
     case MEDIA_LIBRARY_FAILURE.RemoteStorageUnsupported:
@@ -183,6 +185,7 @@ const createMediaLibraryFailureResponse = (error: MediaLibraryError) => {
     case MEDIA_LIBRARY_FAILURE.FileTooLarge:
     case MEDIA_LIBRARY_FAILURE.FolderSlugExists:
     case MEDIA_LIBRARY_FAILURE.ProtectedFolder:
+    case MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly:
     case MEDIA_LIBRARY_FAILURE.R2ConfigurationIncomplete:
     case MEDIA_LIBRARY_FAILURE.RemoteStorageUnsupported:
     case MEDIA_LIBRARY_FAILURE.UnsupportedFileType:

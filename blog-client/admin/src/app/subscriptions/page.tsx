@@ -1,31 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Download,
-  ExternalLink,
-  Paperclip,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Save,
-  Trash2,
-} from "lucide-react";
+import { Download, Paperclip, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Button } from "@astryxdesign/core/Button";
 import { DateInput } from "@astryxdesign/core/DateInput";
 import { Divider } from "@astryxdesign/core/Divider";
-import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
 import { IconButton } from "@astryxdesign/core/IconButton";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
-import { Pagination } from "@astryxdesign/core/Pagination";
 import { Selector } from "@astryxdesign/core/Selector";
-import { Spinner } from "@astryxdesign/core/Spinner";
 import { HStack, VStack } from "@astryxdesign/core/Stack";
-import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Switch } from "@astryxdesign/core/Switch";
-import { Table, pixel, proportional, useTableStickyColumns } from "@astryxdesign/core/Table";
-import type { TableColumn } from "@astryxdesign/core/Table";
 import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
@@ -41,15 +26,14 @@ import { UploadProgressList, useUploadProgress } from "../../../../shared/upload
 import type {
   ExchangeRates,
   Subscription,
+  SubscriptionCurrency,
   SubscriptionInput,
   SubscriptionList,
 } from "../../../../shared/subscriptions-api";
 import {
-  convertSubscriptionPrice,
   deleteSubscription,
   downloadSubscriptionAttachment,
   getSubscriptionRates,
-  getSubscriptionServiceUrl,
   getSubscriptions,
   removeSubscriptionAttachment,
   saveSubscription,
@@ -65,14 +49,14 @@ import {
 } from "../components/admin-feedback-banner";
 import type { AdminFeedbackBannerState } from "../components/admin-feedback-banner";
 import { subscriptionCopy } from "./copy";
+import { SubscriptionPriceField } from "./price-field";
+import { SubscriptionTable } from "./subscription-table";
 
 type Editor = {
   id?: string;
   form: SubscriptionInput;
   attachments: Subscription["attachments"];
-  recipientEmail: string | null;
 };
-type Row = Subscription & Record<string, unknown>;
 const dateValue = (value: string | null): ISODateString | undefined =>
   value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? (value as ISODateString) : undefined;
 
@@ -80,14 +64,8 @@ type SubscriptionsPageProps = {
   authToken: string;
   isNarrow: boolean;
   timeZone: string;
-  adminEmail: string;
 };
-export const SubscriptionsPage = ({
-  authToken,
-  isNarrow,
-  timeZone,
-  adminEmail,
-}: SubscriptionsPageProps) => {
+export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: SubscriptionsPageProps) => {
   const { i18n } = useTranslation();
   const language = normalizeLanguage(i18n.resolvedLanguage);
   const copy = subscriptionCopy[language];
@@ -96,6 +74,7 @@ export const SubscriptionsPage = ({
   const [category, setCategory] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<AdminFeedbackBannerState>();
@@ -107,11 +86,10 @@ export const SubscriptionsPage = ({
   const [rates, setRates] = useState<ExchangeRates>();
   const [ratesLoading, setRatesLoading] = useState(false);
   const [rateError, setRateError] = useState<string>();
-  const [displayCurrency, setDisplayCurrency] = useState<SubscriptionInput["currency"]>("CNY");
+  const [displayCurrency, setDisplayCurrency] = useState<SubscriptionCurrency>("CNY");
   const [busyFile, setBusyFile] = useState<string>();
   const fileInput = useRef<HTMLInputElement>(null);
   const { uploads, onUploadProgress } = useUploadProgress();
-  const stickyColumns = useTableStickyColumns<Row>({ endKeys: ["actions"] });
   const form = editor?.form;
   const error = (value: unknown) => (value instanceof Error ? value.message : copy.failed);
   const update = <Key extends keyof SubscriptionInput>(key: Key, value: SubscriptionInput[Key]) =>
@@ -129,6 +107,7 @@ export const SubscriptionsPage = ({
         category,
         status,
         page,
+        pageSize,
         signal: controller.signal,
       })
         .then((result) => {
@@ -156,7 +135,7 @@ export const SubscriptionsPage = ({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [authToken, category, page, refresh, search, status]);
+  }, [authToken, category, page, pageSize, refresh, search, status]);
 
   const loadRates = useCallback(async () => {
     setRatesLoading(true);
@@ -181,7 +160,6 @@ export const SubscriptionsPage = ({
     setEditor({
       id: item?.id,
       attachments: item?.attachments ?? [],
-      recipientEmail: item?.recipientEmail ?? adminEmail,
       form: item
         ? { ...item, reminderTime: item.reminderTime.slice(0, 5) }
         : {
@@ -193,7 +171,8 @@ export const SubscriptionsPage = ({
             expiryDate: null,
             initialPrice: "0",
             renewalPrice: "0",
-            currency: "CNY",
+            initialCurrency: "CNY",
+            renewalCurrency: "CNY",
             renewalType: "manual",
             notes: "",
             reminderEnabled: true,
@@ -302,163 +281,11 @@ export const SubscriptionsPage = ({
       setBusyFile(undefined);
     }
   };
-  const money = (value: string | number, currency: SubscriptionInput["currency"]) =>
-    new Intl.NumberFormat(language, { style: "currency", currency }).format(Number(value));
-  const columns: TableColumn<Row>[] = [
-    {
-      key: "name",
-      header: copy.name,
-      width: proportional(2),
-      renderCell: (row) => (
-        <VStack gap={1}>
-          <Text weight="semibold">{row.name}</Text>
-          {getSubscriptionServiceUrl(row.serviceUrl) && (
-            <a href={row.serviceUrl} target="_blank" rel="noopener noreferrer">
-              <HStack gap={1} vAlign="center">
-                <ExternalLink size={14} />
-                <Text type="supporting">{getSubscriptionServiceUrl(row.serviceUrl)?.hostname}</Text>
-              </HStack>
-            </a>
-          )}
-        </VStack>
-      ),
-    },
-    {
-      key: "category",
-      header: copy.category,
-      width: pixel(100),
-      renderCell: (row) => copy.categories[row.category],
-    },
-    {
-      key: "expiryDate",
-      header: copy.expiryDate,
-      width: pixel(130),
-      renderCell: (row) => (
-        <VStack gap={1}>
-          <Text>{row.expiryDate ?? "—"}</Text>
-          <Text type="supporting" color="secondary">
-            {row.startDate}
-          </Text>
-        </VStack>
-      ),
-    },
-    {
-      key: "status",
-      header: copy.status,
-      width: pixel(130),
-      renderCell: (row) => (
-        <HStack gap={2} vAlign="center">
-          <StatusDot
-            label={copy[row.status]}
-            variant={
-              row.status === "expired" ? "error" : row.status === "expiring" ? "warning" : "success"
-            }
-          />
-          <Text>{copy[row.status]}</Text>
-        </HStack>
-      ),
-    },
-    {
-      key: "initialPrice",
-      header: copy.initialPrice,
-      width: pixel(140),
-      renderCell: (row) => (
-        <VStack gap={1}>
-          <Text>{money(row.initialPrice, row.currency)}</Text>
-          {rates && row.currency !== displayCurrency && (
-            <Text type="supporting" color="secondary">
-              ≈{" "}
-              {money(
-                convertSubscriptionPrice(row.initialPrice, row.currency, displayCurrency, rates),
-                displayCurrency,
-              )}
-            </Text>
-          )}
-        </VStack>
-      ),
-    },
-    {
-      key: "renewalPrice",
-      header: copy.renewalPrice,
-      width: pixel(160),
-      renderCell: (row) => (
-        <VStack gap={1}>
-          <Text>{money(row.renewalPrice, row.currency)}</Text>
-          {rates && row.currency !== displayCurrency && (
-            <Text type="supporting" color="secondary">
-              ≈{" "}
-              {money(
-                convertSubscriptionPrice(row.renewalPrice, row.currency, displayCurrency, rates),
-                displayCurrency,
-              )}
-            </Text>
-          )}
-        </VStack>
-      ),
-    },
-    {
-      key: "renewalType",
-      header: copy.renewalType,
-      width: pixel(140),
-      renderCell: (row) => copy.renewals[row.renewalType],
-    },
-    {
-      key: "reminderTime",
-      header: copy.reminder,
-      width: pixel(170),
-      renderCell: (row) => (
-        <VStack gap={1}>
-          <Text>
-            {row.reminderEnabled
-              ? `${row.reminderDays}d · ${row.reminderTime.slice(0, 5)}`
-              : copy.off}
-          </Text>
-          <Text type="supporting" color="secondary">
-            {row.deliveryStatus ? copy.deliveries[row.deliveryStatus] : copy.notSent}
-          </Text>
-        </VStack>
-      ),
-    },
-    {
-      key: "attachments",
-      header: copy.attachments,
-      width: pixel(90),
-      renderCell: (row) => (
-        <HStack gap={1} vAlign="center">
-          <Paperclip size={14} />
-          <Text>{row.attachments.length}</Text>
-        </HStack>
-      ),
-    },
-    {
-      key: "actions",
-      header: copy.actions,
-      width: pixel(100),
-      renderCell: (row) => (
-        <HStack gap={1}>
-          <IconButton
-            label={copy.edit}
-            tooltip={copy.edit}
-            icon={<Pencil size={16} />}
-            variant="ghost"
-            onClick={() => open(row)}
-          />
-          <IconButton
-            label={copy.delete}
-            tooltip={copy.delete}
-            icon={<Trash2 size={16} />}
-            variant="ghost"
-            onClick={() => setDeleteTarget(row)}
-          />
-        </HStack>
-      ),
-    },
-  ];
   const feedbackElement = feedback && (
     <AdminFeedbackBanner banner={feedback} onDismiss={() => setFeedback(undefined)} />
   );
   return (
-    <VStack gap={4}>
+    <VStack gap={4} style={{ width: "100%", minWidth: 0 }}>
       {!editor && feedbackElement}
       <HStack gap={3} hAlign="between" vAlign="end" wrap="wrap">
         <Text>{copy.total.replace("{{count}}", String(data?.total ?? 0))}</Text>
@@ -549,28 +376,24 @@ export const SubscriptionsPage = ({
           {rateError}
         </Text>
       )}
-      <Divider />
-      {loading ? (
-        <HStack gap={2} vAlign="center">
-          <Spinner size="sm" />
-          <Text>{copy.loading}</Text>
-        </HStack>
-      ) : data?.items.length ? (
-        <Table
-          data={data.items as Row[]}
-          columns={columns}
-          idKey="id"
-          hasHover
-          verticalAlign="middle"
-          textOverflow="wrap"
-          plugins={{ stickyColumns }}
-        />
-      ) : (
-        <EmptyState title={copy.empty} />
-      )}
-      {(data?.total ?? 0) > 12 && (
-        <Pagination page={page} pageSize={12} totalItems={data?.total ?? 0} onChange={setPage} />
-      )}
+      <SubscriptionTable
+        items={data?.items ?? []}
+        total={data?.total ?? 0}
+        page={data?.page ?? page}
+        pageSize={data?.pageSize ?? pageSize}
+        isLoading={loading}
+        isNarrow={isNarrow}
+        language={language}
+        displayCurrency={displayCurrency}
+        rates={rates}
+        onEdit={open}
+        onDelete={setDeleteTarget}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => {
+          setPageSize(value);
+          setPage(1);
+        }}
+      />
       {editor && form && (
         <AdminFormDialog
           isNarrow={isNarrow}
@@ -630,6 +453,13 @@ export const SubscriptionsPage = ({
                     label: copy.renewals[value],
                   }))}
                 />
+              </Grid>
+              <TextArea
+                label={copy.details}
+                value={form.details}
+                onChange={(value) => update("details", value)}
+              />
+              <Grid columns={isNarrow ? 1 : 2} gap={3}>
                 <DateInput
                   label={copy.startDate}
                   value={dateValue(form.startDate)}
@@ -644,43 +474,23 @@ export const SubscriptionsPage = ({
                   onChange={(value) => update("expiryDate", value ?? null)}
                   format="system_date"
                 />
-                <NumberInput
-                  label={copy.initialPrice}
-                  value={Number(form.initialPrice)}
-                  onChange={(value) => update("initialPrice", value.toFixed(2))}
-                  min={0}
-                  max={9999999999.99}
-                  step={0.01}
-                  isWheelEnabled={false}
+                <SubscriptionPriceField
+                  language={language}
+                  kind="initial"
+                  price={form.initialPrice}
+                  currency={form.initialCurrency}
+                  onPriceChange={(value) => update("initialPrice", value)}
+                  onCurrencyChange={(value) => update("initialCurrency", value)}
                 />
-                <NumberInput
-                  label={copy.renewalPrice}
-                  value={Number(form.renewalPrice)}
-                  onChange={(value) => update("renewalPrice", value.toFixed(2))}
-                  min={0}
-                  max={9999999999.99}
-                  step={0.01}
-                  isWheelEnabled={false}
+                <SubscriptionPriceField
+                  language={language}
+                  kind="renewal"
+                  price={form.renewalPrice}
+                  currency={form.renewalCurrency}
+                  onPriceChange={(value) => update("renewalPrice", value)}
+                  onCurrencyChange={(value) => update("renewalCurrency", value)}
                 />
-                <Selector
-                  label={copy.currency}
-                  value={form.currency}
-                  onChange={(value) => {
-                    const currency = subscriptionCurrencies.find((v) => v === value);
-                    if (currency) update("currency", currency);
-                  }}
-                  options={subscriptionCurrencies.map((value) => ({
-                    value,
-                    label: copy.currencies[value],
-                  }))}
-                />
-                <TextInput label={copy.recipient} value={editor.recipientEmail ?? "—"} isReadOnly />
               </Grid>
-              <TextArea
-                label={copy.details}
-                value={form.details}
-                onChange={(value) => update("details", value)}
-              />
               <TextArea
                 label={copy.notes}
                 value={form.notes}

@@ -182,6 +182,7 @@ const MediaPickerPanel = ({
 
       try {
         const result = await getMediaAssets({
+          excludePrivate: true,
           fileType: "image",
           folderSlug,
           page: 1,

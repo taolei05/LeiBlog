@@ -83,6 +83,7 @@ export const MEDIA_LIBRARY_FAILURE = {
   FolderSlugExists: "folder-slug-exists",
   NotFound: "not-found",
   ProtectedFolder: "protected-folder",
+  SubscriptionAttachmentOnly: "subscription-attachment-only",
   R2ConfigurationIncomplete: "r2-configuration-incomplete",
   RemoteStorageUnsupported: "remote-storage-unsupported",
   UnsupportedFileType: "unsupported-file-type",
@@ -145,6 +146,7 @@ type MediaFolderRow = {
 };
 
 type ListMediaAssetsParameters = {
+  excludePrivate?: boolean;
   fileType?: MediaFileType | "all";
   folderSlug?: string;
   page?: number;
@@ -623,6 +625,7 @@ const validateUploadFile = ({ file }: ValidateUploadFileParameters) => {
 };
 
 export const listMediaAssets = async ({
+  excludePrivate = false,
   fileType,
   folderSlug,
   page,
@@ -654,6 +657,7 @@ export const listMediaAssets = async ({
         OR lower(ma.file_name) LIKE ${search}
         OR lower(ma.access_url) LIKE ${search}
         OR lower(coalesce(mf.name, '')) LIKE ${search})
+      AND (NOT ${excludePrivate} OR ma.subscription_attachment_id IS NULL)
       AND (${normalizedFileType}::text IS NULL OR ma.file_type = ${normalizedFileType})
       AND (${normalizedFolderSlug}::text IS NULL OR lower(mf.slug) = ${normalizedFolderSlug})
       AND (${normalizedStorageProvider}::text IS NULL
@@ -687,6 +691,7 @@ export const listMediaAssets = async ({
         OR lower(ma.file_name) LIKE ${search}
         OR lower(ma.access_url) LIKE ${search}
         OR lower(coalesce(mf.name, '')) LIKE ${search})
+      AND (NOT ${excludePrivate} OR ma.subscription_attachment_id IS NULL)
       AND (${normalizedFileType}::text IS NULL OR ma.file_type = ${normalizedFileType})
       AND (${normalizedFolderSlug}::text IS NULL OR lower(mf.slug) = ${normalizedFolderSlug})
       AND (${normalizedStorageProvider}::text IS NULL
@@ -891,6 +896,10 @@ export const uploadMediaAsset = async ({
   targetProvider,
   uploadedBy,
 }: UploadMediaAssetInput) => {
+  if (folderSlug?.trim().toLowerCase() === "subscription-attachments") {
+    throw new MediaLibraryError(MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly,
+      "Upload attachments from subscription management.");
+  }
   const { fileFormat, fileType } = validateUploadFile({ file });
   if (acceptedFileTypes !== undefined && !acceptedFileTypes.includes(fileType)) {
     throw new MediaLibraryError(
@@ -1057,6 +1066,8 @@ export const deleteMediaAsset = async ({ mediaId }: DeleteMediaAssetParameters) 
       : undefined;
 
   await sql.begin(async (transaction) => {
+    await transaction`DELETE FROM subscription_attachments WHERE id IN
+      (SELECT subscription_attachment_id FROM media_assets WHERE id = ${mediaId})`;
     await transaction`DELETE FROM media_assets WHERE id = ${mediaId}`;
   });
 
@@ -1074,11 +1085,11 @@ export const updateMediaAsset = async ({ fileName, mediaId }: UpdateMediaAssetPa
   const sql = getSql();
   await getMediaAssetById({ mediaId });
 
-  await sql`
-    UPDATE media_assets
-    SET file_name = ${sanitizeDisplayName(fileName)}
-    WHERE id = ${mediaId}
-  `;
+  await sql.begin(async (tx) => {
+    await tx`UPDATE subscription_attachments SET file_name = ${sanitizeDisplayName(fileName)}
+      WHERE id IN (SELECT subscription_attachment_id FROM media_assets WHERE id = ${mediaId})`;
+    await tx`UPDATE media_assets SET file_name = ${sanitizeDisplayName(fileName)} WHERE id = ${mediaId}`;
+  });
 
   const item = await getMediaAssetById({ mediaId });
 
@@ -1117,6 +1128,11 @@ export const getMediaAssetDownload = async ({
   }
 
   if (row.storageKey === null) {
+    const [attachment] = await sql<{ content: Buffer }[]>`SELECT content FROM subscription_attachments
+      WHERE id IN (SELECT subscription_attachment_id FROM media_assets WHERE id = ${mediaId})`;
+    if (attachment !== undefined) return {
+      data: attachment.content, fileName: row.fileName, contentType: readMediaContentType(row.fileFormat),
+    };
     throw new MediaLibraryError(MEDIA_LIBRARY_FAILURE.NotFound, "Media file was not found.");
   }
 

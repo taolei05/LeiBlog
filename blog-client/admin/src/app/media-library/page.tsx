@@ -75,6 +75,7 @@ import {
   LocalImageEditorDialog,
 } from "../../../../shared/local-image-editor";
 import { formatDateTimeInTimeZone } from "../../../../shared/time-zone";
+import { MediaDocumentPreview } from "./media-document-preview";
 
 type MediaFilter = MediaFileType | "all";
 type MediaViewMode = "grid" | "list";
@@ -129,6 +130,7 @@ const PAGE_SIZE_OPTIONS = [12, 24, 48];
 const ALL_FOLDERS_VALUE = "all";
 const DEFAULT_UPLOAD_FOLDER_SLUG = "media";
 const SYSTEM_MEDIA_FOLDER_TRANSLATION_KEYS = {
+  "subscription-attachments": "subscriptionAttachments",
   "article-covers": "articleCovers",
   avatars: "avatars",
   comments: "comments",
@@ -2241,7 +2243,14 @@ export function MediaLibraryPage({ authToken, isNarrow, timeZone }: MediaLibrary
             label={t("admin.mediaLibrary.upload")}
             icon={<UploadCloud size={16} />}
             variant="primary"
-            isDisabled={uploadEditState !== undefined}
+            isDisabled={
+              uploadEditState !== undefined || uploadFolderSlug === "subscription-attachments"
+            }
+            tooltip={
+              uploadFolderSlug === "subscription-attachments"
+                ? t("admin.mediaLibrary.subscriptionAttachmentUpload")
+                : undefined
+            }
             isLoading={isUploading}
             onClick={openUploadPicker}
           />
@@ -2314,6 +2323,12 @@ export function MediaLibraryPage({ authToken, isNarrow, timeZone }: MediaLibrary
                 label={t("admin.mediaLibrary.upload")}
                 variant="primary"
                 icon={<Plus size={16} />}
+                isDisabled={uploadFolderSlug === "subscription-attachments"}
+                tooltip={
+                  uploadFolderSlug === "subscription-attachments"
+                    ? t("admin.mediaLibrary.subscriptionAttachmentUpload")
+                    : undefined
+                }
                 onClick={openUploadPicker}
               />
             }
@@ -2428,18 +2443,29 @@ export function MediaLibraryPage({ authToken, isNarrow, timeZone }: MediaLibrary
         </HStack>
       )}
 
-      {previewingMedia !== undefined && (
-        <MediaDetailDialog
-          isNarrow={isNarrow}
-          language={language}
+      {previewingMedia?.fileType === "document" ? (
+        <MediaDocumentPreview
+          key={previewingMedia.id}
           media={previewingMedia}
+          token={authToken}
+          isNarrow={isNarrow}
           onClose={() => setPreviewingMedia(undefined)}
-          onCopy={() => {
-            void copyMediaLink(previewingMedia);
-          }}
-          onOpenFile={() => openMedia(previewingMedia)}
-          timeZone={timeZone}
+          onDownload={() => downloadMedia(previewingMedia)}
         />
+      ) : (
+        previewingMedia !== undefined && (
+          <MediaDetailDialog
+            isNarrow={isNarrow}
+            language={language}
+            media={previewingMedia}
+            onClose={() => setPreviewingMedia(undefined)}
+            onCopy={() => {
+              void copyMediaLink(previewingMedia);
+            }}
+            onOpenFile={() => openMedia(previewingMedia)}
+            timeZone={timeZone}
+          />
+        )
       )}
 
       {folderForm !== undefined && (

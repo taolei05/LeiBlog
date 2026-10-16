@@ -3,6 +3,7 @@ import { escapeHtml, renderLeiBlogEmailHtml } from "../../blog/auth/service";
 
 export type SubscriptionReminderContent = {
   name: string;
+  details?: string;
   expiryDate: string;
   renewalPrice: string;
   currency: string;
@@ -32,6 +33,7 @@ export const renderSubscriptionReminderEmail = ({
         : "手动续订";
   const rows = [
     [en ? "Service" : "服务", subscription.name],
+    ...(subscription.details?.trim() ? [[en ? "Details" : "详情", subscription.details]] : []),
     [en ? "Expiry date" : "到期日期", subscription.expiryDate],
     [en ? "Renewal price" : "续费价格", `${subscription.currency} ${subscription.renewalPrice}`],
     [en ? "Renewal type" : "续订类型", mode],
@@ -48,7 +50,7 @@ export const renderSubscriptionReminderEmail = ({
       branding,
       preheader: subject,
       title: subject,
-      bodyHtml: `<table role="presentation" style="width:100%;border-collapse:collapse;">${rows.map(([key, value]) => `<tr><td style="padding:8px 0;color:#71717a;vertical-align:top;">${escapeHtml(key)}</td><td style="padding:8px 0;word-break:break-word;">${escapeHtml(value)}</td></tr>`).join("")}</table><p>${escapeHtml(note)}</p><p><a href="${escapeHtml(adminUrl)}">${escapeHtml(action)}</a></p>`,
+      bodyHtml: `<table role="presentation" style="width:100%;border-collapse:collapse;">${rows.map(([key, value]) => `<tr><td style="padding:8px 0;color:#71717a;vertical-align:top;">${escapeHtml(key)}</td><td style="padding:8px 0;word-break:break-word;white-space:pre-wrap;">${escapeHtml(value)}</td></tr>`).join("")}</table><p>${escapeHtml(note)}</p><p><a href="${escapeHtml(adminUrl)}">${escapeHtml(action)}</a></p>`,
     }),
   };
 };

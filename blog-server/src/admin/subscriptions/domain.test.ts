@@ -20,6 +20,21 @@ export const subscriptionFixture = {
 } as const;
 
 describe("subscription validation and calendar status", () => {
+  test("keeps independent currencies and falls back to the legacy currency", () => {
+    const { currency, ...fields } = subscriptionFixture;
+    const input = { ...fields, initialCurrency: "HKD", renewalCurrency: "USD" } as const;
+    expect(Value.Check(subscriptionInputSchema, input)).toBe(true);
+    expect(normalizeSubscription(input)).toMatchObject({
+      initialCurrency: "HKD", renewalCurrency: "USD",
+    });
+    expect(normalizeSubscription(subscriptionFixture)).toMatchObject({
+      initialCurrency: currency, renewalCurrency: currency,
+    });
+    expect(() => normalizeSubscription(fields)).toThrow();
+    for (const field of ["initialCurrency", "renewalCurrency"]) {
+      expect(Value.Check(subscriptionInputSchema, { ...input, [field]: "XYZ" })).toBe(false);
+    }
+  });
   test("accepts exact decimal strings, not numeric floating money", () => {
     expect(Value.Check(subscriptionInputSchema, subscriptionFixture)).toBe(true);
     expect(

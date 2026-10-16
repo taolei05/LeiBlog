@@ -12,6 +12,7 @@ export const subscriptionCurrencies = ["CNY", "HKD", "USD", "EUR", "GBP", "JPY"]
 export const subscriptionRenewalTypes = ["automatic", "manual", "perpetual"] as const;
 const dateSchema = t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const priceSchema = t.String({ pattern: "^\\d{1,10}(\\.\\d{1,2})?$" });
+const currencySchema = t.Union(subscriptionCurrencies.map((value) => t.Literal(value)));
 export const subscriptionInputSchema = t.Object({
   name: t.String({ minLength: 1, maxLength: 160 }),
   serviceUrl: t.String({ maxLength: 2048 }),
@@ -21,7 +22,9 @@ export const subscriptionInputSchema = t.Object({
   expiryDate: t.Nullable(dateSchema),
   initialPrice: priceSchema,
   renewalPrice: priceSchema,
-  currency: t.Union(subscriptionCurrencies.map((value) => t.Literal(value))),
+  initialCurrency: t.Optional(currencySchema),
+  renewalCurrency: t.Optional(currencySchema),
+  currency: t.Optional(currencySchema),
   renewalType: t.Union(subscriptionRenewalTypes.map((value) => t.Literal(value))),
   notes: t.String({ maxLength: 10000 }),
   reminderEnabled: t.Boolean(),
@@ -49,9 +52,13 @@ const isDateValid = (date: string) => {
   );
 };
 
-export const normalizeSubscription = (input: SubscriptionInput): SubscriptionInput => {
+export const normalizeSubscription = (input: SubscriptionInput) => {
   const name = input.name.trim();
   const serviceUrl = input.serviceUrl.trim();
+  const initialCurrency = input.initialCurrency ?? input.currency;
+  const renewalCurrency = input.renewalCurrency ?? input.currency;
+  if (initialCurrency === undefined || renewalCurrency === undefined)
+    throw new SubscriptionError("Select a currency for each price. / 请分别选择首付和续费货币。");
   if (!name) throw new SubscriptionError("Service name is required. / 请填写服务名称。");
   if (serviceUrl) {
     let url: URL;
@@ -77,6 +84,8 @@ export const normalizeSubscription = (input: SubscriptionInput): SubscriptionInp
     ...input,
     name,
     serviceUrl,
+    initialCurrency,
+    renewalCurrency,
     expiryDate,
     reminderEnabled: expiryDate !== null && input.reminderEnabled,
   };

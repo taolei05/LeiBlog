@@ -1034,6 +1034,15 @@ const resources = {
           open: "打开",
           preview: "预览",
           openOriginal: "打开原文件",
+          documentPreview: {
+            loading: "正在加载文档",
+            failed: "文档加载失败或文件无效，请重试或下载查看。",
+            tooLarge: "文件过大，无法在线预览。PDF 最大支持 25 MB，文本最大支持 1 MB，请下载查看。",
+            privateOffice: "此 Office 附件为私有文件，请下载查看。",
+            publicUrlRequired: "Office 在线预览需要可公开访问的 HTTPS 链接，请下载查看。",
+            unsupported: "此文件格式暂不支持在线预览，请下载查看。",
+            officeDisclosure: "此公开文档由 Microsoft Office 在线服务加载。",
+          },
           copyLink: "复制链接",
           copySuccess: "媒体链接已复制。",
           copyFailed: "复制链接失败。",
@@ -1085,7 +1094,12 @@ const resources = {
           emptyTitle: "暂无媒体资源",
           emptyDescription: "上传图片、视频或文档后会显示在这里。",
           defaultFolder: "媒体库",
+          subscriptionAttachmentUpload: "请在订阅与提醒管理中上传附件。",
           systemFolders: {
+            subscriptionAttachments: {
+              name: "订阅附件",
+              description: "订阅发票、合同和图片，仅管理员可访问。",
+            },
             articleCovers: {
               name: "文章",
               description: "文章封面和正文插图可以集中存储到这里。",
@@ -2438,6 +2452,18 @@ const resources = {
           open: "Open",
           preview: "Preview",
           openOriginal: "Open original",
+          documentPreview: {
+            loading: "Loading document",
+            failed: "The document could not be loaded or is invalid. Retry or download it.",
+            tooLarge:
+              "This file is too large to preview. The limit is 25 MB for PDFs and 1 MB for text. Please download it.",
+            privateOffice: "This Office attachment is private. Download it to view it.",
+            publicUrlRequired:
+              "Office preview requires a publicly accessible HTTPS URL. Please download this file.",
+            unsupported: "This file format cannot be previewed. Please download it.",
+            officeDisclosure:
+              "This public document is loaded by the Microsoft Office online service.",
+          },
           copyLink: "Copy link",
           copySuccess: "Media link copied.",
           copyFailed: "Could not copy the link.",
@@ -2491,7 +2517,12 @@ const resources = {
           emptyTitle: "No media yet",
           emptyDescription: "Uploaded images, videos, and documents will appear here.",
           defaultFolder: "Media library",
+          subscriptionAttachmentUpload: "Upload attachments from subscription management.",
           systemFolders: {
+            subscriptionAttachments: {
+              name: "Subscription attachments",
+              description: "Private invoices, contracts and images; administrator access only.",
+            },
             articleCovers: {
               name: "Articles",
               description: "Article covers and inline images are stored here.",

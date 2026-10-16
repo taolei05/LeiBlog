@@ -10,7 +10,7 @@
 4. 安装 Docker Compose v2，需支持 `up --wait`。未安装 Docker 时脚本会使用 Docker 官方安装器；不希望自动安装时设置 `LEIBLOG_INSTALL_DOCKER=0`。
 5. **不得覆盖旧项目的部署目录、数据库或 Compose 项目名。** 旧项目 `.env` 和备份格式不兼容。仍运行旧项目时，给新项目使用不同目录和项目名；80/443 被占用时先明确安排域名/端口切换。
 
-生产前端镜像只执行 `bun run build`（包含 TypeScript 检查），不在 VPS 上重复运行 lint 和测试。完整质量检查保留在 `./check.sh`，GitHub Actions 在每次推送 `main` 和拉取请求时执行检查、安全集成测试及生产部署回归。发布前应确认 Actions 通过。
+生产前端镜像只执行 `bun run build`（包含 TypeScript 检查），不在 VPS 上重复运行 lint 和测试。完整质量检查通过本地 `./check.sh`、安全集成测试和部署回归执行；按当前维护约定，不运行或启用 GitHub Actions。
 
 ## 安装
 

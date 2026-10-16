@@ -970,6 +970,7 @@ type MediaFileTypeFilter = MediaFileType | "all";
 type MediaStorageProviderFilter = MediaStorageProvider | "all";
 
 type GetMediaAssetsParameters = {
+  excludePrivate?: boolean;
   fileType: MediaFileTypeFilter;
   folderSlug?: string;
   page: number;
@@ -3446,6 +3447,7 @@ export const deleteManagedUser = async ({ token, userId }: DeleteManagedUserPara
 };
 
 export const getMediaAssets = async ({
+  excludePrivate,
   fileType,
   folderSlug,
   page,
@@ -3464,6 +3466,7 @@ export const getMediaAssets = async ({
   if (folderSlug !== undefined && folderSlug.trim().length > 0) {
     searchParams.set("folderSlug", folderSlug.trim());
   }
+  if (excludePrivate) searchParams.set("excludePrivate", "true");
 
   const response = await fetch(`${API_BASE_URL}/api/admin/media?${searchParams.toString()}`, {
     headers: {
@@ -3924,6 +3927,54 @@ const readDownloadFileName = (response: Response, fallback: string) => {
 
   const quotedName = disposition.match(/filename="([^"]+)"/i)?.[1];
   return quotedName ?? fallback;
+};
+
+export const readMediaAssetForPreview = async ({
+  mediaId,
+  token,
+  signal,
+  maxBytes,
+}: {
+  mediaId: string;
+  token: string;
+  signal: AbortSignal;
+  maxBytes: number;
+}) => {
+  signal.throwIfAborted();
+  const response = await fetch(`${API_BASE_URL}/api/admin/media/${mediaId}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    const body = await parseJson(response);
+    throw new Error(readErrorMessage(body, "Media preview failed."));
+  }
+  if (Number(response.headers.get("content-length")) > maxBytes) {
+    await response.body?.cancel();
+    throw new RangeError("Media preview is too large.");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return new Blob();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw new RangeError("Media preview is too large.");
+      chunks.push(value.slice());
+    }
+    signal.throwIfAborted();
+    return new Blob(chunks);
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
 };
 
 export const downloadMediaAsset = async ({
@@ -5178,7 +5229,8 @@ export const testExchangeRateApiKey = async ({
   token,
 }: TestIpGeolocationApiKeyParameters) =>
   testSiteSettingsIntegration({
-    fallbackError: "ExchangeRate API key test failed.",
+    fallbackError:
+      locale === "en" ? "ExchangeRate API key test failed." : "ExchangeRate API 密钥测试失败。",
     locale,
     path: "test-exchange-rate",
     payload: { apiKey: apiKey.trim() },

@@ -30,7 +30,7 @@ export type { BackupFailure } from "./archive";
 type BackupImportMode = "replace";
 type BackupRow = Record<string, unknown>;
 type BackupSql = Sql | TransactionSql;
-type SqlValue = string | number | boolean | null;
+type SqlValue = string | number | boolean | Buffer | null;
 
 type BackupPreviewInput = {
   file: File;
@@ -243,7 +243,10 @@ const readTableRows = async (sql: BackupSql, table: string) => {
   // JSON text preserves SQL column names instead of applying the connection's camel transform.
   const value: unknown = typeof result?.rows === "string" ? JSON.parse(result.rows) : result?.rows;
   const rows = Array.isArray(value) ? value.filter(isRecord) : [];
-  return rows.map((row) => excludeSensitiveColumns(table, row));
+  // Private subscription files are packed once, then re-indexed by the attachment trigger on restore.
+  return rows.filter((row) => table !== "media_assets" ||
+      row.subscription_attachment_id === null || row.subscription_attachment_id === undefined)
+    .map((row) => excludeSensitiveColumns(table, row));
 };
 
 const exportData = async (sql: BackupSql): Promise<BackupData> => {
@@ -549,6 +552,10 @@ const toSqlValue = (value: unknown): SqlValue => {
 };
 
 const normalizeSqlValue = (table: string, column: string, value: unknown): SqlValue => {
+  if (table === "subscription_attachments" && column === "content" &&
+      typeof value === "string" && /^\\x(?:[0-9a-f]{2})+$/i.test(value)) {
+    return Buffer.from(value.slice(2), "hex");
+  }
   if (TEXT_ARRAY_COLUMNS[table]?.has(column)) {
     return toSqlValue(toPostgresTextArray(value));
   }
@@ -569,7 +576,15 @@ const insertRows = async (sql: BackupSql, table: string, rows: BackupRow[]) => {
   let imported = 0;
 
   for (const row of rows) {
-    const insertRow = table === "comments" ? { ...row, parent_id: null } : row;
+    const insertRow = table === "comments"
+      ? { ...row, parent_id: null }
+      : table === "subscriptions"
+        ? {
+            ...row,
+            initial_currency: row.initial_currency ?? row.currency,
+            renewal_currency: row.renewal_currency ?? row.currency,
+          }
+        : row;
     if (table === "comments" && row.parent_id !== null && row.parent_id !== undefined) {
       commentParentIds.push({ id: toSqlValue(row.id), parentId: toSqlValue(row.parent_id) });
     }

@@ -25,7 +25,8 @@ export const listSubscriptions = async ({
   const timeZone = await readSiteTimeZone({ sql });
   const records = await sql<{ items: Record<string, unknown>[]; total: number }[]>`
     WITH data AS (
-      SELECT s.id, s.name, s.service_url, s.category, s.details, s.notes, s.currency, s.renewal_type,
+      SELECT s.id, s.name, s.service_url, s.category, s.details, s.notes, s.currency,
+        s.initial_currency, s.renewal_currency, s.renewal_type,
         s.reminder_enabled, s.reminder_days, s.created_at, s.updated_at,
         s.start_date::text AS start_date, s.expiry_date::text AS expiry_date,
         s.reminder_time::text AS reminder_time, s.initial_price::text AS initial_price,
@@ -73,7 +74,8 @@ export const saveSubscription = async ({
       await tx`
         UPDATE subscriptions SET name = ${value.name}, service_url = ${value.serviceUrl}, category = ${value.category},
           details = ${value.details}, start_date = ${value.startDate}, expiry_date = ${value.expiryDate},
-          initial_price = ${value.initialPrice}, renewal_price = ${value.renewalPrice}, currency = ${value.currency},
+          initial_price = ${value.initialPrice}, renewal_price = ${value.renewalPrice}, currency = ${value.initialCurrency},
+          initial_currency = ${value.initialCurrency}, renewal_currency = ${value.renewalCurrency},
           renewal_type = ${value.renewalType}, notes = ${value.notes}, reminder_enabled = ${value.reminderEnabled},
           reminder_days = ${value.reminderDays}, reminder_time = ${value.reminderTime}, reminder_revision = reminder_revision + 1
         WHERE id = ${id}
@@ -83,10 +85,11 @@ export const saveSubscription = async ({
           AND (locked_until IS NULL OR locked_until <= now())`;
     } else {
       await tx`INSERT INTO subscriptions (id, name, service_url, category, details, start_date, expiry_date,
-        initial_price, renewal_price, currency, renewal_type, notes, reminder_enabled, reminder_days,
+        initial_price, renewal_price, currency, initial_currency, renewal_currency, renewal_type, notes, reminder_enabled, reminder_days,
         reminder_time, reminder_recipient_id)
         VALUES (${subscriptionId}, ${value.name}, ${value.serviceUrl}, ${value.category}, ${value.details},
-          ${value.startDate}, ${value.expiryDate}, ${value.initialPrice}, ${value.renewalPrice}, ${value.currency},
+          ${value.startDate}, ${value.expiryDate}, ${value.initialPrice}, ${value.renewalPrice}, ${value.initialCurrency},
+          ${value.initialCurrency}, ${value.renewalCurrency},
           ${value.renewalType}, ${value.notes}, ${value.reminderEnabled}, ${value.reminderDays}, ${value.reminderTime}, ${userId})`;
     }
   });

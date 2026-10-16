@@ -120,6 +120,8 @@ const readMediaLibraryFailureMessage = (reason: MediaLibraryFailure) => {
       return "Media asset was not found.";
     case MEDIA_LIBRARY_FAILURE.ProtectedFolder:
       return "Protected media folder cannot be deleted.";
+    case MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly:
+      return "Upload attachments from subscription management. / 请在订阅与提醒管理中上传附件。";
     case MEDIA_LIBRARY_FAILURE.R2ConfigurationIncomplete:
       return "Cloudflare R2 storage configuration is incomplete.";
     case MEDIA_LIBRARY_FAILURE.RemoteStorageUnsupported:
@@ -144,6 +146,7 @@ const createMediaLibraryFailureResponse = (error: MediaLibraryError) => {
     case MEDIA_LIBRARY_FAILURE.FileTooLarge:
     case MEDIA_LIBRARY_FAILURE.FolderSlugExists:
     case MEDIA_LIBRARY_FAILURE.ProtectedFolder:
+    case MEDIA_LIBRARY_FAILURE.SubscriptionAttachmentOnly:
     case MEDIA_LIBRARY_FAILURE.R2ConfigurationIncomplete:
     case MEDIA_LIBRARY_FAILURE.RemoteStorageUnsupported:
     case MEDIA_LIBRARY_FAILURE.UnsupportedFileType:
@@ -301,6 +304,7 @@ export const adminMediaRoutes = new Elysia({ prefix: "/api/admin" })
       }
 
       return listMediaAssets({
+        excludePrivate: query.excludePrivate === "true",
         fileType: readMediaFileTypeFilter(query.fileType),
         folderSlug: query.folderSlug,
         page: parsePositiveInteger({ fallback: 1, value: query.page }),
@@ -314,6 +318,7 @@ export const adminMediaRoutes = new Elysia({ prefix: "/api/admin" })
         authorization: t.Optional(t.String()),
       }),
       query: t.Object({
+        excludePrivate: t.Optional(t.String()),
         fileType: t.Optional(t.String()),
         folderSlug: t.Optional(t.String()),
         page: t.Optional(t.String()),
@@ -426,6 +431,8 @@ export const adminMediaRoutes = new Elysia({ prefix: "/api/admin" })
         set.headers["content-disposition"] =
           `attachment; filename*=UTF-8''${encodeURIComponent(download.fileName)}`;
         set.headers["content-type"] = download.contentType;
+        set.headers["cache-control"] = "private, no-store";
+        set.headers["x-content-type-options"] = "nosniff";
 
         if (download.data !== undefined) {
           return download.data;
