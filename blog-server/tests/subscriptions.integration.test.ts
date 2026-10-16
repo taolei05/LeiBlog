@@ -208,6 +208,33 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     expect((await request(`/${id}`, { method: "DELETE" })).status).toBe(200);
     expect((await (await request()).json()).total).toBe(0);
   });
+  test("edits existing subscriptions with multiple times without losing attachments", async () => {
+    await create();
+    const body = new FormData();
+    body.set("file", new File(["private invoice"], "invoice.txt"));
+    expect((await request(`/${id}/attachments`, { method: "POST", body })).status).toBe(200);
+    const listed = (await (await request()).json()).items[0];
+    expect(listed.reminderTime).toBe("09:00:00");
+    expect(listed.reminderTimes).toEqual(["09:00"]);
+    expect(listed.attachments).toHaveLength(1);
+
+    const { reminderTime, ...editable } = input();
+    for (const reminderTimes of [["09:00", "10:00"], ["23:59"]]) {
+      const response = await request(`/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...editable, reminderTimes }),
+      });
+      expect(response.status).toBe(200);
+      const updated = (await (await request()).json()).items[0];
+      expect(updated.reminderTimes).toEqual(reminderTimes);
+      expect(updated.attachments).toEqual(listed.attachments);
+      expect(updated.details).toBe(listed.details);
+      expect(updated.initialPrice).toBe(listed.initialPrice);
+      expect(updated.renewalPrice).toBe(listed.renewalPrice);
+      expect(updated.initialCurrency).toBe(listed.initialCurrency);
+      expect(updated.renewalCurrency).toBe(listed.renewalCurrency);
+    }
+  });
   test("unauthenticated and demoted sessions cannot access CRUD, rates or attachments", async () => {
     await create();
     for (const path of ["/", "/exchange-rates", `/${id}/attachments/${crypto.randomUUID()}`])

@@ -225,7 +225,23 @@ export const saveSubscription = async ({
 }) => {
   const result = await request(id ? `/${id}` : "/", token, {
     method: id ? "PUT" : "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      name: input.name,
+      serviceUrl: input.serviceUrl,
+      category: input.category,
+      details: input.details,
+      startDate: input.startDate,
+      expiryDate: input.expiryDate,
+      initialPrice: input.initialPrice,
+      renewalPrice: input.renewalPrice,
+      initialCurrency: input.initialCurrency,
+      renewalCurrency: input.renewalCurrency,
+      renewalType: input.renewalType,
+      notes: input.notes,
+      reminderEnabled: input.reminderEnabled,
+      reminderDays: input.reminderDays,
+      reminderTimes: input.reminderTimes,
+    } satisfies SubscriptionInput),
   });
   if (!isRecord(result) || result.ok !== true || typeof result.id !== "string")
     throw new Error("Invalid subscription response.");

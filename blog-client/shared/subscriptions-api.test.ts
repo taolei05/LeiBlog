@@ -82,6 +82,57 @@ describe("subscriptions API", () => {
       renewalCurrency: "USD",
     });
   });
+  it("edits listed subscriptions without sending legacy or response-only fields", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          ok: true,
+          items: [item],
+          total: 1,
+          page: 1,
+          pageSize: 12,
+          timeZone: "Asia/Shanghai",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ ok: true, id: item.id }));
+    vi.stubGlobal("fetch", fetcher);
+    const listed = await getSubscriptions({
+      token: "",
+      search: "",
+      category: "all",
+      status: "all",
+      page: 1,
+    });
+    const subscription = listed.items[0];
+    await expect(
+      saveSubscription({
+        id: subscription.id,
+        token: "",
+        input: { ...subscription, reminderTimes: ["09:00", "10:00"] },
+      }),
+    ).resolves.toBe(item.id);
+    const [url, init] = fetcher.mock.calls[1];
+    expect(String(url)).toContain(`/api/admin/subscriptions/${item.id}`);
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({
+      name: item.name,
+      serviceUrl: item.serviceUrl,
+      category: item.category,
+      details: item.details,
+      startDate: item.startDate,
+      expiryDate: item.expiryDate,
+      initialPrice: item.initialPrice,
+      renewalPrice: item.renewalPrice,
+      initialCurrency: item.initialCurrency,
+      renewalCurrency: item.renewalCurrency,
+      renewalType: item.renewalType,
+      notes: item.notes,
+      reminderEnabled: item.reminderEnabled,
+      reminderDays: item.reminderDays,
+      reminderTimes: ["09:00", "10:00"],
+    });
+  });
   it("uses HttpOnly credentials without a blank bearer and encodes filters", async () => {
     const fetcher = vi.fn().mockResolvedValue(
       Response.json({
