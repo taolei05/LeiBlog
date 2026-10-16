@@ -935,6 +935,13 @@ UPDATE subscriptions SET initial_currency = COALESCE(initial_currency, currency)
   WHERE initial_currency IS NULL OR renewal_currency IS NULL;
 ALTER TABLE subscriptions ALTER COLUMN initial_currency SET NOT NULL;
 ALTER TABLE subscriptions ALTER COLUMN renewal_currency SET NOT NULL;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS reminder_times time[];
+UPDATE subscriptions SET reminder_times = ARRAY[reminder_time] WHERE reminder_times IS NULL;
+ALTER TABLE subscriptions ALTER COLUMN reminder_times SET NOT NULL;
+ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS subscriptions_reminder_times_check;
+ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_reminder_times_check
+  CHECK (cardinality(reminder_times) BETWEEN 1 AND 12 AND array_position(reminder_times, NULL) IS NULL
+    AND time '24:00' <> ALL(reminder_times));
 CREATE INDEX IF NOT EXISTS subscriptions_expiry_idx ON subscriptions (expiry_date);
 DROP TRIGGER IF EXISTS subscriptions_set_updated_at ON subscriptions;
 CREATE TRIGGER subscriptions_set_updated_at BEFORE UPDATE ON subscriptions
@@ -988,6 +995,15 @@ UPDATE subscription_attachments a SET file_name = a.file_name
 ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_id uuid REFERENCES subscriptions(id) ON DELETE CASCADE;
 ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_revision integer;
 ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_expiry date;
+ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_reminder_date date;
+ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_reminder_time time;
+ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_reminder_final boolean NOT NULL DEFAULT false;
+-- Preserve delivered legacy slots so an upgrade does not repeat today's reminder.
+UPDATE email_notification_jobs j SET subscription_reminder_time = s.reminder_time,
+  subscription_reminder_date = (j.created_at AT TIME ZONE
+    COALESCE((SELECT time_zone FROM site_settings WHERE id = 1), 'Asia/Shanghai'))::date
+  FROM subscriptions s WHERE j.subscription_id = s.id AND j.kind = 'subscription_expiry'
+    AND (j.subscription_reminder_date IS NULL OR j.subscription_reminder_time IS NULL);
 ALTER TABLE email_notification_jobs DROP CONSTRAINT IF EXISTS email_notification_jobs_kind_check;
 ALTER TABLE email_notification_jobs ADD CONSTRAINT email_notification_jobs_kind_check
   CHECK (kind IN ('new_article','comment_reply','comment_admin','subscription_expiry'));
@@ -996,8 +1012,14 @@ ALTER TABLE email_notification_jobs ADD CONSTRAINT email_notification_jobs_check
   CHECK ((kind = 'new_article' AND article_id IS NOT NULL AND comment_id IS NULL AND subscription_id IS NULL)
     OR (kind IN ('comment_reply','comment_admin') AND comment_id IS NOT NULL AND subscription_id IS NULL)
     OR (kind = 'subscription_expiry' AND subscription_id IS NOT NULL AND subscription_revision IS NOT NULL
-      AND subscription_expiry IS NOT NULL AND article_id IS NULL AND comment_id IS NULL));
-CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_subscription_expiry_unique
-  ON email_notification_jobs (subscription_id, subscription_expiry) WHERE kind = 'subscription_expiry' AND status IN ('pending','sent');
+      AND subscription_expiry IS NOT NULL AND subscription_reminder_date IS NOT NULL
+      AND subscription_reminder_time IS NOT NULL AND article_id IS NULL AND comment_id IS NULL));
+DROP INDEX IF EXISTS email_notification_jobs_subscription_expiry_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_subscription_slot_unique
+  ON email_notification_jobs (subscription_id, subscription_expiry, subscription_reminder_date, subscription_reminder_time)
+  WHERE kind = 'subscription_expiry' AND status IN ('pending','sent','failed');
+CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_subscription_final_unique
+  ON email_notification_jobs (subscription_id, subscription_expiry)
+  WHERE kind = 'subscription_expiry' AND subscription_reminder_final AND status IN ('pending','sent','failed');
 CREATE INDEX IF NOT EXISTS email_notification_jobs_subscription_history_idx
   ON email_notification_jobs (subscription_id, subscription_expiry, created_at DESC) WHERE subscription_id IS NOT NULL;

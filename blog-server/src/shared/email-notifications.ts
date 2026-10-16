@@ -134,6 +134,9 @@ type NotificationJob = {
   subscriptionId: string | null;
   subscriptionRevision: number | null;
   subscriptionExpiry: string | null;
+  subscriptionReminderDate: string | null;
+  subscriptionReminderTime: string | null;
+  subscriptionReminderFinal: boolean;
 };
 type NotificationSource = {
   email: string;
@@ -167,11 +170,14 @@ const readNotificationSource = async ({ job, sql }: ReadNotificationSourceParame
     const timeZone = await readSiteTimeZone({ sql });
     const [subscription] = await sql<SubscriptionReminderContent[]>`
       SELECT name, details, expiry_date::text AS expiry_date, renewal_price::text AS renewal_price,
-        renewal_currency AS currency, renewal_type, service_url
+        renewal_currency AS currency, renewal_type, service_url, ${job.subscriptionReminderFinal}::boolean AS is_overdue
       FROM subscriptions WHERE id = ${job.subscriptionId} AND reminder_revision = ${job.subscriptionRevision}
         AND expiry_date = ${job.subscriptionExpiry}::date AND reminder_recipient_id = ${job.recipientId}
-        AND reminder_enabled AND expiry_date >= (now() AT TIME ZONE ${timeZone})::date
-        AND ((expiry_date - reminder_days + reminder_time) AT TIME ZONE ${timeZone}) <= now()
+        AND reminder_enabled AND ${job.subscriptionReminderTime}::time = ANY(reminder_times)
+        AND ((NOT ${job.subscriptionReminderFinal} AND ${job.subscriptionReminderDate}::date = (now() AT TIME ZONE ${timeZone})::date
+            AND ${job.subscriptionReminderDate}::date BETWEEN expiry_date - reminder_days AND expiry_date)
+          OR (${job.subscriptionReminderFinal} AND ${job.subscriptionReminderDate}::date > expiry_date))
+        AND ((${job.subscriptionReminderDate}::date + ${job.subscriptionReminderTime}::time) AT TIME ZONE ${timeZone}) <= now()
     `;
     return subscription === undefined ? undefined : {
       email: recipient.email, locale, subscription, slug: null, title: null, summary: null,

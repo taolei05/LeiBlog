@@ -27,7 +27,7 @@ export type SubscriptionInput = {
   notes: string;
   reminderEnabled: boolean;
   reminderDays: number;
-  reminderTime: string;
+  reminderTimes: string[];
 };
 export type SubscriptionAttachment = {
   id: string;
@@ -37,6 +37,7 @@ export type SubscriptionAttachment = {
 };
 export type Subscription = SubscriptionInput & {
   id: string;
+  reminderTime: string;
   recipientEmail: string | null;
   status: "normal" | "expiring" | "expired";
   attachments: SubscriptionAttachment[];
@@ -121,6 +122,13 @@ export const isSubscription = (value: unknown): value is Subscription => {
     value.reminderDays <= 365 &&
     typeof value.reminderTime === "string" &&
     /^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(value.reminderTime) &&
+    Array.isArray(value.reminderTimes) &&
+    value.reminderTimes.length >= 1 &&
+    value.reminderTimes.length <= 12 &&
+    new Set(value.reminderTimes).size === value.reminderTimes.length &&
+    value.reminderTimes.every(
+      (time: unknown) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time),
+    ) &&
     Array.isArray(value.attachments) &&
     value.attachments.every(isSubscriptionAttachment) &&
     dateValid(value.createdAt) &&

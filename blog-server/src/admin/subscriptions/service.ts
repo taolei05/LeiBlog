@@ -30,6 +30,7 @@ export const listSubscriptions = async ({
         s.reminder_enabled, s.reminder_days, s.created_at, s.updated_at,
         s.start_date::text AS start_date, s.expiry_date::text AS expiry_date,
         s.reminder_time::text AS reminder_time, s.initial_price::text AS initial_price,
+        ARRAY(SELECT to_char(value, 'HH24:MI') FROM unnest(s.reminder_times) AS times(value) ORDER BY value) AS reminder_times,
         s.renewal_price::text AS renewal_price, u.email AS recipient_email,
         CASE WHEN s.expiry_date IS NULL THEN 'normal'
           WHEN s.expiry_date < (now() AT TIME ZONE ${timeZone})::date THEN 'expired'
@@ -77,7 +78,8 @@ export const saveSubscription = async ({
           initial_price = ${value.initialPrice}, renewal_price = ${value.renewalPrice}, currency = ${value.initialCurrency},
           initial_currency = ${value.initialCurrency}, renewal_currency = ${value.renewalCurrency},
           renewal_type = ${value.renewalType}, notes = ${value.notes}, reminder_enabled = ${value.reminderEnabled},
-          reminder_days = ${value.reminderDays}, reminder_time = ${value.reminderTime}, reminder_revision = reminder_revision + 1
+          reminder_days = ${value.reminderDays}, reminder_time = ${value.reminderTime},
+          reminder_times = ${tx.array(value.reminderTimes)}::time[], reminder_revision = reminder_revision + 1
         WHERE id = ${id}
       `;
       await tx`UPDATE email_notification_jobs SET status = 'skipped', completed_at = now()
@@ -86,11 +88,11 @@ export const saveSubscription = async ({
     } else {
       await tx`INSERT INTO subscriptions (id, name, service_url, category, details, start_date, expiry_date,
         initial_price, renewal_price, currency, initial_currency, renewal_currency, renewal_type, notes, reminder_enabled, reminder_days,
-        reminder_time, reminder_recipient_id)
+        reminder_time, reminder_times, reminder_recipient_id)
         VALUES (${subscriptionId}, ${value.name}, ${value.serviceUrl}, ${value.category}, ${value.details},
           ${value.startDate}, ${value.expiryDate}, ${value.initialPrice}, ${value.renewalPrice}, ${value.initialCurrency},
           ${value.initialCurrency}, ${value.renewalCurrency},
-          ${value.renewalType}, ${value.notes}, ${value.reminderEnabled}, ${value.reminderDays}, ${value.reminderTime}, ${userId})`;
+          ${value.renewalType}, ${value.notes}, ${value.reminderEnabled}, ${value.reminderDays}, ${value.reminderTime}, ${tx.array(value.reminderTimes)}::time[], ${userId})`;
     }
   });
   return { ok: true, id: subscriptionId };
@@ -175,16 +177,24 @@ export const deleteSubscriptionAttachment = async ({
   return { ok: true };
 };
 
-export const queueDueSubscriptionReminders = async (sql: Sql = getSql()) => {
+export const queueDueSubscriptionReminders = async (sql: Sql = getSql(), referenceTime = new Date()) => {
   const timeZone = await readSiteTimeZone({ sql });
+  // Catch up today's slots only; the final expiration notice is unique across later days.
   await sql`
-    INSERT INTO email_notification_jobs (kind, recipient_id, subscription_id, subscription_revision, subscription_expiry)
-    SELECT 'subscription_expiry', s.reminder_recipient_id, s.id, s.reminder_revision, s.expiry_date
+    WITH clock AS (SELECT (${referenceTime}::timestamptz AT TIME ZONE ${timeZone})::date AS today)
+    INSERT INTO email_notification_jobs (kind, recipient_id, subscription_id, subscription_revision, subscription_expiry,
+      subscription_reminder_date, subscription_reminder_time, subscription_reminder_final)
+    SELECT 'subscription_expiry', s.reminder_recipient_id, s.id, s.reminder_revision, s.expiry_date,
+      clock.today, slot.send_time, clock.today > s.expiry_date
     FROM subscriptions s JOIN users u ON u.id = s.reminder_recipient_id AND u.role = 'admin'
-    WHERE s.reminder_enabled AND s.expiry_date >= (now() AT TIME ZONE ${timeZone})::date
-      AND ((s.expiry_date - s.reminder_days + s.reminder_time) AT TIME ZONE ${timeZone}) <= now()
+    CROSS JOIN clock CROSS JOIN LATERAL unnest(s.reminder_times) AS slot(send_time)
+    WHERE s.reminder_enabled AND clock.today >= s.expiry_date - s.reminder_days
+      AND ((clock.today + slot.send_time) AT TIME ZONE ${timeZone}) <= ${referenceTime}::timestamptz
+      AND (clock.today <= s.expiry_date OR slot.send_time = (SELECT min(value) FROM unnest(s.reminder_times) AS times(value)))
       AND NOT EXISTS (SELECT 1 FROM email_notification_jobs j WHERE j.subscription_id = s.id
-        AND j.subscription_expiry = s.expiry_date AND j.status IN ('pending', 'sent', 'failed'))
+        AND j.status IN ('pending', 'sent', 'failed') AND (
+          (clock.today <= s.expiry_date AND j.subscription_expiry = s.expiry_date AND j.subscription_reminder_date = clock.today AND j.subscription_reminder_time = slot.send_time)
+          OR (clock.today > s.expiry_date AND j.subscription_expiry = s.expiry_date AND j.subscription_reminder_final)))
     ON CONFLICT DO NOTHING
   `;
 };

@@ -166,7 +166,7 @@ export const SubscriptionTable = ({
             {row.reminderEnabled
               ? copy.reminderSchedule
                   .replace("{{days}}", String(row.reminderDays))
-                  .replace("{{time}}", row.reminderTime.slice(0, 5))
+                  .replace("{{time}}", row.reminderTimes.join(", "))
               : copy.off}
           </Text>
           <Text type="supporting" color="secondary">

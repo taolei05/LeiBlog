@@ -60,7 +60,7 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     );
   const makeDue = async () => {
     await sql`UPDATE subscriptions SET expiry_date = (now() AT TIME ZONE 'Asia/Shanghai')::date + 1,
-      reminder_days = 7, reminder_time = '00:00' WHERE id = ${id}`;
+      reminder_days = 7, reminder_time = '00:00', reminder_times = ARRAY['00:00'::time] WHERE id = ${id}`;
   };
   const create = async () => {
     const response = await request("/", { method: "POST", body: JSON.stringify(input()) });
@@ -174,6 +174,12 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     expect(folder).toEqual({ systemKey: "subscription-attachments", isProtected: true });
     expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id IS NOT NULL`).toHaveLength(1);
   });
+  test("persists validated multiple times through the service", async () => {
+    const [user] = await sql`SELECT id FROM users LIMIT 1`;
+    const saved = await service.saveSubscription({ userId: user.id, input: { ...input(), reminderTimes: ["18:30", "09:00"] }, sql });
+    expect(saved.ok).toBe(true);
+    expect((await service.listSubscriptions({ sql })).items[0].reminderTimes).toEqual(["09:00", "18:30"]);
+  });
   test("CRUD, exact money, pagination, filters and no private bytes in list", async () => {
     await create();
     const response = await request("/?search=domain&category=domain&status=normal");
@@ -219,7 +225,7 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     expect(result.items[0].renewalCurrency).toBe("EUR");
   });
   test("schema upgrades legacy currencies without overwriting independent selections on restart", async () => {
-    await sql`ALTER TABLE subscriptions DROP COLUMN initial_currency, DROP COLUMN renewal_currency`;
+    await sql`ALTER TABLE subscriptions DROP COLUMN initial_currency, DROP COLUMN renewal_currency, DROP COLUMN reminder_times`;
     await sql`INSERT INTO subscriptions (name, category, start_date, expiry_date,
       initial_price, renewal_price, currency, renewal_type)
       VALUES ('Legacy', 'domain', '2020-01-01', '2099-01-01', 12.50, 25.00, 'GBP', 'manual')`;
@@ -280,7 +286,7 @@ suite("subscriptions with isolated database, authenticated routes and captured m
       (await request(`/${id}/attachments/${attachment.id}`, { method: "DELETE" })).status,
     ).toBe(200);
   });
-  test("queues once per expiry, catches up, sends despite unrelated comment preference being off", async () => {
+  test("queues once per date/time, catches up today, sends despite unrelated comment preference being off", async () => {
     await create();
     await makeDue();
     await Promise.all([
@@ -300,11 +306,8 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     await service.queueDueSubscriptionReminders(sql);
     expect(await notifications.processNextEmailNotification({ sql })).toBe(false);
   });
-  test("does not queue early, expired, disabled or perpetual subscriptions", async () => {
+  test("does not queue early, disabled or perpetual subscriptions", async () => {
     await create();
-    await service.queueDueSubscriptionReminders(sql);
-    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(0);
-    await sql`UPDATE subscriptions SET expiry_date = (now() AT TIME ZONE 'Asia/Shanghai')::date - 1`;
     await service.queueDueSubscriptionReminders(sql);
     expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(0);
     await makeDue();
@@ -374,14 +377,14 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     const [clock] =
       await sql`SELECT ((now() AT TIME ZONE 'Asia/Shanghai')::date + 1)::text AS tomorrow,
       to_char(now() AT TIME ZONE 'Asia/Shanghai' + interval '2 minutes', 'HH24:MI') AS future_time`;
-    await sql`UPDATE subscriptions SET expiry_date = ${clock.tomorrow}, reminder_days = 1, reminder_time = ${clock.futureTime}`;
+    await sql`UPDATE subscriptions SET expiry_date = ${clock.tomorrow}, reminder_days = 1, reminder_time = ${clock.futureTime}, reminder_times = ARRAY[${clock.futureTime}::time]`;
     // Skip the two-minute window around midnight, using tomorrow's reminder date instead.
     const [nearMidnight] =
       await sql`SELECT (now() AT TIME ZONE 'Asia/Shanghai')::time > time '23:57' AS value`;
     if (nearMidnight.value) await sql`UPDATE subscriptions SET reminder_days = 0`;
     await service.queueDueSubscriptionReminders(sql);
     expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(0);
-    await sql`UPDATE subscriptions SET reminder_time = '00:00', reminder_days = 1`;
+    await sql`UPDATE subscriptions SET reminder_time = '00:00', reminder_times = ARRAY['00:00'::time], reminder_days = 1`;
     await service.queueDueSubscriptionReminders(sql);
     expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(1);
     await sql`UPDATE subscriptions SET expiry_date = (now() AT TIME ZONE 'Asia/Shanghai')::date - 1`;
@@ -543,8 +546,85 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     await notifications.processNextEmailNotification({ sql });
     expect(deliveries).toHaveLength(2);
   });
+  test("sends at each 24-hour time every day through expiry, without historical-day catch-up or concurrent duplicates", async () => {
+    const response = await request("/", { method: "POST", body: JSON.stringify({ ...input(), expiryDate: "2026-10-23", reminderTimes: ["18:30", "09:00", "12:00", "09:00"] }) });
+    expect(response.status).toBe(200);
+    id = (await response.json()).id;
+    expect((await (await request()).json()).items[0].reminderTimes).toEqual(["09:00", "12:00", "18:30"]);
+    const tick = async (time: string) => {
+      await Promise.all([service.queueDueSubscriptionReminders(sql, new Date(time)), service.queueDueSubscriptionReminders(sql, new Date(time))]);
+    };
+    await tick("2026-10-16T08:59:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(0);
+    await tick("2026-10-16T09:00:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(1);
+    await tick("2026-10-16T12:00:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(2);
+    await tick("2026-10-16T18:30:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(3);
+    await tick("2026-10-17T09:00:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(4);
+    await tick("2026-10-22T18:30:00+08:00");
+    const rows = await sql`SELECT subscription_reminder_date::text AS day FROM email_notification_jobs ORDER BY subscription_reminder_date, subscription_reminder_time`;
+    expect(rows.map((row) => row.day)).toEqual(["2026-10-16", "2026-10-16", "2026-10-16", "2026-10-17", "2026-10-22", "2026-10-22", "2026-10-22"]);
+    await tick("2026-10-23T18:30:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs WHERE subscription_reminder_date = '2026-10-23'`).toHaveLength(3);
+    await sql`UPDATE subscriptions SET reminder_enabled = false`;
+    await tick("2026-10-24T18:30:00+08:00");
+    expect(await sql`SELECT id FROM email_notification_jobs WHERE subscription_reminder_final`).toHaveLength(0);
+  });
+  test("sends exactly one final expired-service email, regardless of later times, dates or retries", async () => {
+    await create();
+    await sql`UPDATE subscriptions SET expiry_date = (now() AT TIME ZONE 'Asia/Shanghai')::date - 1,
+      reminder_times = ARRAY['00:00'::time, '12:00'::time, '18:30'::time]`;
+    await Promise.all([service.queueDueSubscriptionReminders(sql), service.queueDueSubscriptionReminders(sql)]);
+    const [job] = await sql`SELECT subscription_reminder_final, subscription_reminder_time::text AS time FROM email_notification_jobs`;
+    expect(job).toEqual({ subscriptionReminderFinal: true, time: "00:00:00" });
+    rejectMail = true;
+    await notifications.processNextEmailNotification({ sql });
+    await service.queueDueSubscriptionReminders(sql, new Date("2099-01-01T23:59:00+08:00"));
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(1);
+    rejectMail = false;
+    await sql`UPDATE email_notification_jobs SET available_at = now()`;
+    await notifications.processNextEmailNotification({ sql });
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries[0]).toEqual(deliveries[1]);
+    expect(deliveries[1].body.subject).toContain("Subscription expired");
+    expect(deliveries[1].body.text).toContain("Status: Expired");
+    await service.queueDueSubscriptionReminders(sql, new Date("2099-01-02T23:59:00+08:00"));
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(1);
+  });
+  test("disabling reminders cancels every unsent time slot", async () => {
+    await create();
+    await makeDue();
+    await sql`UPDATE subscriptions SET reminder_times = ARRAY['00:00'::time, '00:01'::time]`;
+    await service.queueDueSubscriptionReminders(sql);
+    const result = await request(`/${id}`, { method: "PUT", body: JSON.stringify({ ...input(), reminderEnabled: false, reminderTimes: ["09:00", "18:30"] }) });
+    expect(result.status).toBe(200);
+    expect(await notifications.processNextEmailNotification({ sql })).toBe(false);
+    expect(await sql`SELECT id FROM email_notification_jobs WHERE status = 'pending'`).toHaveLength(0);
+    expect(deliveries).toHaveLength(0);
+  });
+  test("migrates legacy single-time settings and sent jobs idempotently without resending today's reminder", async () => {
+    await create();
+    await makeDue();
+    await service.queueDueSubscriptionReminders(sql);
+    await notifications.processNextEmailNotification({ sql });
+    expect(deliveries).toHaveLength(1);
+    await sql`ALTER TABLE subscriptions ALTER COLUMN reminder_times DROP NOT NULL`;
+    await sql`ALTER TABLE email_notification_jobs DROP CONSTRAINT email_notification_jobs_check`;
+    await sql`UPDATE subscriptions SET reminder_times = NULL`;
+    await sql`UPDATE email_notification_jobs SET subscription_reminder_date = NULL, subscription_reminder_time = NULL`;
+    const schema = await Bun.file(new URL("../src/shared/db/schema.sql", import.meta.url)).text();
+    await sql.unsafe(schema);
+    await sql.unsafe(schema);
+    expect((await (await request()).json()).items[0].reminderTimes).toEqual(["00:00"]);
+    await service.queueDueSubscriptionReminders(sql);
+    expect(await sql`SELECT id FROM email_notification_jobs`).toHaveLength(1);
+  });
   test("backup round-trip preserves private bytes without expanding binary data into JSON", async () => {
     await create();
+    await sql`UPDATE subscriptions SET reminder_times = ARRAY['09:00'::time, '18:30'::time]`;
     const body = new FormData();
     body.set("file", new File(["private invoice"], "invoice.txt"));
     expect((await request(`/${id}/attachments`, { method: "POST", body })).status).toBe(200);
@@ -567,16 +647,19 @@ suite("subscriptions with isolated database, authenticated routes and captured m
     await importBackupArchive({ file: new File([new Uint8Array(backup.data)], "backup.zip") });
     const [restored] = await sql`SELECT initial_currency, renewal_currency, reminder_enabled FROM subscriptions`;
     expect(restored).toEqual({ initialCurrency: "HKD", renewalCurrency: "USD", reminderEnabled: false });
+    expect((await service.listSubscriptions({ sql })).items[0].reminderTimes).toEqual(["09:00", "18:30"]);
     expect(await sql`SELECT id FROM media_assets WHERE subscription_attachment_id IS NOT NULL`).toHaveLength(1);
     const rawData: typeof payload.data = JSON.parse(dataText);
     for (const row of rawData.tables.subscriptions) {
       delete row.initial_currency;
       delete row.renewal_currency;
+      delete row.reminder_times;
     }
     zip.updateFile("data.json", Buffer.from(JSON.stringify(rawData)));
     await importBackupArchive({ file: new File([new Uint8Array(zip.toBuffer())], "legacy.zip") });
     const [legacy] = await sql`SELECT initial_currency, renewal_currency, reminder_enabled FROM subscriptions`;
     expect(legacy).toEqual({ initialCurrency: "HKD", renewalCurrency: "HKD", reminderEnabled: false });
+    expect((await service.listSubscriptions({ sql })).items[0].reminderTimes).toEqual(["09:00"]);
     const corrupt = zip
       .getEntries()
       .find((entry) => entry.entryName.startsWith("private/subscriptions/"))!;

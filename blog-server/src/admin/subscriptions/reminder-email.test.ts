@@ -29,4 +29,13 @@ describe("subscription reminder details", () => {
     expect(mail.text).not.toContain("Details:");
     expect(mail.text).not.toContain("undefined");
   });
+  test.each(["zh-CN", "en"] as const)("labels the single final expiration notice in %s", (locale) => {
+    const mail = renderSubscriptionReminderEmail({
+      branding: { ...branding, locale }, subscription: { ...subscription, isOverdue: true },
+      adminUrl: "https://example.test/admin/#subscriptions",
+    });
+    expect(mail.subject).toContain(locale === "en" ? "Subscription expired" : "订阅服务到期提醒");
+    expect(mail.text).toContain(locale === "en" ? "Status: Expired" : "状态: 已过期");
+    expect(mail.html).not.toContain("<script>");
+  });
 });

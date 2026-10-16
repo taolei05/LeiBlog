@@ -9,6 +9,7 @@ export type SubscriptionReminderContent = {
   currency: string;
   renewalType: string;
   serviceUrl: string;
+  isOverdue?: boolean;
 };
 export const renderSubscriptionReminderEmail = ({
   branding,
@@ -20,7 +21,8 @@ export const renderSubscriptionReminderEmail = ({
   adminUrl: string;
 }) => {
   const en = branding.locale === "en";
-  const subject = `${en ? "Subscription expiring" : "订阅到期提醒"}: ${subscription.name}`
+  const title = subscription.isOverdue ? (en ? "Subscription expired" : "订阅服务到期提醒") : (en ? "Subscription expiring" : "订阅到期提醒");
+  const subject = `${title}: ${subscription.name}`
     .replace(/[\r\n]+/g, " ")
     .slice(0, 220);
   const mode =
@@ -35,6 +37,7 @@ export const renderSubscriptionReminderEmail = ({
     [en ? "Service" : "服务", subscription.name],
     ...(subscription.details?.trim() ? [[en ? "Details" : "详情", subscription.details]] : []),
     [en ? "Expiry date" : "到期日期", subscription.expiryDate],
+    ...(subscription.isOverdue ? [[en ? "Status" : "状态", en ? "Expired" : "已过期"]] : []),
     [en ? "Renewal price" : "续费价格", `${subscription.currency} ${subscription.renewalPrice}`],
     [en ? "Renewal type" : "续订类型", mode],
     [en ? "Website" : "服务网站", subscription.serviceUrl],

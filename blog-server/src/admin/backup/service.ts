@@ -88,6 +88,7 @@ const TEXT_ARRAY_COLUMNS: Record<string, Set<string>> = {
   site_settings: new Set(["cover_urls", "seo_keywords"]),
   users: new Set(["tags"]),
   users_en: new Set(["tags"]),
+  subscriptions: new Set(["reminder_times"]),
 };
 
 const quoteIdent = (value: string) => `"${value.replace(/"/g, '""')}"`;
@@ -583,6 +584,7 @@ const insertRows = async (sql: BackupSql, table: string, rows: BackupRow[]) => {
             ...row,
             initial_currency: row.initial_currency ?? row.currency,
             renewal_currency: row.renewal_currency ?? row.currency,
+            reminder_times: row.reminder_times ?? [row.reminder_time],
           }
         : row;
     if (table === "comments" && row.parent_id !== null && row.parent_id !== undefined) {

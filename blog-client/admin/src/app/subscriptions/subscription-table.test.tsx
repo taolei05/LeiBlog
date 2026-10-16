@@ -21,6 +21,7 @@ const item: Subscription = {
   reminderEnabled: true,
   reminderDays: 7,
   reminderTime: "09:00:00",
+  reminderTimes: ["09:00", "18:30"],
   recipientEmail: "admin@example.test",
   status: "normal",
   attachments: [],
@@ -65,6 +66,7 @@ describe("subscription management table", () => {
       expect(headers[2]).toContain(language === "en" ? "Details" : "详情");
       expect(headers[3]).toContain(language === "en" ? "Expiry date" : "到期日期");
       expect(html).toContain("taolei.net");
+      expect(html).toContain("09:00, 18:30");
       expect(html).toContain("&lt;script&gt;");
       expect(html).not.toContain("<script>");
       expect(html).toContain("text-align:center");

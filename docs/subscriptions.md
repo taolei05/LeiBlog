@@ -12,9 +12,15 @@ No vendor billing or automatic payment is performed.
   renewal mode (automatic/manual/perpetual), notes, and attachments.
 - Status is derived using the site calendar: expired after expiry date, expiring
   within the configured lead days (default 7), otherwise normal. Perpetual has no expiry.
-- Optional reminder: N calendar days before expiry, HH:mm in the current site timezone,
-  sent once per expiry date to the administrator who created the subscription.
-  Late creation/restarts catch up until expiry; no historical expired reminder flood.
+- Optional reminders: from N calendar days before expiry through the expiry date,
+  send every day at each configured 24-hour HH:mm time in the current site timezone.
+  The Tokenizer supports 1 to 12 times, normalized, deduplicated and sorted.
+  After expiry, send one final expiration notice at the earliest configured time,
+  once per expiry cycle; later dates or times do not send further expiration notices.
+  All reminders go to the administrator who created the subscription.
+  Late creation/restarts catch up only on the current day, not historical reminder dates.
+  Disabling reminders cancels unsent jobs. Legacy single-time records and queued/sent
+  jobs migrate without resetting selections or repeating an already delivered time slot.
   Edits/disabled reminders/deletion invalidate pending delivery. Existing durable mail
   queue handles locks, retries, frozen payloads, and provider idempotency.
 - Attachments: max 10 per subscription, 5 MiB each; PDF, images, TXT/MD and Word

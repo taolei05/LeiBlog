@@ -20,6 +20,21 @@ export const subscriptionFixture = {
 } as const;
 
 describe("subscription validation and calendar status", () => {
+  test("accepts multiple reminder times, sorts and deduplicates them, and retains legacy time", () => {
+    const { reminderTime, ...fields } = subscriptionFixture;
+    const input = { ...fields, reminderTimes: ["18:30", "09:00", "18:30"] };
+    expect(Value.Check(subscriptionInputSchema, input)).toBe(true);
+    expect(normalizeSubscription(input)).toMatchObject({ reminderTimes: ["09:00", "18:30"], reminderTime: "09:00" });
+    expect(normalizeSubscription(subscriptionFixture)).toMatchObject({ reminderTimes: [reminderTime] });
+    expect(() => normalizeSubscription(fields)).toThrow();
+  });
+  test("rejects missing, excessive or invalid reminder times", () => {
+    const { reminderTime: _time, ...fields } = subscriptionFixture;
+    for (const reminderTimes of [[], ["24:00"], ["09:60"], ["9:00"], ["09:00:00"], Array(13).fill("09:00")]) {
+      expect(Value.Check(subscriptionInputSchema, { ...fields, reminderTimes })).toBe(false);
+    }
+    expect(() => normalizeSubscription({ ...fields, reminderTimes: [] })).toThrow();
+  });
   test("keeps independent currencies and falls back to the legacy currency", () => {
     const { currency, ...fields } = subscriptionFixture;
     const input = { ...fields, initialCurrency: "HKD", renewalCurrency: "USD" } as const;

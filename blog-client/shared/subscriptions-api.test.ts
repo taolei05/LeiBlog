@@ -31,6 +31,7 @@ const item = {
   reminderEnabled: true,
   reminderDays: 7,
   reminderTime: "09:00:00",
+  reminderTimes: ["09:00", "18:30"],
   recipientEmail: "admin@example.test",
   status: "normal",
   attachments: [],
@@ -40,6 +41,19 @@ const item = {
 };
 afterEach(() => vi.unstubAllGlobals());
 describe("subscriptions API", () => {
+  it("validates every configured reminder time", () => {
+    expect(isSubscription(item)).toBe(true);
+    for (const reminderTimes of [
+      undefined,
+      [],
+      ["25:00"],
+      ["9:00"],
+      ["09:00", "09:00"],
+      Array(13).fill("09:00"),
+    ]) {
+      expect(isSubscription({ ...item, reminderTimes })).toBe(false);
+    }
+  });
   it("validates entries, attachment metadata and rates before rendering", () => {
     expect(isSubscription(item)).toBe(true);
     expect(isSubscription({ ...item, attachments: [{ fileName: "invoice" }] })).toBe(false);

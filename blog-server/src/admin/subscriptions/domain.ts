@@ -13,6 +13,7 @@ export const subscriptionRenewalTypes = ["automatic", "manual", "perpetual"] as 
 const dateSchema = t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const priceSchema = t.String({ pattern: "^\\d{1,10}(\\.\\d{1,2})?$" });
 const currencySchema = t.Union(subscriptionCurrencies.map((value) => t.Literal(value)));
+const timeSchema = t.String({ pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" });
 export const subscriptionInputSchema = t.Object({
   name: t.String({ minLength: 1, maxLength: 160 }),
   serviceUrl: t.String({ maxLength: 2048 }),
@@ -29,7 +30,8 @@ export const subscriptionInputSchema = t.Object({
   notes: t.String({ maxLength: 10000 }),
   reminderEnabled: t.Boolean(),
   reminderDays: t.Integer({ minimum: 0, maximum: 365 }),
-  reminderTime: t.String({ pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }),
+  reminderTime: t.Optional(timeSchema),
+  reminderTimes: t.Optional(t.Array(timeSchema, { minItems: 1, maxItems: 12 })),
 });
 export type SubscriptionInput = Static<typeof subscriptionInputSchema>;
 
@@ -57,6 +59,9 @@ export const normalizeSubscription = (input: SubscriptionInput) => {
   const serviceUrl = input.serviceUrl.trim();
   const initialCurrency = input.initialCurrency ?? input.currency;
   const renewalCurrency = input.renewalCurrency ?? input.currency;
+  const reminderTimes = [...new Set(input.reminderTimes ?? (input.reminderTime ? [input.reminderTime] : []))].sort();
+  if (reminderTimes.length < 1 || reminderTimes.length > 12)
+    throw new SubscriptionError("Choose 1 to 12 reminder times. / 请设置 1 至 12 个发送时刻。");
   if (initialCurrency === undefined || renewalCurrency === undefined)
     throw new SubscriptionError("Select a currency for each price. / 请分别选择首付和续费货币。");
   if (!name) throw new SubscriptionError("Service name is required. / 请填写服务名称。");
@@ -86,6 +91,8 @@ export const normalizeSubscription = (input: SubscriptionInput) => {
     serviceUrl,
     initialCurrency,
     renewalCurrency,
+    reminderTimes,
+    reminderTime: reminderTimes[0],
     expiryDate,
     reminderEnabled: expiryDate !== null && input.reminderEnabled,
   };

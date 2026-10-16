@@ -14,8 +14,6 @@ import { Switch } from "@astryxdesign/core/Switch";
 import { Text } from "@astryxdesign/core/Text";
 import { TextArea } from "@astryxdesign/core/TextArea";
 import { TextInput } from "@astryxdesign/core/TextInput";
-import { TimeInput } from "@astryxdesign/core/TimeInput";
-import { createISOTimeString } from "@astryxdesign/core/utils";
 import type { ISODateString } from "@astryxdesign/core/utils";
 import { normalizeLanguage } from "../../../../shared/i18n";
 import {
@@ -51,6 +49,7 @@ import type { AdminFeedbackBannerState } from "../components/admin-feedback-bann
 import { subscriptionCopy } from "./copy";
 import { SubscriptionPriceField } from "./price-field";
 import { SubscriptionTable } from "./subscription-table";
+import { areReminderTimesValid, ReminderTimesField } from "./reminder-times-field";
 
 type Editor = {
   id?: string;
@@ -161,7 +160,7 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
       id: item?.id,
       attachments: item?.attachments ?? [],
       form: item
-        ? { ...item, reminderTime: item.reminderTime.slice(0, 5) }
+        ? { ...item }
         : {
             name: "",
             serviceUrl: "",
@@ -177,7 +176,7 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
             notes: "",
             reminderEnabled: true,
             reminderDays: 7,
-            reminderTime: "09:00",
+            reminderTimes: ["09:00"],
           },
     });
   };
@@ -191,7 +190,7 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
         (!input.expiryDate || input.expiryDate < input.startDate)) ||
       !/^\d{1,10}(\.\d{1,2})?$/.test(input.initialPrice) ||
       !/^\d{1,10}(\.\d{1,2})?$/.test(input.renewalPrice) ||
-      !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.reminderTime)
+      !areReminderTimesValid(input.reminderTimes)
     ) {
       setFeedback(createAdminFeedbackBanner({ status: "error", title: copy.invalid }));
       return;
@@ -514,12 +513,11 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
                   isWheelEnabled={false}
                   onChange={(value) => update("reminderDays", value)}
                 />
-                <TimeInput
-                  label={copy.reminderTime}
-                  value={createISOTimeString(form.reminderTime) ?? undefined}
-                  hourFormat="24h"
+                <ReminderTimesField
+                  language={language}
+                  value={form.reminderTimes}
                   isDisabled={!form.reminderEnabled}
-                  onChange={(value) => update("reminderTime", value ?? "")}
+                  onChange={(values) => update("reminderTimes", values)}
                 />
               </Grid>
               <Text type="supporting" color="secondary">
