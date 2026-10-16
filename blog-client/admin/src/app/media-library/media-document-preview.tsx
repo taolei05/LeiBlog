@@ -13,7 +13,7 @@ import { AdminFormDialog } from "../components/admin-form-dialog";
 import { getDocumentPreviewPolicy } from "./document-preview-policy";
 import type { DocumentPreviewPolicy } from "./document-preview-policy";
 import { loadDocumentPreviewResource } from "./document-preview-resource";
-import type { DocumentPreviewResource } from "./document-preview-resource";
+import type { DocumentPreviewRequest, DocumentPreviewResource } from "./document-preview-resource";
 
 const DocumentViewer = lazy(async () => ({
   default: (await import("./document-viewer")).DocumentViewer,
@@ -23,19 +23,20 @@ type PreviewState =
   | { status: "failed"; tooLarge: boolean }
   | { status: "ready"; resource: DocumentPreviewResource };
 
+type DocumentPreviewContentProps = {
+  policy: DocumentPreviewPolicy;
+  state: PreviewState;
+  fileName: string;
+  onClose: () => void;
+  onRetry: () => void;
+};
 export const DocumentPreviewContent = ({
   policy,
   state,
   fileName,
   onClose,
   onRetry,
-}: {
-  policy: DocumentPreviewPolicy;
-  state: PreviewState;
-  fileName: string;
-  onClose: () => void;
-  onRetry: () => void;
-}) => {
+}: DocumentPreviewContentProps) => {
   const { t } = useTranslation();
   if (policy.kind === "download") {
     return (
@@ -85,6 +86,15 @@ export const DocumentPreviewContent = ({
       </VStack>
     );
   }
+  if (state.status === "ready" && state.resource.kind === "image" && policy.kind === "image") {
+    return (
+      <img
+        src={state.resource.url}
+        alt={fileName}
+        style={{ display: "block", width: "100%", height: "100%", objectFit: "contain" }}
+      />
+    );
+  }
   const url =
     policy.kind === "office"
       ? policy.url
@@ -99,19 +109,25 @@ export const DocumentPreviewContent = ({
   );
 };
 
+type MediaDocumentPreviewProps = {
+  media: Pick<
+    MediaAsset,
+    "id" | "fileName" | "fileFormat" | "accessUrl" | "folderSlug" | "storageProvider"
+  >;
+  token: string;
+  isNarrow: boolean;
+  onClose: () => void;
+  onDownload: () => Promise<void>;
+  readResource?: (request: DocumentPreviewRequest) => Promise<DocumentPreviewResource>;
+};
 export const MediaDocumentPreview = ({
   media,
   token,
   isNarrow,
   onClose,
   onDownload,
-}: {
-  media: MediaAsset;
-  token: string;
-  isNarrow: boolean;
-  onClose: () => void;
-  onDownload: () => Promise<void>;
-}) => {
+  readResource,
+}: MediaDocumentPreviewProps) => {
   const { t } = useTranslation();
   const policy = getDocumentPreviewPolicy({
     media,
@@ -125,12 +141,15 @@ export const MediaDocumentPreview = ({
   const [downloading, setDownloading] = useState(false);
   const kind = policy.kind;
   useEffect(() => {
-    if (kind !== "pdf" && kind !== "text") return;
+    if (kind !== "pdf" && kind !== "text" && kind !== "image") return;
     const controller = new AbortController();
     let resource: DocumentPreviewResource | undefined;
     setState({ status: "loading" });
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
-    void loadDocumentPreviewResource({ kind, mediaId: media.id, token, signal })
+    const pending = readResource
+      ? readResource({ kind, signal })
+      : loadDocumentPreviewResource({ kind, mediaId: media.id, token, signal });
+    void pending
       .then((result) => {
         if (controller.signal.aborted) result.dispose();
         else {
@@ -146,7 +165,7 @@ export const MediaDocumentPreview = ({
       controller.abort();
       resource?.dispose();
     };
-  }, [kind, media.id, token, revision]);
+  }, [kind, media.id, token, revision, readResource]);
 
   return (
     <AdminFormDialog

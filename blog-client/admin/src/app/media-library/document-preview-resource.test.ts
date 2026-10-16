@@ -37,6 +37,23 @@ describe("local document preview resources", () => {
       text,
     });
   });
+  it("preserves the authenticated media response type for local image previews", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("image", { headers: { "Content-Type": "image/png" } })),
+    );
+    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:https://blog.test/image");
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    try {
+      const resource = await loadDocumentPreviewResource({ ...parameters, kind: "image" });
+      expect(create.mock.calls[0]?.[0]).toMatchObject({ type: "image/png" });
+      resource.dispose();
+      expect(revoke).toHaveBeenCalledWith("blob:https://blog.test/image");
+    } finally {
+      create.mockRestore();
+      revoke.mockRestore();
+    }
+  });
   it("rejects an HTML/login response masquerading as a PDF", async () => {
     vi.stubGlobal(
       "fetch",

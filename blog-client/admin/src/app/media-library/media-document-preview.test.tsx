@@ -46,4 +46,18 @@ describe("document preview content", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("iframe");
   });
+  it("contains images at their natural aspect ratio without a remote iframe", () => {
+    const html = render({
+      fileName: "invoice.png",
+      policy: { kind: "image" },
+      state: {
+        status: "ready",
+        resource: { kind: "image", url: "blob:https://blog.test/private-image", dispose: () => {} },
+      },
+    });
+    expect(html).toContain('alt="invoice.png"');
+    expect(html).toContain('src="blob:https://blog.test/private-image"');
+    expect(html).toContain("object-fit:contain");
+    expect(html).not.toContain("iframe");
+  });
 });

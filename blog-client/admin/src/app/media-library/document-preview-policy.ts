@@ -1,7 +1,7 @@
 import type { MediaAsset } from "../../../../shared/admin-api";
 
 export type DocumentPreviewPolicy =
-  | { kind: "pdf" | "text" }
+  | { kind: "pdf" | "text" | "image" }
   | { kind: "office"; url: string }
   | { kind: "download"; reason: "privateOffice" | "publicUrlRequired" | "unsupported" };
 
@@ -33,6 +33,7 @@ export const getDocumentPreviewPolicy = ({
   const format = media.fileFormat.toLowerCase();
   if (format === "pdf") return { kind: "pdf" };
   if (["txt", "md"].includes(format)) return { kind: "text" };
+  if (["jpg", "jpeg", "png", "gif", "webp", "ico"].includes(format)) return { kind: "image" };
   if (!officeFormats.includes(format)) return { kind: "download", reason: "unsupported" };
   try {
     const url = new URL(media.accessUrl, origin);

@@ -28,6 +28,18 @@ describe("document preview privacy and URL policy", () => {
       policy({ storageProvider: "r2", accessUrl: "https://cdn.example.test/file.docx" }).kind,
     ).toBe("office");
   });
+  it.each(["jpg", "jpeg", "PNG", "gif", "webp", "ico"])(
+    "keeps private %s images local",
+    (fileFormat) => {
+      expect(
+        policy({
+          fileFormat,
+          folderSlug: "subscription-attachments",
+          accessUrl: "/api/admin/subscriptions/private/attachments/image",
+        }),
+      ).toEqual({ kind: "image" });
+    },
+  );
   it("never discloses authenticated or signed document links", () => {
     expect(policy({ folderSlug: "subscription-attachments" })).toEqual({
       kind: "download",

@@ -3968,7 +3968,9 @@ export const readMediaAssetForPreview = async ({
       chunks.push(value.slice());
     }
     signal.throwIfAborted();
-    return new Blob(chunks);
+    return new Blob(chunks, {
+      type: response.headers.get("Content-Type") ?? "application/octet-stream",
+    });
   } catch (error) {
     await reader.cancel().catch(() => {});
     throw error;

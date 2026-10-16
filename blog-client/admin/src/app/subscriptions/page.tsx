@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, Paperclip, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { Paperclip, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { AlertDialog } from "@astryxdesign/core/AlertDialog";
 import { Button } from "@astryxdesign/core/Button";
 import { DateInput } from "@astryxdesign/core/DateInput";
@@ -50,6 +50,8 @@ import { subscriptionCopy } from "./copy";
 import { SubscriptionPriceField } from "./price-field";
 import { SubscriptionTable } from "./subscription-table";
 import { areReminderTimesValid, ReminderTimesField } from "./reminder-times-field";
+import { SubscriptionAttachmentRow } from "./attachment-row";
+import { SubscriptionAttachmentPreview } from "./attachment-preview";
 
 type Editor = {
   id?: string;
@@ -87,6 +89,8 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
   const [rateError, setRateError] = useState<string>();
   const [displayCurrency, setDisplayCurrency] = useState<SubscriptionCurrency>("CNY");
   const [busyFile, setBusyFile] = useState<string>();
+  const [previewAttachment, setPreviewAttachment] = useState<Subscription["attachments"][number]>();
+  const previewSubscriptionId = editor?.id;
   const fileInput = useRef<HTMLInputElement>(null);
   const { uploads, onUploadProgress } = useUploadProgress();
   const form = editor?.form;
@@ -153,6 +157,7 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
   }, [loadRates]);
 
   const open = (item?: Subscription) => {
+    setPreviewAttachment(undefined);
     setFiles([]);
     setRemoved([]);
     setFeedback(undefined);
@@ -531,26 +536,17 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
               {editor.attachments
                 .filter((a) => !removed.includes(a.id))
                 .map((a) => (
-                  <HStack key={a.id} gap={2} hAlign="between" vAlign="center" wrap="wrap">
-                    <Text style={{ overflowWrap: "anywhere" }}>
-                      {a.fileName} · {(a.fileSize / 1024).toFixed(1)} KiB
-                    </Text>
-                    <HStack gap={1}>
-                      <IconButton
-                        label={copy.download}
-                        tooltip={copy.download}
-                        icon={<Download size={16} />}
-                        isLoading={busyFile === a.id}
-                        onClick={() => void download(editor.id!, a)}
-                      />
-                      <IconButton
-                        label={copy.remove}
-                        tooltip={copy.remove}
-                        icon={<Trash2 size={16} />}
-                        onClick={() => setRemoved((current) => [...current, a.id])}
-                      />
-                    </HStack>
-                  </HStack>
+                  <SubscriptionAttachmentRow
+                    key={a.id}
+                    attachment={a}
+                    language={language}
+                    isDownloading={busyFile === a.id}
+                    onPreview={() => setPreviewAttachment(a)}
+                    onDownload={() => {
+                      if (editor.id) void download(editor.id, a);
+                    }}
+                    onRemove={() => setRemoved((current) => [...current, a.id])}
+                  />
                 ))}
               {files.map((file, index) => (
                 <HStack key={`${file.name}-${index}`} gap={2} hAlign="between">
@@ -596,6 +592,17 @@ export const SubscriptionsPage = ({ authToken, isNarrow, timeZone }: Subscriptio
             </VStack>
           </fieldset>
         </AdminFormDialog>
+      )}
+      {previewSubscriptionId && previewAttachment && (
+        <SubscriptionAttachmentPreview
+          key={`${previewSubscriptionId}/${previewAttachment.id}`}
+          subscriptionId={previewSubscriptionId}
+          attachment={previewAttachment}
+          token={authToken}
+          isNarrow={isNarrow}
+          onClose={() => setPreviewAttachment(undefined)}
+          onDownload={() => download(previewSubscriptionId, previewAttachment)}
+        />
       )}
       {deleteTarget && (
         <AlertDialog

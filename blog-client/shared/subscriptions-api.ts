@@ -295,14 +295,18 @@ export const downloadSubscriptionAttachment = async ({
   id,
   attachmentId,
   token,
+  signal,
 }: {
   id: string;
   attachmentId: string;
   token: string;
+  signal?: AbortSignal;
 }) => {
+  signal?.throwIfAborted();
   const response = await fetch(`${endpoint}/${id}/attachments/${attachmentId}`, {
     credentials: "include",
     headers: headersFor(token),
+    signal,
   });
   if (!response.ok) {
     await read(response);
