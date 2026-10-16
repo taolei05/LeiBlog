@@ -55,6 +55,9 @@ const AdminSettingsPage = lazy(async () => ({
   default: (await import("../admin-settings/page")).AdminSettingsPage,
 }));
 const BackupPage = lazy(async () => ({ default: (await import("../backup/page")).BackupPage }));
+const SubscriptionsPage = lazy(async () => ({
+  default: (await import("../subscriptions/page")).SubscriptionsPage,
+}));
 const ContentManagementPage = lazy(async () => ({
   default: (await import("../content-management/page")).ContentManagementPage,
 }));
@@ -86,6 +89,7 @@ type AdminPageId =
   | "contributors"
   | "navigation"
   | "media"
+  | "subscriptions"
   | "users"
   | "admin-settings"
   | "theme-settings"
@@ -248,6 +252,12 @@ const adminNavSections: AdminNavSection[] = [
         descriptionKey: "admin.pageDescriptions.media",
         icon: <Image size={16} />,
       },
+      {
+        id: "subscriptions",
+        labelKey: "admin.pages.subscriptions",
+        descriptionKey: "admin.pageDescriptions.subscriptions",
+        icon: <Bell size={16} />,
+      },
     ],
   },
   {
@@ -369,7 +379,11 @@ export function AdminShellPage({
 }: AdminShellPageProps) {
   const { t, i18n } = useTranslation();
   const isNarrow = useMediaQuery("(max-width: 640px)");
-  const [activePageId, setActivePageId] = useState<AdminPageId>("dashboard");
+  const [activePageId, setActivePageId] = useState<AdminPageId>(() =>
+    typeof window !== "undefined" && window.location.hash === "#subscriptions"
+      ? "subscriptions"
+      : "dashboard",
+  );
   const [confirmationAction, setConfirmationAction] = useState<AdminConfirmationAction>();
   const [isAccountPopoverOpen, setIsAccountPopoverOpen] = useState(false);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>();
@@ -388,6 +402,7 @@ export function AdminShellPage({
     activePageId !== "contributors" &&
     activePageId !== "login-methods" &&
     activePageId !== "media" &&
+    activePageId !== "subscriptions" &&
     activePageId !== "navigation" &&
     activePageId !== "posts" &&
     activePageId !== "site-settings" &&
@@ -679,6 +694,13 @@ export function AdminShellPage({
                       authToken={authToken}
                       isNarrow={isNarrow}
                       timeZone={siteTimeZone}
+                    />
+                  ) : activePageId === "subscriptions" ? (
+                    <SubscriptionsPage
+                      authToken={authToken}
+                      isNarrow={isNarrow}
+                      timeZone={siteTimeZone}
+                      adminEmail={user.email}
                     />
                   ) : activePageId === "media" ? (
                     <MediaLibraryPage

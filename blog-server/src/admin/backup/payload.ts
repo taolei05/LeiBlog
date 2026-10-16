@@ -6,6 +6,7 @@ import { getSchemaValidator, t } from "elysia";
 
 import { isMediaFileContentValid } from "../media/file-policy";
 import { isMediaStorageKeyValid } from "../media/storage-path";
+import { unpackSubscriptionAttachments } from "../subscriptions/attachment-backup";
 import {
   BACKUP_FAILURE,
   BACKUP_LIMITS,
@@ -39,6 +40,8 @@ export const EXPORTED_TABLES = [
   "navigation_groups",
   "navigation_items",
   "login_audit_logs",
+  "subscriptions",
+  "subscription_attachments",
 ] as const;
 
 export const SENSITIVE_COLUMNS: Record<string, ReadonlySet<string>> = {
@@ -101,10 +104,17 @@ const mediaValidator = getSchemaValidator(mediaSchema);
 const invalidPayload = () =>
   new BackupError(BACKUP_FAILURE.InvalidPayload, "Backup payload is invalid or incomplete.");
 
-const hasCompleteTableSet = (names: string[]) =>
-  names.length === EXPORTED_TABLES.length &&
-  new Set(names).size === names.length &&
-  EXPORTED_TABLES.every((table) => names.includes(table));
+const hasCompleteTableSet = (names: string[]) => {
+  const legacy = EXPORTED_TABLES.filter(
+    (table) => table !== "subscriptions" && table !== "subscription_attachments",
+  );
+  return (
+    new Set(names).size === names.length &&
+    ((names.length === EXPORTED_TABLES.length &&
+      EXPORTED_TABLES.every((table) => names.includes(table))) ||
+      (names.length === legacy.length && legacy.every((table) => names.includes(table))))
+  );
+};
 
 export const readBackupPayload = async (zip: AdmZip) => {
   const manifestResult = manifestValidator.safeParse(readBackupJson(zip, "manifest.json"));
@@ -119,6 +129,7 @@ export const readBackupPayload = async (zip: AdmZip) => {
   if (
     !hasCompleteTableSet(Object.keys(data.tables)) ||
     !hasCompleteTableSet(manifest.tables) ||
+    manifest.tables.length !== Object.keys(data.tables).length ||
     !manifest.media.included ||
     manifest.media.total !== mediaManifest.entries.length ||
     mediaManifest.total !== mediaManifest.entries.length ||
@@ -175,6 +186,10 @@ export const readBackupPayload = async (zip: AdmZip) => {
     totalBytes += bytes.length;
     mediaFiles.push({ entry, bytes });
   }
+  const privateNames = unpackSubscriptionAttachments({
+    rows: data.tables.subscription_attachments ?? [],
+    zip,
+  });
   if (
     totalBytes !== mediaManifest.totalBytes ||
     zip
@@ -183,7 +198,8 @@ export const readBackupPayload = async (zip: AdmZip) => {
         (entry) =>
           !entry.isDirectory &&
           !["manifest.json", "data.json", "media-manifest.json"].includes(entry.entryName) &&
-          !entryNames.has(entry.entryName),
+          !entryNames.has(entry.entryName) &&
+          !privateNames.has(entry.entryName),
       )
   ) {
     throw invalidPayload();

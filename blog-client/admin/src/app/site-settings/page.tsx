@@ -55,6 +55,7 @@ import {
   sendSiteSettingsApiKeyRevealCode,
   testDeepLApiKey,
   testIpGeolocationApiKey,
+  testExchangeRateApiKey,
   testResendApiKey,
   updateSiteSettings,
   uploadMediaAsset,
@@ -110,6 +111,7 @@ type SiteSettingsFormState = {
   resendApiKey: string;
   deeplApiKey: string;
   ipGeolocationApiKey: string;
+  exchangeRateApiKey: string;
   r2AccessKeyId: string;
   r2AccountId: string;
   r2Bucket: string;
@@ -119,6 +121,7 @@ type SiteSettingsFormState = {
   resendApiKeyConfigured: boolean;
   deeplApiKeyConfigured: boolean;
   ipGeolocationApiKeyConfigured: boolean;
+  exchangeRateApiKeyConfigured: boolean;
   r2SecretAccessKeyConfigured: boolean;
   icpRecords: IcpRecordItem[];
   policeRecordNumber: string;
@@ -147,6 +150,7 @@ type SiteSettingsTextField =
   | "resendApiKey"
   | "deeplApiKey"
   | "ipGeolocationApiKey"
+  | "exchangeRateApiKey"
   | "r2AccessKeyId"
   | "r2AccountId"
   | "r2Bucket"
@@ -159,9 +163,10 @@ type IcpRecordField = "number" | "url";
 
 type SiteSettingsSaveTarget = "site" | "basics" | "filings" | "storage";
 
-type SiteSettingsIntegrationTestTarget = "deepl" | "ipGeolocation" | "resend";
+type SiteSettingsIntegrationTestTarget = "deepl" | "ipGeolocation" | "resend" | "exchangeRate";
 
 type SiteSettingsSecretKey =
+  | "exchangeRateApiKey"
   | "deeplApiKey"
   | "ipGeolocationApiKey"
   | "r2SecretAccessKey"
@@ -183,6 +188,7 @@ const SAVE_TARGET_LABEL_KEYS: Record<SiteSettingsSaveTarget, string> = {
 };
 
 const SECRET_FIELD_LABEL_KEYS: Record<SiteSettingsSecretKey, string> = {
+  exchangeRateApiKey: "admin.siteSettings.fields.exchangeRateApiKey",
   deeplApiKey: "initialSetup.basics.deeplApiKey",
   ipGeolocationApiKey: "initialSetup.basics.ipGeolocationApiKey",
   r2SecretAccessKey: "admin.siteSettings.fields.r2SecretAccessKey",
@@ -190,6 +196,7 @@ const SECRET_FIELD_LABEL_KEYS: Record<SiteSettingsSecretKey, string> = {
 };
 
 const API_KEY_GET_URLS: Record<SiteSettingsSecretKey, string> = {
+  exchangeRateApiKey: "https://app.exchangerate-api.com/",
   deeplApiKey: "https://www.deepl.com/your-account/keys",
   ipGeolocationApiKey: "https://app.ipgeolocation.io/signup",
   r2SecretAccessKey: "https://dash.cloudflare.com/?to=/:account/r2/api-tokens",
@@ -390,6 +397,7 @@ const createFormState = (settings: SiteSettings): SiteSettingsFormState => {
     resendApiKey: "",
     deeplApiKey: "",
     ipGeolocationApiKey: "",
+    exchangeRateApiKey: "",
     r2AccessKeyId: settings.storage.r2AccessKeyId,
     r2AccountId: settings.storage.r2AccountId,
     r2Bucket: settings.storage.r2Bucket,
@@ -399,6 +407,7 @@ const createFormState = (settings: SiteSettings): SiteSettingsFormState => {
     resendApiKeyConfigured: settings.basics.resendApiKeyConfigured,
     deeplApiKeyConfigured: settings.basics.deeplApiKeyConfigured,
     ipGeolocationApiKeyConfigured: settings.basics.ipGeolocationApiKeyConfigured,
+    exchangeRateApiKeyConfigured: settings.basics.exchangeRateApiKeyConfigured ?? false,
     r2SecretAccessKeyConfigured: settings.storage.r2SecretAccessKeyConfigured,
     icpRecords: toIcpRecordItems(settings.filings.icpRecords),
     policeRecordNumber: settings.filings.policeRecordNumber,
@@ -1002,11 +1011,17 @@ export function SiteSettingsPage({
                 locale,
                 token: authToken,
               })
-            : await testIpGeolocationApiKey({
-                apiKey: form.ipGeolocationApiKey,
-                locale,
-                token: authToken,
-              });
+            : target === "exchangeRate"
+              ? await testExchangeRateApiKey({
+                  apiKey: form.exchangeRateApiKey,
+                  locale,
+                  token: authToken,
+                })
+              : await testIpGeolocationApiKey({
+                  apiKey: form.ipGeolocationApiKey,
+                  locale,
+                  token: authToken,
+                });
 
       setFeedbackBanner(createIntegrationTestSuccessBanner(result));
     } catch (error) {
@@ -1167,6 +1182,7 @@ export function SiteSettingsPage({
       resendApiKey: targetForm.resendApiKey.trim(),
       deeplApiKey: targetForm.deeplApiKey.trim(),
       ipGeolocationApiKey: targetForm.ipGeolocationApiKey.trim(),
+      exchangeRateApiKey: targetForm.exchangeRateApiKey.trim(),
     },
     filings: {
       icpRecords: targetForm.icpRecords
@@ -1342,7 +1358,7 @@ export function SiteSettingsPage({
   const revealedSecretValue =
     revealingSecretKey === undefined || revealedApiKeys === undefined
       ? ""
-      : revealedApiKeys[revealingSecretKey];
+      : (revealedApiKeys[revealingSecretKey] ?? "");
   const isRevealCodeCoolingDown = revealCodeSendCooldownSeconds > 0;
   const sendRevealCodeLabel = isRevealCodeCoolingDown
     ? t("admin.siteSettings.secret.sendCodeCountdown", {
@@ -1669,6 +1685,25 @@ export function SiteSettingsPage({
                       />
                     </Grid>
                     <VStack gap={3}>
+                      <SecretTestField
+                        configured={form.exchangeRateApiKeyConfigured}
+                        configuredLabel={t("admin.siteSettings.secret.configured")}
+                        label={t("admin.siteSettings.fields.exchangeRateApiKey")}
+                        value={form.exchangeRateApiKey}
+                        onChange={(value) => updateTextField("exchangeRateApiKey", value)}
+                        placeholder={t("admin.siteSettings.secret.placeholder")}
+                        getLabel={t("admin.siteSettings.secret.get")}
+                        getUrl={API_KEY_GET_URLS.exchangeRateApiKey}
+                        isNarrow={isNarrow}
+                        notConfiguredLabel={t("admin.siteSettings.secret.notConfigured")}
+                        revealSavedLabel={t("admin.siteSettings.secret.viewSaved")}
+                        testLabel={t("admin.siteSettings.secret.test")}
+                        testingLabel={t("admin.siteSettings.secret.testing")}
+                        isLoading={testingTarget === "exchangeRate"}
+                        isDisabled={isLoading || isSaving || isTesting}
+                        onRevealSaved={() => openSecretRevealDialog("exchangeRateApiKey")}
+                        onTest={() => void runIntegrationTest("exchangeRate")}
+                      />
                       <SecretTestField
                         configured={form.resendApiKeyConfigured}
                         configuredLabel={t("admin.siteSettings.secret.configured")}

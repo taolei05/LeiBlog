@@ -59,6 +59,15 @@ const makeZip = async (fixture: ReturnType<typeof createFixture>, includeFile = 
 };
 
 describe("backup preflight before any restore", () => {
+  test("accepts pre-subscription archives without dropping required legacy tables", async () => {
+    const fixture = createFixture();
+    delete fixture.data.tables.subscriptions;
+    delete fixture.data.tables.subscription_attachments;
+    fixture.manifest.tables = fixture.manifest.tables.filter(
+      (table) => table !== "subscriptions" && table !== "subscription_attachments",
+    );
+    expect((await readBackupPayload(await makeZip(fixture))).data.tables.users).toEqual([]);
+  });
   test("validates a complete backup and returns its checked media bytes", async () => {
     const fixture = createFixture();
     const payload = await readBackupPayload(await makeZip(fixture));

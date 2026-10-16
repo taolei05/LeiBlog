@@ -15,6 +15,7 @@ import type { R2StorageSettings } from "../media/r2-storage";
 import { resolveSafeMediaStoragePath } from "../media/storage-path";
 import { BACKUP_FAILURE, BACKUP_LIMITS, BackupError } from "./archive";
 import { readBackupZip } from "./archive";
+import { packSubscriptionAttachments } from "../subscriptions/attachment-backup";
 import {
   EXPORTED_TABLES,
   SENSITIVE_COLUMNS,
@@ -236,10 +237,12 @@ const createZipArchive = (entries: Array<{ data: Uint8Array | Buffer; name: stri
 
 const readTableRows = async (sql: BackupSql, table: string) => {
   const [result] = await sql.unsafe<JsonRowsResult[]>(
-    `SELECT COALESCE(jsonb_agg(to_jsonb(source_row)), '[]'::jsonb) AS rows
+    `SELECT COALESCE(jsonb_agg(to_jsonb(source_row)), '[]'::jsonb)::text AS rows
      FROM (SELECT * FROM ${quoteIdent(table)}) AS source_row`,
   );
-  const rows = Array.isArray(result?.rows) ? result.rows.filter(isRecord) : [];
+  // JSON text preserves SQL column names instead of applying the connection's camel transform.
+  const value: unknown = typeof result?.rows === "string" ? JSON.parse(result.rows) : result?.rows;
+  const rows = Array.isArray(value) ? value.filter(isRecord) : [];
   return rows.map((row) => excludeSensitiveColumns(table, row));
 };
 
@@ -337,14 +340,17 @@ export const createBackupArchive = async () => {
   const sql = getSql();
   const data = await exportData(sql);
   const media = await exportMediaEntries(sql, data.tables.media_assets ?? []);
+  const privateAttachments = packSubscriptionAttachments(data.tables.subscription_attachments ?? []);
   const manifest = createManifest(data, media.manifest);
   const archiveEntries = [
     { data: toJsonBytes(manifest), name: "manifest.json" },
     { data: toJsonBytes(data), name: "data.json" },
     { data: toJsonBytes(media.manifest), name: "media-manifest.json" },
     ...media.entries,
+    ...privateAttachments,
   ];
   if (
+    archiveEntries.length > BACKUP_LIMITS.entries ||
     archiveEntries.slice(0, 3).some((entry) => entry.data.byteLength > BACKUP_LIMITS.jsonBytes) ||
     archiveEntries.reduce((total, entry) => total + entry.data.byteLength, 0) >
       BACKUP_LIMITS.expandedBytes
@@ -605,6 +611,8 @@ const restoreTables = async (sql: BackupSql, data: BackupData) => {
   // Restoring an older backup must not resend notifications for already-public content.
   await sql`UPDATE articles SET notification_enqueued_at = now() WHERE status = 'published'`;
   await sql`UPDATE comments SET notification_enqueued_at = now() WHERE status = 'approved'`;
+  // Delivery jobs are intentionally not backed up; require opt-in after a restore.
+  await sql`UPDATE subscriptions SET reminder_enabled = false`;
 
   return importedRows;
 };

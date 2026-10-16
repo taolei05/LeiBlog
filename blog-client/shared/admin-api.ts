@@ -571,6 +571,7 @@ export type SiteSettings = {
     resendApiKeyConfigured: boolean;
     deeplApiKeyConfigured: boolean;
     ipGeolocationApiKeyConfigured: boolean;
+    exchangeRateApiKeyConfigured?: boolean;
   };
   filings: {
     icpRecords: SiteFilingRecord[];
@@ -651,6 +652,7 @@ export type UpdateSiteSettingsPayload = {
     resendApiKey: string;
     deeplApiKey: string;
     ipGeolocationApiKey: string;
+    exchangeRateApiKey?: string;
   };
   filings: {
     icpRecords: SiteFilingRecord[];
@@ -674,6 +676,7 @@ export type SiteSettingsIntegrationTestResponse = {
 };
 
 export type SiteSettingsApiKeys = {
+  exchangeRateApiKey?: string;
   deeplApiKey: string;
   ipGeolocationApiKey: string;
   r2SecretAccessKey: string;
@@ -1832,6 +1835,8 @@ const isSiteSettings = (value: unknown): value is SiteSettings => {
     typeof basicsRecord.resendApiKeyConfigured === "boolean" &&
     typeof basicsRecord.deeplApiKeyConfigured === "boolean" &&
     typeof basicsRecord.ipGeolocationApiKeyConfigured === "boolean" &&
+    (basicsRecord.exchangeRateApiKeyConfigured === undefined ||
+      typeof basicsRecord.exchangeRateApiKeyConfigured === "boolean") &&
     Array.isArray(filingsRecord.icpRecords) &&
     filingsRecord.icpRecords.every(isSiteFilingRecord) &&
     typeof filingsRecord.policeRecordNumber === "string" &&
@@ -2714,6 +2719,7 @@ const isSiteSettingsApiKeys = (value: unknown): value is SiteSettingsApiKeys => 
   const record = value as Record<string, unknown>;
   return (
     typeof record.deeplApiKey === "string" &&
+    (record.exchangeRateApiKey === undefined || typeof record.exchangeRateApiKey === "string") &&
     typeof record.ipGeolocationApiKey === "string" &&
     typeof record.r2SecretAccessKey === "string" &&
     typeof record.resendApiKey === "string"
@@ -5089,7 +5095,7 @@ export const revealSiteSettingsApiKeys = async ({
 type TestSiteSettingsIntegrationParameters = {
   fallbackError: string;
   locale: AppLanguage;
-  path: "test-deepl" | "test-ip-geolocation" | "test-resend";
+  path: "test-deepl" | "test-ip-geolocation" | "test-resend" | "test-exchange-rate";
   payload: unknown;
   token: string;
 };
@@ -5163,6 +5169,19 @@ export const testIpGeolocationApiKey = async ({
     payload: {
       apiKey: apiKey.trim(),
     },
+    token,
+  });
+
+export const testExchangeRateApiKey = async ({
+  apiKey,
+  locale,
+  token,
+}: TestIpGeolocationApiKeyParameters) =>
+  testSiteSettingsIntegration({
+    fallbackError: "ExchangeRate API key test failed.",
+    locale,
+    path: "test-exchange-rate",
+    payload: { apiKey: apiKey.trim() },
     token,
   });
 

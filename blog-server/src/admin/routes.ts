@@ -9,6 +9,7 @@ import { adminNavigationRoutes } from "./navigation/routes";
 import { adminSettingsRoutes } from "./settings/routes";
 import { adminSetupRoutes } from "./setup/routes";
 import { adminUsersRoutes } from "./users/routes";
+import { adminSubscriptionRoutes } from "./subscriptions/routes";
 
 export const adminRoutes = new Elysia()
   .use(adminSetupRoutes)
@@ -19,4 +20,5 @@ export const adminRoutes = new Elysia()
   .use(adminCommentsRoutes)
   .use(adminMediaRoutes)
   .use(adminNavigationRoutes)
-  .use(adminBackupRoutes);
+  .use(adminBackupRoutes)
+  .use(adminSubscriptionRoutes);

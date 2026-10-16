@@ -1,0 +1,55 @@
+# Subscriptions And Reminders
+
+## Objective
+Add an administrator-only Content Management page for subscription services, expiry
+tracking, private invoice/contract attachments, currency conversion, and email reminders.
+No vendor billing or automatic payment is performed.
+
+## Acceptance
+- CRUD: name, HTTP(S) vendor URL, category (domain/server/membership/software/other),
+  details, start/expiry dates, initial/renewal decimal prices, CNY/HKD/USD/EUR/GBP/JPY,
+  renewal mode (automatic/manual/perpetual), notes, and attachments.
+- Status is derived using the site calendar: expired after expiry date, expiring
+  within the configured lead days (default 7), otherwise normal. Perpetual has no expiry.
+- Optional reminder: N calendar days before expiry, HH:mm in the current site timezone,
+  sent once per expiry date to the administrator who created the subscription.
+  Late creation/restarts catch up until expiry; no historical expired reminder flood.
+  Edits/disabled reminders/deletion invalidate pending delivery. Existing durable mail
+  queue handles locks, retries, frozen payloads, and provider idempotency.
+- Attachments: max 10 per subscription, 5 MiB each; PDF, images, TXT/MD and Word
+  documents. Stored privately in PostgreSQL, forced download behind admin auth.
+- ExchangeRate-API key belongs in Site Settings alongside Resend/DeepL/IPGeolocation;
+  existing encrypted_settings storage and email-code-protected reveal are reused.
+  Browser only receives rates, provider update timestamps and configured status.
+  Server caches USD-base rates until provider next update; conversions are estimates.
+- Search, category/status filters, pagination, loading/error/empty states, bilingual UI,
+  mobile fullscreen editor, attachment upload progress, and send status are available.
+
+## Implementation
+1. Backend domain/schema/CRUD + private attachment endpoints; focused unit tests.
+2. Encrypted key + provider validation/cache + Site Settings row and test action.
+3. Queue scheduling, branded reminder mail, current-source authorization checks.
+4. Admin navigation/table/editor and runtime-validated API client.
+5. Isolated PostgreSQL/Redis integration and frontend regression checks.
+
+## Structure And Style
+Feature backend: blog-server/src/admin/subscriptions/; frontend:
+blog-client/admin/src/app/subscriptions/ and shared/subscriptions-api.ts.
+Follow existing Elysia TypeBox schemas and Astryx layout/table/dialog components.
+Example: `const schema = t.Object({ name: t.String({ minLength: 1 }) });`
+Schema additions are additive and idempotent. No new dependency, CI, branch, deployment,
+secret logging, public attachment URL or automatic external renewal.
+
+## Verification Commands
+`cd blog-server && bun run typecheck && bun test src && bun run test:security`
+`cd blog-client && bun run check && bun run test --run && bun run build && bun run test:production`
+Use isolated disposable local databases for persistence/security tests, no production writes.
+New backups include subscriptions and private attachment bytes as checksum-validated
+ZIP entries, not oversized JSON strings. Old archives remain
+importable. Restoring disables reminders until the administrator explicitly enables them,
+because transient delivery history is not part of the existing backup format.
+
+## Provider
+Official endpoint: https://www.exchangerate-api.com/docs/standard-requests
+Provider update frequency depends on the account plan; display actual timestamps,
+not a claim of tick-by-tick live pricing.

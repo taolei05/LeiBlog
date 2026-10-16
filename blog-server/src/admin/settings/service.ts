@@ -47,6 +47,7 @@ export const ENCRYPTED_SETTING_KEYS = [
   "resend_api_key",
   "deepl_api_key",
   "ip_geolocation_api_key",
+  "exchange_rate_api_key",
   "r2_secret_access_key",
 ] as const;
 
@@ -174,6 +175,7 @@ export type SiteSettings = {
     resendApiKeyConfigured: boolean;
     deeplApiKeyConfigured: boolean;
     ipGeolocationApiKeyConfigured: boolean;
+    exchangeRateApiKeyConfigured: boolean;
   };
   filings: {
     icpRecords: FilingRecord[];
@@ -308,6 +310,7 @@ type UpdateSiteSettingsInput = {
     resendApiKey: string;
     deeplApiKey: string;
     ipGeolocationApiKey: string;
+    exchangeRateApiKey?: string;
   };
   filings: {
     icpRecords: FilingRecord[];
@@ -396,6 +399,7 @@ type IntegrationTestResult =
     };
 
 type SiteSettingsApiKeys = {
+  exchangeRateApiKey: string;
   deeplApiKey: string;
   ipGeolocationApiKey: string;
   r2SecretAccessKey: string;
@@ -956,11 +960,13 @@ const readEncryptedSettingStatuses = async () => {
     resendApiKeyConfigured,
     deeplApiKeyConfigured,
     ipGeolocationApiKeyConfigured,
+    exchangeRateApiKeyConfigured,
     r2SecretAccessKeyConfigured,
   ] = await Promise.all([
     isEncryptedSettingConfigured("resend_api_key"),
     isEncryptedSettingConfigured("deepl_api_key"),
     isEncryptedSettingConfigured("ip_geolocation_api_key"),
+    isEncryptedSettingConfigured("exchange_rate_api_key"),
     isEncryptedSettingConfigured("r2_secret_access_key"),
   ]);
 
@@ -968,6 +974,7 @@ const readEncryptedSettingStatuses = async () => {
     resendApiKeyConfigured,
     deeplApiKeyConfigured,
     ipGeolocationApiKeyConfigured,
+    exchangeRateApiKeyConfigured,
     r2SecretAccessKeyConfigured,
   };
 };
@@ -998,6 +1005,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     resendApiKeyConfigured: false,
     deeplApiKeyConfigured: false,
     ipGeolocationApiKeyConfigured: false,
+    exchangeRateApiKeyConfigured: false,
   },
   filings: {
     icpRecords: [],
@@ -1353,6 +1361,7 @@ const toSiteSettings = ({
       resendApiKeyConfigured: secretStatuses.resendApiKeyConfigured,
       deeplApiKeyConfigured: secretStatuses.deeplApiKeyConfigured,
       ipGeolocationApiKeyConfigured: secretStatuses.ipGeolocationApiKeyConfigured,
+      exchangeRateApiKeyConfigured: secretStatuses.exchangeRateApiKeyConfigured,
     },
     filings: {
       icpRecords,
@@ -2062,11 +2071,12 @@ export const revealSiteSettingsApiKeys = async ({
     };
   }
 
-  const [resendApiKey, deeplApiKey, ipGeolocationApiKey, r2SecretAccessKey] = await Promise.all([
+  const [resendApiKey, deeplApiKey, ipGeolocationApiKey, r2SecretAccessKey, exchangeRateApiKey] = await Promise.all([
     readEncryptedSetting("resend_api_key"),
     readEncryptedSetting("deepl_api_key"),
     readEncryptedSetting("ip_geolocation_api_key"),
     readEncryptedSetting("r2_secret_access_key"),
+    readEncryptedSetting("exchange_rate_api_key"),
   ]);
 
   return {
@@ -2074,6 +2084,7 @@ export const revealSiteSettingsApiKeys = async ({
     item: {
       deeplApiKey: deeplApiKey ?? "",
       ipGeolocationApiKey: ipGeolocationApiKey ?? "",
+      exchangeRateApiKey: exchangeRateApiKey ?? "",
       r2SecretAccessKey: r2SecretAccessKey ?? "",
       resendApiKey: resendApiKey ?? "",
     },
@@ -2763,6 +2774,7 @@ export const updateSiteSettings = async (
       { key: "resend_api_key", value: input.basics.resendApiKey },
       { key: "deepl_api_key", value: input.basics.deeplApiKey },
       { key: "ip_geolocation_api_key", value: input.basics.ipGeolocationApiKey },
+      { key: "exchange_rate_api_key", value: input.basics.exchangeRateApiKey ?? "" },
       { key: "r2_secret_access_key", value: input.storage.r2SecretAccessKey },
     ] satisfies Array<{ key: EncryptedSettingKey; value: string }>;
 

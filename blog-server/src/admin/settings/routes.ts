@@ -25,6 +25,8 @@ import {
 import { env } from "../../shared/env";
 import { USER_PROFILE_LOCALE_HEADER } from "../../shared/profile-tags";
 import { readAltchaFailureMessage, verifyAltchaPayload } from "../../shared/altcha";
+import { getExchangeRates } from "../subscriptions/exchange-rates";
+import { SubscriptionError } from "../subscriptions/domain";
 
 type AdminJwtVerifier = {
   verify: (token: string) => Promise<unknown>;
@@ -92,6 +94,7 @@ const updateSiteSettingsSchema = t.Object({
     resendApiKey: t.String(),
     deeplApiKey: t.String(),
     ipGeolocationApiKey: t.String(),
+    exchangeRateApiKey: t.Optional(t.String({ maxLength: 1000 })),
   }),
   filings: t.Object({
     icpRecords: t.Array(filingRecordSchema),
@@ -723,4 +726,19 @@ export const adminSettingsRoutes = new Elysia({ prefix: "/api/admin/settings" })
       }),
       body: testIpGeolocationApiKeySchema,
     },
-  );
+  )
+  .post("/site/api-keys/test-exchange-rate", async ({ body, headers, jwt }) => {
+    const auth = await resolveAuthenticatedAdmin({ authorization: headers.authorization, jwt });
+    if (!auth.ok) return auth.response;
+    try {
+      const rates = await getExchangeRates({ apiKey: body.apiKey, forceRefresh: true });
+      return { ok: true, message: createLocalizedRouteMessage({
+        locale: headers[USER_PROFILE_LOCALE_HEADER], en: "ExchangeRate API connected.", zhCN: "ExchangeRate API 连接成功。",
+      }), details: `USD → CNY: ${rates.rates.CNY}; ${rates.updatedAt}` };
+    } catch (error) {
+      if (error instanceof SubscriptionError) return status(400, { message: error.message });
+      return status(502, { message: "ExchangeRate service unavailable. / 汇率服务暂不可用。" });
+    }
+  }, { body: testIpGeolocationApiKeySchema, headers: t.Object({
+    authorization: t.Optional(t.String()), [USER_PROFILE_LOCALE_HEADER]: t.Optional(t.String()),
+  }) });

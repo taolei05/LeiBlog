@@ -7,13 +7,17 @@ import { getSiteSettings, readEncryptedSetting } from "../admin/settings/service
 import { resolveEmailBranding, sendResendEmail } from "../blog/auth/service";
 import { getSql } from "./db/postgres";
 import { env } from "./env";
+import { queueDueSubscriptionReminders } from "../admin/subscriptions/service";
+import { renderSubscriptionReminderEmail } from "../admin/subscriptions/reminder-email";
+import type { SubscriptionReminderContent } from "../admin/subscriptions/reminder-email";
+import { readSiteTimeZone } from "./time-zone";
 import {
   renderArticleNotificationEmail,
   renderCommentNotificationEmail,
 } from "./notification-email";
 
 type NotificationSql = Sql | TransactionSql;
-type NotificationKind = "new_article" | "comment_reply" | "comment_admin";
+type NotificationKind = "new_article" | "comment_reply" | "comment_admin" | "subscription_expiry";
 
 const notificationMessageSchema = t.Object({
   branding: t.Object({
@@ -100,6 +104,7 @@ export const publishDueScheduledArticles = async (sql: Sql = getSql()) => {
 };
 
 const getPublicOrigin = () => {
+  if (env.publicSiteUrl) return env.publicSiteUrl;
   for (const origin of env.corsOrigins) {
     try {
       const url = new URL(origin);
@@ -126,6 +131,9 @@ type NotificationJob = {
   attempts: number;
   firstAttemptAt: Date | null;
   message: unknown;
+  subscriptionId: string | null;
+  subscriptionRevision: number | null;
+  subscriptionExpiry: string | null;
 };
 type NotificationSource = {
   email: string;
@@ -136,6 +144,7 @@ type NotificationSource = {
   content: string | null;
   authorName: string | null;
   targetType: "article" | "guestbook" | null;
+  subscription?: SubscriptionReminderContent;
 };
 
 type ReadNotificationSourceParameters = { job: NotificationJob; sql: Sql };
@@ -143,7 +152,8 @@ type ReadNotificationSourceParameters = { job: NotificationJob; sql: Sql };
 const readNotificationSource = async ({ job, sql }: ReadNotificationSourceParameters) => {
   const [recipient] = await sql<{ email: string; notificationEmailLocale: "en" | "zh-CN" }[]>`
     SELECT email, notification_email_locale FROM users WHERE id = ${job.recipientId}
-      AND (CASE WHEN ${job.kind} = 'new_article' THEN new_post_email_notifications ELSE comment_email_notifications END)
+      AND (CASE WHEN ${job.kind} = 'subscription_expiry' THEN role = 'admin'
+        WHEN ${job.kind} = 'new_article' THEN new_post_email_notifications ELSE comment_email_notifications END)
       AND (${job.kind} <> 'comment_admin' OR role = 'admin')
   `;
   if (
@@ -153,6 +163,20 @@ const readNotificationSource = async ({ job, sql }: ReadNotificationSourceParame
   )
     return undefined;
   const locale = recipient.notificationEmailLocale;
+  if (job.kind === "subscription_expiry") {
+    const timeZone = await readSiteTimeZone({ sql });
+    const [subscription] = await sql<SubscriptionReminderContent[]>`
+      SELECT name, expiry_date::text AS expiry_date, renewal_price::text AS renewal_price, currency, renewal_type, service_url
+      FROM subscriptions WHERE id = ${job.subscriptionId} AND reminder_revision = ${job.subscriptionRevision}
+        AND expiry_date = ${job.subscriptionExpiry}::date AND reminder_recipient_id = ${job.recipientId}
+        AND reminder_enabled AND expiry_date >= (now() AT TIME ZONE ${timeZone})::date
+        AND ((expiry_date - reminder_days + reminder_time) AT TIME ZONE ${timeZone}) <= now()
+    `;
+    return subscription === undefined ? undefined : {
+      email: recipient.email, locale, subscription, slug: null, title: null, summary: null,
+      content: null, authorName: null, targetType: null,
+    };
+  }
   const [source] =
     job.kind === "new_article"
       ? await sql<Omit<NotificationSource, "email" | "locale">[]>`
@@ -242,7 +266,9 @@ export const processNextEmailNotification = async ({
       const preferencesUrl = `${origin}/profile#profile-section-preferences`;
       const articleUrl = `${origin}/articles/${encodeURIComponent(source.slug ?? "")}`;
       const email =
-        job.kind === "new_article"
+        job.kind === "subscription_expiry" && source.subscription !== undefined
+          ? renderSubscriptionReminderEmail({ branding, subscription: source.subscription, adminUrl: `${origin}/admin/#subscriptions` })
+          : job.kind === "new_article"
           ? renderArticleNotificationEmail({
               branding,
               articleUrl,
@@ -253,7 +279,7 @@ export const processNextEmailNotification = async ({
           : renderCommentNotificationEmail({
               branding,
               preferencesUrl,
-              kind: job.kind,
+              kind: job.kind === "comment_reply" ? "comment_reply" : "comment_admin",
               articleTitle: source.title,
               authorName: source.authorName ?? "",
               content: source.content ?? "",
@@ -291,12 +317,17 @@ export const processNextEmailNotification = async ({
 };
 
 export const startEmailNotificationWorker = () => {
+  let lastSubscriptionCheck = 0;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running: Promise<void>;
   const tick = async () => {
     try {
       await publishDueScheduledArticles();
+      if (Date.now() - lastSubscriptionCheck >= 30000) {
+        await queueDueSubscriptionReminders();
+        lastSubscriptionCheck = Date.now();
+      }
       await processNextEmailNotification();
     } catch {
       console.error("Email notification worker tick failed");

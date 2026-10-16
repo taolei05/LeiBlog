@@ -42,3 +42,4 @@ bun test tests/login-metadata.integration.test.ts
 bun test tests/auth-security.integration.test.ts
 bun test tests/comment-settings.integration.test.ts
 bun test tests/email-notifications.integration.test.ts
+bun test tests/subscriptions.integration.test.ts

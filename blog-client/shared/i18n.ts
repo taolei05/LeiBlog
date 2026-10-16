@@ -69,6 +69,7 @@ const resources = {
         },
         pages: {
           dashboard: "仪表盘",
+          subscriptions: "订阅与提醒管理",
           posts: "文章管理",
           categories: "分类管理",
           tags: "标签管理",
@@ -92,6 +93,7 @@ const resources = {
           contributors: "维护作者与贡献者资料、权限和公开展示信息。",
           navigation: "配置前台导航页、外链入口和菜单排序。",
           media: "集中管理图片、附件、封面和后续上传资源。",
+          subscriptions: "管理订阅服务、到期提醒与费用。",
           users: "管理站点用户、角色和账号状态。",
           adminSettings: "维护管理员资料、邮件通知和个人公开信息。",
           themeSettings: "调整主题、色彩、Logo 和前台展示偏好。",
@@ -289,6 +291,7 @@ const resources = {
           },
           fields: {
             siteNameZh: "中文站点名称",
+            exchangeRateApiKey: "ExchangeRate API key",
             siteNameEn: "英文站点名称",
             siteDescriptionZh: "中文站点描述",
             siteDescriptionEn: "英文站点描述",
@@ -1443,6 +1446,7 @@ const resources = {
         },
         pages: {
           dashboard: "Dashboard",
+          subscriptions: "Subscriptions and reminders",
           posts: "Post management",
           categories: "Category management",
           tags: "Tag management",
@@ -1467,6 +1471,7 @@ const resources = {
             "Maintain author and contributor profiles, permissions, and public details.",
           navigation: "Configure frontend navigation pages, external links, and menu order.",
           media: "Manage images, attachments, covers, and later uploaded assets.",
+          subscriptions: "Manage subscription services, expiry reminders and costs.",
           users: "Manage site users, roles, and account state.",
           adminSettings: "Maintain administrator profile, email notifications, and public details.",
           themeSettings: "Adjust theme, colors, logos, and frontend presentation preferences.",
@@ -1675,6 +1680,7 @@ const resources = {
           },
           fields: {
             siteNameZh: "Chinese site name",
+            exchangeRateApiKey: "ExchangeRate API key",
             siteNameEn: "English site name",
             siteDescriptionZh: "Chinese site description",
             siteDescriptionEn: "English site description",

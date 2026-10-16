@@ -249,14 +249,14 @@ CREATE TABLE IF NOT EXISTS encrypted_settings (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT encrypted_settings_known_key CHECK (
-    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key', 'r2_secret_access_key')
+    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key', 'r2_secret_access_key', 'exchange_rate_api_key')
   )
 );
 
 ALTER TABLE encrypted_settings DROP CONSTRAINT IF EXISTS encrypted_settings_known_key;
 ALTER TABLE encrypted_settings
   ADD CONSTRAINT encrypted_settings_known_key CHECK (
-    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key', 'r2_secret_access_key')
+    key IN ('resend_api_key', 'deepl_api_key', 'ip_geolocation_api_key', 'r2_secret_access_key', 'exchange_rate_api_key')
   );
 
 DROP TRIGGER IF EXISTS encrypted_settings_set_updated_at ON encrypted_settings;
@@ -901,3 +901,59 @@ CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_comment_recipient_uniq
   ON email_notification_jobs (comment_id, recipient_id) WHERE comment_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS email_notification_jobs_pending_idx
   ON email_notification_jobs (available_at, created_at) WHERE status = 'pending';
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 160),
+  service_url text NOT NULL DEFAULT '',
+  category text NOT NULL CHECK (category IN ('domain','server','membership','software','other')),
+  details text NOT NULL DEFAULT '',
+  start_date date NOT NULL,
+  expiry_date date,
+  initial_price numeric(12,2) NOT NULL CHECK (initial_price >= 0),
+  renewal_price numeric(12,2) NOT NULL CHECK (renewal_price >= 0),
+  currency text NOT NULL CHECK (currency IN ('CNY','HKD','USD','EUR','GBP','JPY')),
+  renewal_type text NOT NULL CHECK (renewal_type IN ('automatic','manual','perpetual')),
+  notes text NOT NULL DEFAULT '',
+  reminder_enabled boolean NOT NULL DEFAULT true,
+  reminder_days integer NOT NULL DEFAULT 7 CHECK (reminder_days BETWEEN 0 AND 365),
+  reminder_time time NOT NULL DEFAULT '09:00',
+  reminder_recipient_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  reminder_revision integer NOT NULL DEFAULT 1,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((renewal_type = 'perpetual' AND expiry_date IS NULL AND NOT reminder_enabled)
+    OR (renewal_type <> 'perpetual' AND expiry_date IS NOT NULL AND expiry_date >= start_date))
+);
+CREATE INDEX IF NOT EXISTS subscriptions_expiry_idx ON subscriptions (expiry_date);
+DROP TRIGGER IF EXISTS subscriptions_set_updated_at ON subscriptions;
+CREATE TRIGGER subscriptions_set_updated_at BEFORE UPDATE ON subscriptions
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS subscription_attachments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+  file_name text NOT NULL,
+  content_type text NOT NULL,
+  file_size integer NOT NULL CHECK (file_size BETWEEN 1 AND 5242880),
+  content bytea NOT NULL CHECK (octet_length(content) = file_size),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS subscription_attachments_parent_idx ON subscription_attachments (subscription_id);
+
+ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_id uuid REFERENCES subscriptions(id) ON DELETE CASCADE;
+ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_revision integer;
+ALTER TABLE email_notification_jobs ADD COLUMN IF NOT EXISTS subscription_expiry date;
+ALTER TABLE email_notification_jobs DROP CONSTRAINT IF EXISTS email_notification_jobs_kind_check;
+ALTER TABLE email_notification_jobs ADD CONSTRAINT email_notification_jobs_kind_check
+  CHECK (kind IN ('new_article','comment_reply','comment_admin','subscription_expiry'));
+ALTER TABLE email_notification_jobs DROP CONSTRAINT IF EXISTS email_notification_jobs_check;
+ALTER TABLE email_notification_jobs ADD CONSTRAINT email_notification_jobs_check
+  CHECK ((kind = 'new_article' AND article_id IS NOT NULL AND comment_id IS NULL AND subscription_id IS NULL)
+    OR (kind IN ('comment_reply','comment_admin') AND comment_id IS NOT NULL AND subscription_id IS NULL)
+    OR (kind = 'subscription_expiry' AND subscription_id IS NOT NULL AND subscription_revision IS NOT NULL
+      AND subscription_expiry IS NOT NULL AND article_id IS NULL AND comment_id IS NULL));
+CREATE UNIQUE INDEX IF NOT EXISTS email_notification_jobs_subscription_expiry_unique
+  ON email_notification_jobs (subscription_id, subscription_expiry) WHERE kind = 'subscription_expiry' AND status IN ('pending','sent');
+CREATE INDEX IF NOT EXISTS email_notification_jobs_subscription_history_idx
+  ON email_notification_jobs (subscription_id, subscription_expiry, created_at DESC) WHERE subscription_id IS NOT NULL;
